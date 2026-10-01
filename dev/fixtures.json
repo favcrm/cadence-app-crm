@@ -1,0 +1,135 @@
+{
+  "$comment": "CRM app-owned synthetic fixture scenarios for the dev-only app-views/v1 preview (CAD-974). Shape: { populated: { <view-id>: [rows…] }, empty: { <view-id>: [] } }. Rows are keyed by declared view id and are NEVER part of the descriptor or the installable app/ bundle — the canonical fixtureRows validator still checks every key/value against the view's declared fields, so undeclared keys, undeclared enum values and forbidden content refuse before render. All contact addresses use the reserved example.invalid domain; every record is synthetic; no real customer data, credentials, production state or send authority exists here. The \"empty\" scenario exercises the renderer's empty-state path for every non-form view.",
+
+  "populated": {
+    "customers": [
+      {
+        "name": "Synthetic Ada Demo",
+        "email": "ada.demo@example.invalid",
+        "tier": "vip",
+        "visits": 12,
+        "last_visit": "2026-10-02",
+        "tags": ["lunch", "ramen"]
+      },
+      {
+        "name": "Synthetic 嘉欣 Demo",
+        "email": "kayan.demo@example.invalid",
+        "tier": "member",
+        "visits": 3,
+        "last_visit": "2026-09-18",
+        "tags": ["dinner"]
+      },
+      {
+        "name": "Synthetic Łukasz Brzęczyszczykiewicz-Żółćń Demo",
+        "email": "lukasz.demo@example.invalid",
+        "tier": "vip_plus",
+        "visits": 47,
+        "last_visit": "2026-08-30",
+        "tags": ["catering", "events", "vip-lounge", "late-night"]
+      },
+      {
+        "name": "<script>alert(1)</script>",
+        "email": "inert.demo@example.invalid",
+        "tier": "member",
+        "visits": 0,
+        "last_visit": "2026-01-05",
+        "tags": []
+      },
+      {
+        "name": "Synthetic Very-Long-Name-With-Absurdly-Many-Hyphens-And-Extra-Suffixes Demo Record",
+        "email": "very.long.synthetic.address.with.many.dots@example.invalid",
+        "tier": "member",
+        "visits": 8,
+        "last_visit": "2026-10-20",
+        "tags": ["long-name-boundary-check"]
+      }
+    ],
+
+    "segments": [
+      {
+        "name": "Lunch regulars",
+        "definition": "visits >= 10 AND last_visit within 30 days",
+        "members": 214,
+        "status": "active",
+        "updated_at": "2026-10-01T08:30:00Z"
+      },
+      {
+        "name": "夏日午市常客 (summer lunch regulars)",
+        "definition": "tag contains \"lunch\" AND tier != \"member\"",
+        "members": 38,
+        "status": "active",
+        "updated_at": "2026-09-27T14:05:00+08:00"
+      },
+      {
+        "name": "Draft — churn-risk scan",
+        "definition": "no visit in 90 days AND visits >= 3",
+        "members": 91,
+        "status": "draft",
+        "updated_at": "2026-10-19T22:40:12Z"
+      },
+      {
+        "name": "Archived legacy import",
+        "definition": "imported segment kept for audit; never re-evaluated",
+        "members": 0,
+        "status": "archived",
+        "updated_at": "2025-11-30T00:00:00Z"
+      }
+    ],
+
+    "campaigns": [
+      {
+        "name": "Spring renewal reminder",
+        "segment": "Lunch regulars",
+        "status": "sent",
+        "subject": "Your plan renews 1 July — price stays HK$88/month",
+        "scheduled_at": "2026-06-25T09:00:00Z",
+        "tags": ["renewal", "q2"]
+      },
+      {
+        "name": "夏日限定 ramen launch",
+        "segment": "夏日午市常客 (summer lunch regulars)",
+        "status": "scheduled",
+        "subject": "夏日限定｜Kura Summer Ramen HK$88，每日限量 40 碗",
+        "scheduled_at": "2026-10-31T11:30:00+08:00",
+        "tags": ["kura", "summer", "zh-hk"]
+      },
+      {
+        "name": "<img src=x onerror=alert(1)> draft",
+        "segment": "Draft — churn-risk scan",
+        "status": "draft",
+        "subject": "Inert markup in a fixture cell renders as text, never DOM",
+        "scheduled_at": "2026-11-15T16:00:00Z",
+        "tags": []
+      },
+      {
+        "name": "Paused — loyalty re-engagement",
+        "segment": "Archived legacy import",
+        "status": "paused",
+        "subject": "We'd like to see you again — synthetic preview copy",
+        "scheduled_at": "2026-12-01T10:00:00Z",
+        "tags": ["re-engagement"]
+      }
+    ],
+
+    "customer-detail": [
+      {
+        "name": "Synthetic Ada Demo",
+        "email": "ada.demo@example.invalid",
+        "tier": "vip",
+        "visits": 12,
+        "last_visit": "2026-10-02",
+        "notes": "Synthetic preview notes only — no messages sent, no operator action taken. Inert text such as <b>bold</b> stays text."
+      }
+    ],
+
+    "customer-form": []
+  },
+
+  "empty": {
+    "customers": [],
+    "segments": [],
+    "campaigns": [],
+    "customer-detail": [],
+    "customer-form": []
+  }
+}

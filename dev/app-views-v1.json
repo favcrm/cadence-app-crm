@@ -1,0 +1,93 @@
+{
+  "contract": "app-views/v1",
+  "app": "crm",
+  "title": "CRM — customers, segments, campaigns",
+  "summary": "App-owned development descriptor for the CRM package: customers, segments and campaigns tables, a customer detail, and a disabled preview of the host's customer form. Fixture-only; not shipped in the installable app/ bundle.",
+  "views": [
+    {
+      "id": "customers",
+      "title": "Customers",
+      "kind": "table",
+      "fields": [
+        { "id": "name", "label": "Name", "format": "text" },
+        { "id": "email", "label": "Email", "format": "text" },
+        { "id": "tier", "label": "Tier", "format": "enum", "values": ["member", "vip", "vip_plus"] },
+        { "id": "visits", "label": "Visits", "format": "number" },
+        { "id": "last_visit", "label": "Last visit", "format": "date" },
+        { "id": "tags", "label": "Tags", "format": "tags", "kind": "list" }
+      ],
+      "columns": [
+        { "field": "name" },
+        { "field": "email" },
+        { "field": "tier", "label": "Level" },
+        { "field": "visits" },
+        { "field": "last_visit" },
+        { "field": "tags" }
+      ]
+    },
+    {
+      "id": "segments",
+      "title": "Segments",
+      "kind": "table",
+      "fields": [
+        { "id": "name", "label": "Name", "format": "text" },
+        { "id": "definition", "label": "Definition", "format": "text" },
+        { "id": "members", "label": "Members", "format": "number" },
+        { "id": "status", "label": "Status", "format": "enum", "values": ["active", "draft", "archived"] },
+        { "id": "updated_at", "label": "Updated", "format": "datetime" }
+      ],
+      "columns": [
+        { "field": "name" },
+        { "field": "definition" },
+        { "field": "members" },
+        { "field": "status" },
+        { "field": "updated_at" }
+      ]
+    },
+    {
+      "id": "campaigns",
+      "title": "Campaigns",
+      "kind": "table",
+      "fields": [
+        { "id": "name", "label": "Name", "format": "text" },
+        { "id": "segment", "label": "Segment", "format": "text" },
+        { "id": "status", "label": "Status", "format": "enum", "values": ["draft", "scheduled", "sent", "paused"] },
+        { "id": "subject", "label": "Subject", "format": "text" },
+        { "id": "scheduled_at", "label": "Scheduled", "format": "datetime" },
+        { "id": "tags", "label": "Tags", "format": "tags", "kind": "list" }
+      ],
+      "columns": [
+        { "field": "name" },
+        { "field": "segment" },
+        { "field": "status" },
+        { "field": "subject" },
+        { "field": "scheduled_at" },
+        { "field": "tags" }
+      ]
+    },
+    {
+      "id": "customer-detail",
+      "title": "Customer detail",
+      "kind": "detail",
+      "fields": [
+        { "id": "name", "label": "Name", "format": "text" },
+        { "id": "email", "label": "Email", "format": "text" },
+        { "id": "tier", "label": "Tier", "format": "enum", "values": ["member", "vip", "vip_plus"] },
+        { "id": "visits", "label": "Visits", "format": "number" },
+        { "id": "last_visit", "label": "Last visit", "format": "date" },
+        { "id": "notes", "label": "Notes", "format": "text", "createView": "customer-form" }
+      ]
+    },
+    {
+      "id": "customer-form",
+      "title": "New customer (preview)",
+      "kind": "form",
+      "previewOf": [
+        { "id": "name", "label": "Full name", "format": "text" },
+        { "id": "email", "label": "Email", "format": "text" },
+        { "id": "tier", "label": "Tier", "format": "enum", "values": ["member", "vip", "vip_plus"] },
+        { "id": "notes", "label": "Notes", "format": "text" }
+      ]
+    }
+  ]
+}
