@@ -14,15 +14,23 @@ python3 -m unittest discover -s tests/unit -v                        # tool test
 
 ## What the checks do and do not prove
 
-`check`/`build` mirror the *shape* rules the v0 host loader applies in
-`src/issue/app.rs` (`bundle_files` + `parse_manifest`): required
-`app.md` and `workflows/`, only the five known top-level dirs
+`check`/`build`/`verify` mirror the *shape* rules the v0 host loader
+applies in `src/issue/app.rs` (`bundle_files` + `parse_manifest`):
+required `app.md` and `workflows/`, only the five known top-level dirs
 (`workflows/`, `rubrics/`, `templates/`, `views/`, `bindings/`), flat
 dirs, no symlinks, no dotfiles, no unknown top-level entries,
 tag-shaped names, bounded file count/size, and the manifest
 frontmatter key allowlist (`app`, `title`, `version`, `needs`,
 `summary`; `records`/`actions`/`ui`/`settings`/`actors` refuse as
-later-stage). An A1 bundle is UTF-8 text only.
+later-stage). An A1 bundle is UTF-8 text only — every file (not just
+`app.md`) is decoded on both the source and archive path.
+`needs.views`/`needs.bindings` declarations and their descriptor files
+are checked both ways on the archive exactly as on the source. Archive
+members must be regular files or plain directories under the single
+bundle root — non-regular types (links, devices, fifos), paths outside
+the root, dot-directories and duplicate/normalized names refuse; per-file
+and aggregate size bounds are enforced while reading, before any
+unbounded aggregation.
 
 A PASS here is **not** host validation. The tool does not run
 `workflow check`, the secret guard, `uses:` slot cross-checks,

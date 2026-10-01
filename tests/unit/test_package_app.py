@@ -370,7 +370,7 @@ class BuildAndExclusionTests(unittest.TestCase):
         # bundle paths — no scripts/, src/, tests/, docs/, .git, .env.
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
         archive = self.out / "crm-0.1.0.tar.gz"
-        names = [n for n, _ in pkg._archive_members(archive)]
+        names = [n for n, _ in pkg._archive_members(archive)[0]]
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
@@ -386,6 +386,102 @@ class BuildAndExclusionTests(unittest.TestCase):
         self.assertEqual(result["app"], "crm")
         self.assertEqual(result["version"], "0.1.0")
         self.assertEqual(result["files"], 3)
+
+
+class VerifyParityTests(unittest.TestCase):
+    """R2 regression: verify_archive must refuse what the source shape
+    check and host loader refuse. Mirrors the PM probes at
+    /tmp/crm-plugin-pm-0930/cad962/pm-review/probe_archive_verify.py."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        # Build a good archive from the real bundle as the base bytes.
+        self.out = self.dir / "good"
+        self.out.mkdir()
+        self.assertEqual(
+            pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0
+        )
+        self.original = {
+            str(p.relative_to(REPO / "app")): p.read_bytes()
+            for p in (REPO / "app").rglob("*")
+            if p.is_file()
+        }
+
+    def _tar_with(self, label, mutate):
+        d = self.dir / label
+        d.mkdir()
+        archive = d / "crm-0.1.0.tar.gz"
+        import io as _io
+        contents = dict(self.original)
+        mutate(contents)
+        with tarfile.open(archive, "w:gz") as tf:
+            for rel, data in contents.items():
+                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info.size = len(data)
+                tf.addfile(info, _io.BytesIO(data))
+        pkg.write_sidecar(archive)
+        return archive
+
+    def test_verify_refuses_non_utf8_file(self):
+        archive = self._tar_with("nonutf8", lambda c: c.__setitem__("rubrics/bad.md", bytes([255])))
+        with self.assertRaisesRegex(pkg.PackageError, "UTF-8"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_aggregate_over_2mib(self):
+        def add(c):
+            for i in range(9):
+                c[f"rubrics/large-{i}.md"] = b"x" * (250 * 1024)
+        archive = self._tar_with("agg", add)
+        with self.assertRaisesRegex(pkg.PackageError, "over"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_declared_view_without_descriptor(self):
+        def add(c):
+            c["app.md"] = c["app.md"].replace(
+                b"  connections: []", b"  connections: []\n  views:\n    contract: app-views/v1"
+            )
+        archive = self._tar_with("missing-view", add)
+        with self.assertRaisesRegex(pkg.PackageError, "needs.views"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_undeclared_descriptor_file(self):
+        archive = self._tar_with(
+            "undeclared", lambda c: c.__setitem__("views/app-views-v1.json", b"{}")
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "needs.views.contract"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_zip_symlink_member(self):
+        archive = self.dir / "ziplink" / "crm-0.1.0.zip"
+        archive.parent.mkdir()
+        with zipfile.ZipFile(archive, "w") as zf:
+            for rel, data in self.original.items():
+                zf.writestr("crm-0.1.0/" + rel, data)
+            info = zipfile.ZipInfo("crm-0.1.0/rubrics/link.md")
+            info.create_system = 3
+            info.external_attr = 0o120777 << 16  # unix symlink mode
+            zf.writestr(info, "/outside")
+        pkg.write_sidecar(archive)
+        with self.assertRaisesRegex(pkg.PackageError, "not a regular file"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_dir_outside_prefix(self):
+        archive = self.dir / "dirout" / "crm-0.1.0.tar.gz"
+        archive.parent.mkdir()
+        import io as _io
+        with tarfile.open(archive, "w:gz") as tf:
+            for rel, data in self.original.items():
+                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info.size = len(data)
+                tf.addfile(info, _io.BytesIO(data))
+            extra = tarfile.TarInfo("sneaky/")
+            extra.type = tarfile.DIRTYPE
+            tf.addfile(extra)
+        pkg.write_sidecar(archive)
+        with self.assertRaisesRegex(pkg.PackageError, "outside"):
+            pkg.verify_archive(archive)
 
 
 class CliTests(unittest.TestCase):

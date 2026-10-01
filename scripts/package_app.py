@@ -527,44 +527,77 @@ def _check_utf8_name(name: str, where: str) -> None:
         raise PackageError(f"{where} carries a file name that is not UTF-8") from e
 
 
-def read_manifest(root: Path) -> Manifest:
-    try:
-        text = (root / MANIFEST).read_text(encoding="utf-8")
-    except OSError as e:
-        raise PackageError(f"cannot read {root / MANIFEST}: {e}") from e
-    except UnicodeDecodeError as e:
-        raise PackageError(f"{MANIFEST}: not UTF-8 text — an A1 app carries text only") from e
-    manifest = parse_manifest(text)
-    if manifest.view_contract and f"views/{VIEWS_FILE}" not in bundle_files(root):
+def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
+    """Descriptor/companion files pair with their manifest declarations —
+    either alone refuses, both directions, same as the host. `files` is
+    the already shape-checked rel-path list (source or archive)."""
+    present = set(files)
+    if manifest.view_contract and f"views/{VIEWS_FILE}" not in present:
         raise PackageError(
-            f"app.md declares `needs.views` but the bundle carries no "
+            f"{where}: app.md declares `needs.views` but the bundle carries no "
             f"views/{VIEWS_FILE} — the declaration and the descriptor file "
             "install together or not at all"
         )
     if manifest.binding_contract:
-        if f"bindings/{BINDINGS_FILE}" not in bundle_files(root):
+        if f"bindings/{BINDINGS_FILE}" not in present:
             raise PackageError(
-                f"app.md declares `needs.bindings` but the bundle carries no "
+                f"{where}: app.md declares `needs.bindings` but the bundle carries no "
                 f"bindings/{BINDINGS_FILE}"
             )
         if not manifest.view_contract:
             raise PackageError(
-                "app.md declares `needs.bindings` but not `needs.views` — a "
+                f"{where}: app.md declares `needs.bindings` but not `needs.views` — a "
                 "bindings companion requires the descriptor it maps"
             )
-    # The reverse pairing: a descriptor/companion file without its
-    # manifest declaration can never install.
-    files = bundle_files(root)
-    if f"views/{VIEWS_FILE}" in files and not manifest.view_contract:
+    if f"views/{VIEWS_FILE}" in present and not manifest.view_contract:
         raise PackageError(
-            f"views/{VIEWS_FILE} is present but app.md never declares "
+            f"{where}: views/{VIEWS_FILE} is present but app.md never declares "
             "`needs.views.contract` — an undeclared descriptor can never install"
         )
-    if f"bindings/{BINDINGS_FILE}" in files and not manifest.binding_contract:
+    if f"bindings/{BINDINGS_FILE}" in present and not manifest.binding_contract:
         raise PackageError(
-            f"bindings/{BINDINGS_FILE} is present but app.md never declares "
+            f"{where}: bindings/{BINDINGS_FILE} is present but app.md never declares "
             "`needs.bindings.contract`"
         )
+
+
+def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
+    """Aggregate size + all-files-UTF-8 over already shape-checked bytes.
+
+    An A1 bundle is UTF-8 text only — the host refuses any non-UTF-8
+    file. Per-file size was bounded while listing; this enforces the
+    aggregate bound and decodes every file so a non-UTF-8 byte never
+    reaches the manifest/guide stage. `contents` is the in-memory
+    (relpath, bytes) list; never call this on unbounded untrusted input.
+    """
+    total = 0
+    for rel, data in contents:
+        total += len(data)
+        if total > MAX_APP_BYTES:
+            raise PackageError(
+                f"{where}: app is over {MAX_APP_BYTES} bytes of content — split it"
+            )
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise PackageError(
+                f"{where}: {rel}: not UTF-8 text — an A1 app carries text only"
+            ) from e
+
+
+def read_manifest(root: Path, files: list[str] | None = None) -> Manifest:
+    if files is None:
+        files = bundle_files(root)
+    try:
+        raw = (root / MANIFEST).read_bytes()
+    except OSError as e:
+        raise PackageError(f"cannot read {root / MANIFEST}: {e}") from e
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise PackageError(f"{MANIFEST}: not UTF-8 text — an A1 app carries text only") from e
+    manifest = parse_manifest(text)
+    check_pairing(manifest, files, MANIFEST)
     return manifest
 
 
@@ -645,6 +678,9 @@ def read_contents(root: Path, files: list[str]) -> list[tuple[str, bytes]]:
         if len(data) > MAX_FILE_BYTES:
             raise PackageError(f"{rel} is {len(data)} bytes — a file is at most {MAX_FILE_BYTES}")
         contents.append((rel, data))
+    # A1 bundles are UTF-8 text; enforce the aggregate bound and decode
+    # every file — not just app.md — so a non-UTF-8 byte never ships.
+    check_file_bytes(contents, str(root))
     return contents
 
 
@@ -681,16 +717,46 @@ def read_sidecar(archive: Path) -> str:
 # --- Safe archive reading (never extractall) ---------------------------
 
 
-def _archive_members(archive: Path) -> list[tuple[str, bytes]]:
-    """Read a release archive into memory with path checks.
+def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]:
+    """Read a release archive into memory with path/shape/bounds checks.
 
-    Every member must be a regular file or directory under the single
-    bundle root: no absolute paths, no `..`, no links, no duplicate
-    names. The archive's own metadata is never trusted as authority —
-    names are validated before any byte is used.
+    Returns (files, dirs): `files` is the regular-file member list as
+    (name, bytes); `dirs` is the explicit directory-entry names.
+    Every member — file or directory — must sit under the single bundle
+    root, be regular-file or directory only (links/devices/fifos refuse),
+    carry no absolute path or `..`, and not collide on a normalized name.
+    File count, per-file size and the aggregate size are enforced while
+    reading, before any unbounded aggregation. The archive's own
+    metadata is never trusted as authority.
     """
     members: list[tuple[str, bytes]] = []
+    dirs: list[str] = []
     seen: set[str] = set()
+    total = 0
+
+    def admit(name: str, is_dir: bool, size: int, data: bytes | None) -> None:
+        nonlocal total
+        _check_member_path(name, archive.name)
+        norm = name.rstrip("/") if is_dir else name
+        if norm in seen:
+            raise PackageError(f"{archive.name}: duplicate member {norm}")
+        seen.add(norm)
+        if is_dir:
+            dirs.append(norm)
+            return
+        if size > MAX_FILE_BYTES:
+            raise PackageError(
+                f"{archive.name}: {name} is {size} bytes — a file is at most {MAX_FILE_BYTES}"
+            )
+        total += size
+        if total > MAX_APP_BYTES:
+            raise PackageError(
+                f"{archive.name}: app is over {MAX_APP_BYTES} bytes of content — split it"
+            )
+        if len(members) + 1 > MAX_FILES:
+            raise PackageError(f"{archive.name}: more than {MAX_FILES} files")
+        members.append((name, data if data is not None else b""))
+
     if archive.name.endswith(".zip"):
         try:
             zf = zipfile.ZipFile(archive)
@@ -698,19 +764,29 @@ def _archive_members(archive: Path) -> list[tuple[str, bytes]]:
             raise PackageError(f"{archive.name}: not a zip archive — {e}") from e
         with zf:
             for info in zf.infolist():
-                _check_member_path(info.filename, archive.name)
-                if info.is_dir():
+                # A unix symlink or non-regular file carries its type in
+                # the high bits of external_attr (the mode field). When
+                # unix type bits are present they are authoritative — a
+                # member whose mode is not a regular file or directory
+                # refuses, regardless of the create_system platform flag
+                # or a trailing-slash name. With no unix type bits the
+                # member is regular unless it is a directory entry.
+                mode = (info.external_attr >> 16) & 0xFFFF
+                ftype = stat.S_IFMT(mode)
+                # With unix type bits present, they decide: only regular
+                # files and directories pass. With none (mode==0 or
+                # permission bits alone), the member is a regular file
+                # unless it is a directory entry.
+                if ftype == stat.S_IFDIR or info.is_dir():
+                    admit(info.filename, True, 0, None)
                     continue
-                if info.filename in seen:
-                    raise PackageError(f"{archive.name}: duplicate member {info.filename}")
-                seen.add(info.filename)
-                if info.file_size > MAX_FILE_BYTES:
+                if ftype not in (0, stat.S_IFREG):
                     raise PackageError(
-                        f"{archive.name}: {info.filename} is {info.file_size} bytes — "
-                        f"a file is at most {MAX_FILE_BYTES}"
+                        f"{archive.name}: member {info.filename} is not a regular "
+                        "file (links/devices/special types refuse)"
                     )
-                members.append((info.filename, zf.read(info)))
-        return members
+                admit(info.filename, False, info.file_size, zf.read(info))
+        return members, dirs
 
     try:
         tf = tarfile.open(archive, mode="r:*")
@@ -718,27 +794,19 @@ def _archive_members(archive: Path) -> list[tuple[str, bytes]]:
         raise PackageError(f"{archive.name}: cannot read archive — {e}") from e
     with tf:
         for info in tf:
-            _check_member_path(info.name, archive.name)
             if info.isdir():
+                admit(info.name, True, 0, None)
                 continue
             if not info.isreg():
                 raise PackageError(
                     f"{archive.name}: member {info.name} is not a regular file "
                     "(links/devices refuse)"
                 )
-            if info.name in seen:
-                raise PackageError(f"{archive.name}: duplicate member {info.name}")
-            seen.add(info.name)
-            if info.size > MAX_FILE_BYTES:
-                raise PackageError(
-                    f"{archive.name}: {info.name} is {info.size} bytes — "
-                    f"a file is at most {MAX_FILE_BYTES}"
-                )
             fh = tf.extractfile(info)
             if fh is None:
                 raise PackageError(f"{archive.name}: cannot read member {info.name}")
-            members.append((info.name, fh.read()))
-    return members
+            admit(info.name, False, info.size, fh.read())
+    return members, dirs
 
 
 def _check_member_path(name: str, archive_name: str) -> PurePosixPath:
@@ -766,7 +834,7 @@ def verify_archive(archive: Path) -> dict:
             f"sidecar {expected[:12]}… (integrity check failed)"
         )
 
-    members = _archive_members(archive)
+    members, dirs = _archive_members(archive)
     if not members:
         raise PackageError(f"{archive.name}: archive carries no files")
     # The archive is rooted at a single prefix dir holding the bundle
@@ -785,24 +853,43 @@ def verify_archive(archive: Path) -> dict:
             "single top directory"
         )
     rels = []
-    for name, _data in members:
+    rel_bytes: list[tuple[str, bytes]] = []
+    for name, data in members:
         if not name.startswith(prefix):
             raise PackageError(
                 f"{archive.name}: member {name} is outside the bundle root {prefix}"
             )
-        rels.append(name[len(prefix):])
+        rel = name[len(prefix):]
+        rels.append(rel)
+        rel_bytes.append((rel, data))
     rels.sort()
+    # Directory entries are checked too — a dir outside the root, a
+    # dot-dir or an unknown top-level dir refuses like a file would.
+    for d in dirs:
+        drel = d[len(prefix):] if d.startswith(prefix) else d
+        _check_member_dir(drel, archive.name, prefix, d)
 
     # Re-run the bundle shape checks on the member names: this is the
     # same allowlist bundle_files enforces on a real tree.
     _check_member_tree(rels, archive.name)
 
-    manifest_text = dict(members)[manifest_member].decode("utf-8")
+    # Aggregate bound + every file is UTF-8 text (same as the source
+    # path's check_file_bytes) — not just the manifest.
+    check_file_bytes(rel_bytes, archive.name)
+
+    manifest_bytes = dict(members)[manifest_member]
+    try:
+        manifest_text = manifest_bytes.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise PackageError(f"{archive.name}: {MANIFEST}: not UTF-8 text — an A1 app carries text only") from e
     try:
         manifest = parse_manifest(manifest_text)
     except PackageError as e:
         raise PackageError(f"{archive.name}: {e}") from e
     _check_version_semver(manifest.version)
+    # Descriptor/companion files pair with their manifest declarations —
+    # the same both-ways check the source path runs.
+    check_pairing(manifest, rels, archive.name)
 
     # The archive name pins `<app>-<version>` — name/bytes cannot drift.
     base = archive.name
@@ -867,6 +954,34 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
         raise PackageError(f"{archive_name}: bundle has no workflows/")
     if len(files) > MAX_FILES:
         raise PackageError(f"{archive_name}: {len(files)} files — at most {MAX_FILES}")
+
+
+def _check_member_dir(drel: str, archive_name: str, prefix: str, full: str) -> None:
+    """Validate one explicit archive directory entry.
+
+    `drel` is the path relative to the bundle prefix; `full` is the
+    member name. A dir must sit directly under the bundle root as one
+    of the allowed top dirs — anything deeper, outside, a dot-dir or an
+    unknown name refuses, and it cannot collide with a file of the same
+    normalized name (already covered by the `seen` set).
+    """
+    if not full.startswith(prefix):
+        raise PackageError(
+            f"{archive_name}: directory member {full} is outside the bundle root {prefix}"
+        )
+    if not drel or "/" in drel.rstrip("/"):
+        raise PackageError(
+            f"{archive_name}: directory member {full} — v0 app dirs are flat, "
+            "no nested folders"
+        )
+    top = drel.rstrip("/")
+    if top.startswith("."):
+        raise PackageError(f"{archive_name}: dot-directory {full} refuses")
+    if top not in TOP_DIRS:
+        raise PackageError(
+            f"{archive_name}: directory member {full} — v0 knows workflows/, "
+            "rubrics/, templates/, views/, bindings/ under the bundle root"
+        )
 
 
 # --- Commands ------------------------------------------------------------
@@ -941,7 +1056,7 @@ def cmd_extract_for_test(archive: Path, dest: Path) -> None:
     path-checked by _archive_members; this writes only regular files
     under dest/<prefix>/.
     """
-    members = _archive_members(archive)
+    members, _dirs = _archive_members(archive)
     for name, data in members:
         target = dest / name
         target.parent.mkdir(parents=True, exist_ok=True)
