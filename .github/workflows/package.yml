@@ -1,0 +1,67 @@
+# CAD-962: independent packaging checks for the app/ bundle.
+#
+# This workflow is a definition only — it runs nothing until the
+# proposed remote `favcrm/cadence-app-crm` exists and receives a push.
+# Actions are pinned to commit SHAs per project convention (same pins
+# as the host repository). Read-only token; no publication, no
+# deployment, no external sends. Python 3 from the runner image is the
+# only toolchain — no app runtime is selected by this workflow.
+#
+# The archive filename is derived from `build`'s JSON output
+# (`archive`/`sidecar`/`app`/`version`), never a hardcoded
+# `crm-0.1.0`, so a manifest version bump does not break these steps.
+
+name: package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Bundle shape check (offline — not host validation)
+        run: python3 scripts/package_app.py check --source app
+
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests/unit -v
+
+      - name: Build archive twice — byte-identical required
+        run: |
+          python3 scripts/package_app.py build --source app --outdir dist/a | tee "$RUNNER_TEMP/build-a.json"
+          python3 scripts/package_app.py build --source app --outdir dist/b | tee "$RUNNER_TEMP/build-b.json"
+          # Resolve the produced archive/sidecar paths from the build
+          # metadata — the name is <app>-<version>.tar.gz and changes
+          # with a version bump, so it is never hardcoded here.
+          ARCHIVE=$(python3 -c "import json;print(json.load(open('$RUNNER_TEMP/build-a.json'))['archive'])")
+          SIDECAR=$(python3 -c "import json;print(json.load(open('$RUNNER_TEMP/build-a.json'))['sidecar'])")
+          ARCHIVE_B=$(python3 -c "import json;print(json.load(open('$RUNNER_TEMP/build-b.json'))['archive'])")
+          SIDECAR_B=$(python3 -c "import json;print(json.load(open('$RUNNER_TEMP/build-b.json'))['sidecar'])")
+          cmp "$ARCHIVE" "$ARCHIVE_B"
+          cmp "$SIDECAR" "$SIDECAR_B"
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "SIDECAR=$SIDECAR" >> "$GITHUB_ENV"
+
+      - name: Verify archive (sidecar digest + member shape)
+        run: python3 scripts/package_app.py verify "$ARCHIVE"
+
+      - name: Extract to temp — only bundle paths, identical content
+        run: |
+          STAGE=$(mktemp -d)
+          cp "$ARCHIVE" "$SIDECAR" "$STAGE/"
+          cd "$STAGE"
+          sha256sum -c "$(basename "$SIDECAR")"
+          tar -xzf "$(basename "$ARCHIVE")"
+          # The bundle root is the single extracted top dir; diff it
+          # against the source tree regardless of its versioned name.
+          ROOT=$(find . -mindepth 1 -maxdepth 1 -type d ! -name '.' | head -1)
+          diff -r "$GITHUB_WORKSPACE/app" "$ROOT"
