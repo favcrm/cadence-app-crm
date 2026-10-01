@@ -184,6 +184,46 @@ class RejectionGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(pkg.PackageError, "twice"):
             pkg.parse_manifest(bad)
 
+    # --- R3: deliberate divergence guards (subset of serde_yaml) ---
+
+    def test_manifest_null_needs_refuses(self):
+        # `needs:` with a null scalar is a mapping error on the host.
+        bad = APP_MD.replace("  connections: []", "")  # leaves bare `needs:`
+        with self.assertRaisesRegex(pkg.PackageError, "needs"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_nonstring_app_refuses(self):
+        bad = APP_MD.replace("app: crm", "app: 123")
+        with self.assertRaisesRegex(pkg.PackageError, "string|app name"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_bool_title_refuses(self):
+        bad = APP_MD.replace("title: CRM", "title: true")
+        with self.assertRaisesRegex(pkg.PackageError, "string"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_duplicate_top_key_refuses(self):
+        bad = APP_MD.replace("title: CRM", "title: CRM\ntitle: Dup")
+        with self.assertRaisesRegex(pkg.PackageError, "twice"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_duplicate_needs_key_refuses(self):
+        bad = APP_MD.replace(
+            "  connections: []", "  connections: []\n  connections: [x]"
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "twice"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_tab_indent_refuses(self):
+        bad = APP_MD.replace("  connections: []", "\tconnections: []")
+        with self.assertRaisesRegex(pkg.PackageError, "tab"):
+            pkg.parse_manifest(bad)
+
+    def test_manifest_null_capabilities_refuses(self):
+        bad = APP_MD.replace("  connections: []", "  connections: []\n  capabilities:")
+        with self.assertRaisesRegex(pkg.PackageError, "capabilities"):
+            pkg.parse_manifest(bad)
+
     def test_manifest_unknown_needs_key_refuses(self):
         bad = APP_MD.replace("  connections: []", "  connections: []\n  migrations: []")
         with self.assertRaisesRegex(pkg.PackageError, "needs.migrations"):
@@ -482,6 +522,129 @@ class VerifyParityTests(unittest.TestCase):
         pkg.write_sidecar(archive)
         with self.assertRaisesRegex(pkg.PackageError, "outside"):
             pkg.verify_archive(archive)
+
+    # --- R3: non-canonical path aliases refuse; extract can't overwrite ---
+
+    def _tar_with_extra_member(self, label, member_name, payload=b"EVIL\n"):
+        archive = self.dir / label / "crm-0.1.0.tar.gz"
+        archive.parent.mkdir()
+        import io as _io
+        with tarfile.open(archive, "w:gz") as tf:
+            for rel, data in self.original.items():
+                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info.size = len(data)
+                tf.addfile(info, _io.BytesIO(data))
+            info = tarfile.TarInfo(member_name)
+            info.size = len(payload)
+            tf.addfile(info, _io.BytesIO(payload))
+        pkg.write_sidecar(archive)
+        return archive
+
+    def test_verify_refuses_dot_component_alias(self):
+        # `crm-0.1.0/./workflows/email-brief.md` collapses to a path that
+        # already exists — verify must refuse, else extract overwrites.
+        archive = self._tar_with_extra_member(
+            "dotalias", "crm-0.1.0/./workflows/email-brief.md"
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_mid_dot_component(self):
+        archive = self._tar_with_extra_member(
+            "middot", "crm-0.1.0/workflows/./email-brief.md"
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_double_slash_alias(self):
+        archive = self._tar_with_extra_member(
+            "dslash", "crm-0.1.0//workflows/email-brief.md"
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
+            pkg.verify_archive(archive)
+
+    def test_verify_refuses_dotdot_alias(self):
+        archive = self._tar_with_extra_member(
+            "ddot", "crm-0.1.0/rubrics/../workflows/email-brief.md"
+        )
+        with self.assertRaises(pkg.PackageError):
+            pkg.verify_archive(archive)
+
+    def test_legit_dir_trailing_slash_still_passes(self):
+        # The real built archive carries explicit dir entries with a
+        # trailing slash — canonicalization must not reject it.
+        result = pkg.verify_archive(self.out / "crm-0.1.0.tar.gz")
+        self.assertEqual(result["files"], 3)
+
+
+class CleanRefusalTests(unittest.TestCase):
+    """R3: malformed inputs must surface as clean exit-1 refusals,
+    never a traceback."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+
+    def _good_archive(self):
+        out = self.dir / "ok"
+        out.mkdir()
+        self.assertEqual(
+            pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(out)]), 0
+        )
+        return out / "crm-0.1.0.tar.gz"
+
+    def test_non_ascii_sidecar_is_clean_refusal(self):
+        archive = self._good_archive()
+        archive.with_name(archive.name + ".sha256").write_bytes("é".encode())
+        # Library path raises PackageError (not UnicodeDecodeError).
+        with self.assertRaises(pkg.PackageError):
+            pkg.verify_archive(archive)
+        # CLI exits 1 with a short error line, no traceback.
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT), "verify", str(archive)],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(p.returncode, 1)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertIn("error:", p.stderr)
+
+    def test_corrupt_zip_local_header_is_clean_refusal(self):
+        out = self.dir / "z"
+        out.mkdir()
+        self.assertEqual(
+            pkg.main(
+                ["build", "--source", str(REPO / "app"), "--outdir", str(out), "--format", "zip"]
+            ),
+            0,
+        )
+        archive = out / "crm-0.1.0.zip"
+        raw = bytearray(archive.read_bytes())
+        idx = raw.find(b"crm-0.1.0/app.md")
+        self.assertGreater(idx, 0)
+        raw[idx] ^= 0xFF  # corrupt a filename byte in a local header
+        archive.write_bytes(raw)
+        pkg.write_sidecar(archive)
+        with self.assertRaises(pkg.PackageError):
+            pkg.verify_archive(archive)
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT), "verify", str(archive)],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(p.returncode, 1)
+        self.assertNotIn("Traceback", p.stderr)
+
+    def test_garbage_tar_is_clean_refusal(self):
+        archive = self.dir / "crm-0.1.0.tar.gz"
+        archive.write_bytes(os.urandom(64))
+        pkg.write_sidecar(archive)
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT), "verify", str(archive)],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(p.returncode, 1)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertIn("error:", p.stderr)
 
 
 class CliTests(unittest.TestCase):

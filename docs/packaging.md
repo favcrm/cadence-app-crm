@@ -28,9 +28,15 @@ later-stage). An A1 bundle is UTF-8 text only — every file (not just
 are checked both ways on the archive exactly as on the source. Archive
 members must be regular files or plain directories under the single
 bundle root — non-regular types (links, devices, fifos), paths outside
-the root, dot-directories and duplicate/normalized names refuse; per-file
-and aggregate size bounds are enforced while reading, before any
-unbounded aggregation.
+the root, dot-directories and duplicate names refuse. Member names must
+be canonical: `.`/`..`/`//` components and non-trailing empty parts are
+rejected on the raw string *before* `PurePosixPath` normalization, so an
+alias like `crm-0.1.0/./workflows/x.md` can never collide with and
+overwrite the canonical file on extract. Per-file and aggregate size
+bounds are enforced while reading, before any unbounded aggregation.
+Malformed inputs (a non-ASCII sidecar, a corrupt zip local header, a
+truncated/garbage archive) surface as clean `PackageError` refusals —
+exit 1 with a short message, never a traceback.
 
 A PASS here is **not** host validation. The tool does not run
 `workflow check`, the secret guard, `uses:` slot cross-checks,

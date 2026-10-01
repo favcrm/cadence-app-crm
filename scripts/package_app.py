@@ -105,16 +105,22 @@ class Manifest:
     binding_contract: str | None
 
 
-# --- Minimal YAML frontmatter parser ---------------------------------
+# --- Restricted YAML frontmatter reader -------------------------------
 #
-# The host parses frontmatter with serde_yaml. Packaging needs only the
-# declared fields, so a deliberately small subset is parsed instead of
-# vendoring a YAML dependency: plain scalars (quoted or unquoted) at
-# top level, and a `needs:` mapping holding a `connections:` flow list
-# (`[]` or `[a, b]`) and `views:`/`bindings:` maps with one `contract:`
-# scalar each. Frontmatter outside this subset is refused rather than
-# silently misread — the bundle must stay in the shape the host's full
-# parser also accepts.
+# This is NOT a serde_yaml-parity parser — it is a deliberately narrow
+# reader for the metadata this tool extracts (`app`, `title`, `version`,
+# `summary`, `needs.connections`, `needs.views.contract`,
+# `needs.bindings.contract`). It accepts only: a `---` fenced block of
+# `key: value` lines; plain scalars (single/double-quoted or unquoted);
+# a `needs:` mapping whose values are a `connections:` flow list (`[]`
+# or `[a, b]`), `views:`/`bindings:` maps with a lone `contract:`
+# scalar, or an empty `capabilities: {}`. It deliberately refuses —
+# rather than silently misread — frontmatter the host's serde_yaml would
+# also refuse: unknown or later-stage keys, duplicate keys at any level,
+# tab indentation, a null/non-mapping `needs:`, non-string scalars
+# (`app: 123`, `title: true`), and any nested or flow structure outside
+# the listed shape. Do not extend this into a general YAML parser; the
+# host re-validates the manifest at install regardless.
 
 
 def _split_front(text: str, rel: str = MANIFEST) -> tuple[str, str]:
@@ -190,6 +196,29 @@ def _unquote(value: str, where: str) -> str:
     return value
 
 
+_SCALAR_WORDS = {"true", "false", "yes", "no", "on", "off", "null", "~"}
+
+
+def _refuse_nonstring_scalar(key: str, value: str | None) -> None:
+    """Refuse a manifest field that YAML would type as non-string.
+
+    `_unquote` already returns the raw text for plain scalars; a bare
+    number or boolean keyword is what serde_yaml would hand the host as
+    a non-string (its `as_str()` is None → refuse). Quoted values
+    (`version: '0.1.0'`) already arrived as real strings.
+    """
+    if value is None:
+        return
+    low = value.strip().lower()
+    if low in _SCALAR_WORDS or re.fullmatch(r"[-+]?[0-9]+", low) or re.fullmatch(
+        r"[-+]?[0-9]*\.[0-9]+", low
+    ):
+        raise PackageError(
+            f"{MANIFEST} `{key}:` must be a string — `{value}` reads as a "
+            "non-string scalar"
+        )
+
+
 def _flow_strings(value: str, where: str) -> list[str]:
     """Parse `[a, b]` or `[]` into a list of plain scalars."""
     value = value.strip()
@@ -217,6 +246,8 @@ def parse_manifest(text: str) -> Manifest:
     yaml, _body = _split_front(text)
     fields: dict[str, str | None] = {}
     needs: dict[str, str] = {}
+    seen_fields: set[str] = set()
+    seen_needs: set[str] = set()
     in_needs = False
     # Indent of `needs:` children; `needs.views:`/`needs.bindings:` may
     # carry one nested `contract:` line deeper than that indent.
@@ -225,7 +256,10 @@ def parse_manifest(text: str) -> Manifest:
     for raw_line in yaml.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
-        indented = raw_line[0] in (" ", "\t")
+        if "\t" in raw_line[: len(raw_line) - len(raw_line.lstrip())]:
+            # serde_yaml refuses a tab as indentation; match that here.
+            raise PackageError(f"{MANIFEST} frontmatter: tab indentation refuses")
+        indented = raw_line[0] == " "
         line = raw_line.strip()
         if not indented:
             in_needs = False
@@ -236,6 +270,11 @@ def parse_manifest(text: str) -> Manifest:
                 )
             key, _, value = line.partition(":")
             key = key.strip()
+            if key in seen_fields:
+                raise PackageError(
+                    f"{MANIFEST} frontmatter key '{key}' is declared twice"
+                )
+            seen_fields.add(key)
             if key in GATED_KEYS:
                 raise PackageError(
                     f"{MANIFEST} frontmatter key '{key}' is a later stage "
@@ -248,6 +287,8 @@ def parse_manifest(text: str) -> Manifest:
                     f"{', '.join(MANIFEST_KEYS)}; anything else can never be installed"
                 )
             if key == "needs":
+                # `needs:` holds a mapping — a null/empty/scalar value
+                # refuses like the host's `needs is a mapping` error.
                 if value.strip() and value.strip() != "{}":
                     raise PackageError(
                         f"{MANIFEST} `needs:` is a mapping — v0 knows "
@@ -255,8 +296,15 @@ def parse_manifest(text: str) -> Manifest:
                         "needs.bindings"
                     )
                 in_needs = True
+                if value.strip() == "{}":
+                    seen_needs.add("{}")  # explicit empty map: children are a dup
                 continue
             fields[key] = _unquote(value, f"{MANIFEST} `{key}:`")
+            # serde_yaml reads `app: 123` / `title: true` as int/bool,
+            # not a string — `as_str()` is None and the host refuses.
+            # Refuse the obvious non-string scalars here so the field
+            # never pretends to be a string.
+            _refuse_nonstring_scalar(key, fields[key])
         elif in_needs:
             indent = len(raw_line) - len(raw_line.lstrip())
             if needs_child_indent is None:
@@ -284,6 +332,11 @@ def parse_manifest(text: str) -> Manifest:
                     "needs.connections, needs.capabilities, needs.views, "
                     "needs.bindings"
                 )
+            if key in seen_needs:
+                raise PackageError(
+                    f"{MANIFEST} `needs.{key}` is declared twice"
+                )
+            seen_needs.add(key)
             needs[key] = value.strip()
             if value.strip() == "" and key in ("views", "bindings"):
                 needs_sub = key  # may carry a nested `contract:` line
@@ -292,6 +345,14 @@ def parse_manifest(text: str) -> Manifest:
                 f"{MANIFEST} frontmatter: nested content is only supported "
                 "under `needs:`"
             )
+
+    # A bare `needs:` that produced no children is a null scalar on the
+    # host (`needs is a mapping` → refuse), not an empty mapping.
+    if in_needs and "{}" not in seen_needs and not needs:
+        raise PackageError(
+            f"{MANIFEST} `needs:` is a mapping — v0 knows "
+            "needs.connections, needs.capabilities, needs.views, needs.bindings"
+        )
 
     def need(key: str, what: str) -> str:
         value = fields.get(key)
@@ -329,8 +390,10 @@ def parse_manifest(text: str) -> Manifest:
     if "capabilities" in needs:
         # The shape mirror does not decode capability declarations —
         # the host validates them — but an empty flow map is still a
-        # declared empty set and valid.
-        if needs["capabilities"] not in ("{}", ""):
+        # declared empty set and valid. A bare `capabilities:` (empty
+        # value) is a null, which the host reads as a mapping — refuse
+        # it rather than claim typed parity.
+        if needs["capabilities"] not in ("{}",):
             raise PackageError(
                 f"{MANIFEST} `needs.capabilities` declarations are validated "
                 "by the host; this packaging check accepts only an empty "
@@ -705,6 +768,12 @@ def read_sidecar(archive: Path) -> str:
         line = sidecar.read_text(encoding="ascii").strip()
     except OSError as e:
         raise PackageError(f"cannot read {sidecar}: {e}") from e
+    except UnicodeDecodeError as e:
+        # A non-ASCII sidecar is malformed input, not a bug — refuse
+        # cleanly, never a UnicodeDecodeError traceback.
+        raise PackageError(
+            f"{sidecar.name}: not ASCII — expected `<64-hex>  {archive.name}`"
+        ) from e
     parts = line.split()
     if len(parts) != 2 or not re.fullmatch(r"[0-9a-f]{64}", parts[0]) or parts[1] != archive.name:
         raise PackageError(
@@ -762,6 +831,8 @@ def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]
             zf = zipfile.ZipFile(archive)
         except zipfile.BadZipFile as e:
             raise PackageError(f"{archive.name}: not a zip archive — {e}") from e
+        except OSError as e:
+            raise PackageError(f"{archive.name}: cannot read archive — {e}") from e
         with zf:
             for info in zf.infolist():
                 # A unix symlink or non-regular file carries its type in
@@ -785,7 +856,15 @@ def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]
                         f"{archive.name}: member {info.filename} is not a regular "
                         "file (links/devices/special types refuse)"
                     )
-                admit(info.filename, False, info.file_size, zf.read(info))
+                try:
+                    data = zf.read(info)
+                except (zipfile.BadZipFile, OSError) as e:
+                    # A corrupt member/local header is malformed input —
+                    # refuse cleanly, never a BadZipFile traceback.
+                    raise PackageError(
+                        f"{archive.name}: cannot read member {info.filename} — {e}"
+                    ) from e
+                admit(info.filename, False, info.file_size, data)
         return members, dirs
 
     try:
@@ -802,21 +881,55 @@ def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]
                     f"{archive.name}: member {info.name} is not a regular file "
                     "(links/devices refuse)"
                 )
-            fh = tf.extractfile(info)
+            try:
+                fh = tf.extractfile(info)
+            except (tarfile.TarError, OSError) as e:
+                raise PackageError(
+                    f"{archive.name}: cannot read member {info.name} — {e}"
+                ) from e
             if fh is None:
                 raise PackageError(f"{archive.name}: cannot read member {info.name}")
-            admit(info.name, False, info.size, fh.read())
+            try:
+                data = fh.read()
+            except (tarfile.TarError, OSError) as e:
+                raise PackageError(
+                    f"{archive.name}: cannot read member {info.name} — {e}"
+                ) from e
+            admit(info.name, False, info.size, data)
     return members, dirs
 
 
 def _check_member_path(name: str, archive_name: str) -> PurePosixPath:
+    """Refuse a member name that is not already canonical.
+
+    Run on the RAW member name before any PurePosixPath use. `PurePosixPath`
+    collapses `.`/`..`/`//` and drops a trailing slash in `.parts`, so a
+    string like `crm-0.1.0/./workflows/x.md` yields parts
+    `(crm-0.1.0, workflows, x.md)` — the alias would pass a parts-based
+    check while the raw string still names a different on-disk path and
+    can overwrite a canonical file on extract. Reject every non-canonical
+    component by splitting the raw string, so `seen` keys, the prefix
+    strip and the rel tree all agree on the same canonical name. A
+    directory's single trailing `/` is allowed; no other empty or `.`/`..`
+    component is.
+    """
     if not name or "\\" in name:
         raise PackageError(f"{archive_name}: bad member name {name!r}")
-    path = PurePosixPath(name)
-    if path.is_absolute() or name.startswith("/"):
+    if name.startswith("/"):
         raise PackageError(f"{archive_name}: absolute member path {name!r} refuses")
-    if any(part in ("..", "") for part in path.parts):
-        raise PackageError(f"{archive_name}: member path {name!r} escapes or is empty")
+    parts = name.split("/")
+    # A single trailing slash marks a directory entry — drop it before
+    # checking components. Any other empty or `.`/`..` part is an alias.
+    if parts and parts[-1] == "":
+        parts = parts[:-1]
+    if not parts or any(p in ("", ".", "..") for p in parts):
+        raise PackageError(
+            f"{archive_name}: member path {name!r} is not canonical — "
+            "a `.`/`..`/empty component is an alias and refuses"
+        )
+    path = PurePosixPath(name)
+    if path.is_absolute():
+        raise PackageError(f"{archive_name}: absolute member path {name!r} refuses")
     return path
 
 
@@ -923,7 +1036,10 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
             files.append(rel)
             continue
         parts = PurePosixPath(rel).parts
-        if len(parts) != 2:
+        if len(parts) != 2 or rel.endswith("/"):
+            # A rel that is not exactly `top/name`, or a file member whose
+            # name ends in `/` (masquerading as a directory entry), has no
+            # place in a flat v0 bundle.
             raise PackageError(
                 f"{archive_name}: member {rel} — v0 app dirs are flat, "
                 "no nested folders"
