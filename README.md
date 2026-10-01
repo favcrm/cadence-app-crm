@@ -1,0 +1,50 @@
+# Cadence CRM App
+
+Proposed remote: `favcrm/cadence-app-crm`. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
+App identity stays `crm`; the repository name does not change installation or data identities.
+
+## Status
+
+This is a draft extraction scaffold for CAD-811, not an independently functional CRM release.
+`app/` is a copy of the existing metadata/email-brief bundle from Cadence source
+`a692ba9080d453bd22b864f5fb5af7d13c67286e`. It does not contain the host-compiled CRM screens,
+customer/segment/campaign implementation, or sending logic. The original source remains in place.
+No remote repository, release, production installation or migration has been created.
+
+The current manifest version `0.1.0` is preserved from that metadata bundle; it does not certify
+full-plugin compatibility or delivery. No app runtime/language/SDK is selected by this scaffold.
+
+## Repository convention
+
+```text
+cadence-app-crm/
+  app/                     # installable bundle root (current metadata only)
+    app.md                 # actual Cadence manifest format
+    workflows/
+    rubrics/
+    views/                 # planned app-views/v1 descriptors
+    bindings/              # planned app-bindings/v1 companions
+  src/
+    domain/                # app-specific definitions/logic: contract work pending
+    actions/               # typed app operations: execution contract pending
+    migrations/            # installation data migrations: contract pending
+  tests/
+    unit/
+    contract/              # compatibility with pinned Cadence host contracts
+    e2e/                   # install/update/isolation/rollback rehearsal
+  scripts/                 # package, validate and release tooling (pending)
+  docs/
+  .github/workflows/       # independent CI/release workflows (pending)
+  dist/                    # generated artifacts, ignored by Git
+```
+
+Only directories with current content are committed. `app/views/`, `app/bindings/` and `dist/`
+are planned; no unsupported declarations or preview forms are shipped as working features.
+
+Cadence owns the shared shell/navigation/chat, Field/table/detail/drawer components, scoped
+storage and authorization, credential custody, approvals and effect execution. CRM owns
+its app views, domain definitions, workflows, typed action declarations, migrations and tests.
+App-specific behavior needs an explicit verified execution contract; copying host Rust/React
+into this repository alone would not make it loadable by Cadence.
+
+See [repository-layout.md](docs/repository-layout.md) for boundaries and release acceptance.
