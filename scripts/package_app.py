@@ -868,34 +868,37 @@ def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]
         return members, dirs
 
     try:
-        tf = tarfile.open(archive, mode="r:*")
-    except (tarfile.TarError, OSError) as e:
+        try:
+            tf = tarfile.open(archive, mode="r:*")
+        except (tarfile.TarError, OSError) as e:
+            raise PackageError(f"{archive.name}: cannot read archive — {e}") from e
+        with tf:
+            for info in tf:
+                if info.isdir():
+                    admit(info.name, True, 0, None)
+                    continue
+                if not info.isreg():
+                    raise PackageError(
+                        f"{archive.name}: member {info.name} is not a regular file "
+                        "(links/devices refuse)"
+                    )
+                try:
+                    fh = tf.extractfile(info)
+                except (tarfile.TarError, OSError) as e:
+                    raise PackageError(
+                        f"{archive.name}: cannot read member {info.name} — {e}"
+                    ) from e
+                if fh is None:
+                    raise PackageError(f"{archive.name}: cannot read member {info.name}")
+                try:
+                    data = fh.read()
+                except (tarfile.TarError, OSError) as e:
+                    raise PackageError(
+                        f"{archive.name}: cannot read member {info.name} — {e}"
+                    ) from e
+                admit(info.name, False, info.size, data)
+    except (tarfile.TarError, OSError, EOFError) as e:
         raise PackageError(f"{archive.name}: cannot read archive — {e}") from e
-    with tf:
-        for info in tf:
-            if info.isdir():
-                admit(info.name, True, 0, None)
-                continue
-            if not info.isreg():
-                raise PackageError(
-                    f"{archive.name}: member {info.name} is not a regular file "
-                    "(links/devices refuse)"
-                )
-            try:
-                fh = tf.extractfile(info)
-            except (tarfile.TarError, OSError) as e:
-                raise PackageError(
-                    f"{archive.name}: cannot read member {info.name} — {e}"
-                ) from e
-            if fh is None:
-                raise PackageError(f"{archive.name}: cannot read member {info.name}")
-            try:
-                data = fh.read()
-            except (tarfile.TarError, OSError) as e:
-                raise PackageError(
-                    f"{archive.name}: cannot read member {info.name} — {e}"
-                ) from e
-            admit(info.name, False, info.size, data)
     return members, dirs
 
 
@@ -1116,13 +1119,16 @@ def cmd_build(args: argparse.Namespace) -> int:
 
     archive_name = f"{manifest.app}-{manifest.version}.{args.format}"
     prefix = f"{manifest.app}-{manifest.version}/"
-    args.outdir.mkdir(parents=True, exist_ok=True)
-    archive = args.outdir / archive_name
-    if args.format == "tar.gz":
-        write_tar_gz(archive, prefix, contents)
-    else:
-        write_zip(archive, prefix, contents)
-    sidecar = write_sidecar(archive)
+    try:
+        args.outdir.mkdir(parents=True, exist_ok=True)
+        archive = args.outdir / archive_name
+        if args.format == "tar.gz":
+            write_tar_gz(archive, prefix, contents)
+        else:
+            write_zip(archive, prefix, contents)
+        sidecar = write_sidecar(archive)
+    except OSError as e:
+        raise PackageError(f"cannot write package in {args.outdir}: {e}") from e
 
     result = {
         "archive": str(archive),

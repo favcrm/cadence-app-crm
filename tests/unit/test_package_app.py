@@ -670,6 +670,30 @@ class CliTests(unittest.TestCase):
             check = self.run_cli("check", "--source", str(REPO / "app"))
             self.assertEqual(check.returncode, 0, check.stderr)
 
+    def test_truncated_gzip_is_clean_refusal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = self.run_cli("build", "--outdir", tmp)
+            self.assertEqual(build.returncode, 0, build.stderr)
+            archive = Path(json.loads(build.stdout)["archive"])
+            data = archive.read_bytes()
+            archive.write_bytes(data[:len(data) // 2])
+            pkg.write_sidecar(archive)
+            with self.assertRaises(pkg.PackageError):
+                pkg.verify_archive(archive)
+            result = self.run_cli("verify", str(archive))
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("error:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
+    def test_output_directory_blocked_by_file_is_clean_refusal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            blocked = Path(tmp) / "blocked"
+            blocked.write_text("a file blocks directory creation")
+            result = self.run_cli("build", "--outdir", str(blocked / "child"))
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("error:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_missing_source_fails_nonzero(self):
         result = self.run_cli("check", "--source", "/nonexistent/path")
         self.assertNotEqual(result.returncode, 0)
