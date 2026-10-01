@@ -1,6 +1,6 @@
 # Cadence CRM App
 
-Proposed remote: `favcrm/cadence-app-crm`. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
+Private repository: https://github.com/favcrm/cadence-app-crm. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
 App identity stays `crm`; the repository name does not change installation or data identities.
 
 ## Status
@@ -9,14 +9,14 @@ This is a draft extraction scaffold for CAD-811, not an independently functional
 `app/` is a copy of the existing metadata/email-brief bundle from Cadence source
 `a692ba9080d453bd22b864f5fb5af7d13c67286e`. It does not contain the host-compiled CRM screens,
 customer/segment/campaign implementation, or sending logic. The original source remains in place.
-No remote repository, release, production installation or migration has been created.
+The remote repository holds the extraction scaffold. No release, production CRM installation or migration has been performed.
 
 CAD-962 added deterministic packaging for the unchanged `app/` bundle
 (`scripts/package_app.py`: check/build/verify, byte-identical rebuilds,
 SHA256 sidecar that is integrity evidence only — never the Cadence bundle
 digest or an approval), its unit tests, an install-path note
 (`docs/packaging.md`) and a read-only CI definition
-(`.github/workflows/package.yml`, unexecuted until a remote exists).
+(`.github/workflows/package.yml`, hosted execution pending).
 Still pending: the action/domain/migration contract, descriptor/binding
 validation against pinned host contracts, and the two-version
 install/update/isolation/rollback rehearsal.
@@ -44,7 +44,7 @@ cadence-app-crm/
     e2e/                   # install/update/isolation/rollback rehearsal
   scripts/                 # package_app.py: check/build/verify the bundle (done); release pipeline pending
   docs/
-  .github/workflows/       # package.yml: read-only packaging CI (defined, unexecuted); release pending
+  .github/workflows/       # package.yml: read-only packaging CI (defined; hosted validation pending); release pending
   dist/                    # generated artifacts, ignored by Git
 ```
 
@@ -58,3 +58,5 @@ App-specific behavior needs an explicit verified execution contract; copying hos
 into this repository alone would not make it loadable by Cadence.
 
 See [repository-layout.md](docs/repository-layout.md) for boundaries and release acceptance.
+
+See [development-loop.md](docs/development-loop.md) for the shared CRM/Social Content development modes.
