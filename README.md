@@ -1,6 +1,6 @@
 # Cadence CRM App
 
-Private repository: https://github.com/favcrm/cadence-app-crm. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
+Public repository: https://github.com/favcrm/cadence-app-crm. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
 App identity stays `crm`; the repository name does not change installation or data identities.
 
 ## Status
@@ -60,3 +60,5 @@ into this repository alone would not make it loadable by Cadence.
 See [repository-layout.md](docs/repository-layout.md) for boundaries and release acceptance.
 
 See [development-loop.md](docs/development-loop.md) for the shared CRM/Social Content development modes.
+
+The intended distribution model is installation from a public Git repository at an explicit release/reference. The current installer scans the clone root; this repository keeps the bundle in `app/`, so direct Git URL installation still needs a supported bundle-subdirectory contract. Until that exists, use the local/extracted bundle path in [packaging.md](docs/packaging.md). Public availability does not grant installation approval or app permissions.
