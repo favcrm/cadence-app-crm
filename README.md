@@ -11,6 +11,16 @@ This is a draft extraction scaffold for CAD-811, not an independently functional
 customer/segment/campaign implementation, or sending logic. The original source remains in place.
 No remote repository, release, production installation or migration has been created.
 
+CAD-962 added deterministic packaging for the unchanged `app/` bundle
+(`scripts/package_app.py`: check/build/verify, byte-identical rebuilds,
+SHA256 sidecar that is integrity evidence only — never the Cadence bundle
+digest or an approval), its unit tests, an install-path note
+(`docs/packaging.md`) and a read-only CI definition
+(`.github/workflows/package.yml`, unexecuted until a remote exists).
+Still pending: the action/domain/migration contract, descriptor/binding
+validation against pinned host contracts, and the two-version
+install/update/isolation/rollback rehearsal.
+
 The current manifest version `0.1.0` is preserved from that metadata bundle; it does not certify
 full-plugin compatibility or delivery. No app runtime/language/SDK is selected by this scaffold.
 
@@ -32,9 +42,9 @@ cadence-app-crm/
     unit/
     contract/              # compatibility with pinned Cadence host contracts
     e2e/                   # install/update/isolation/rollback rehearsal
-  scripts/                 # package, validate and release tooling (pending)
+  scripts/                 # package_app.py: check/build/verify the bundle (done); release pipeline pending
   docs/
-  .github/workflows/       # independent CI/release workflows (pending)
+  .github/workflows/       # package.yml: read-only packaging CI (defined, unexecuted); release pending
   dist/                    # generated artifacts, ignored by Git
 ```
 
