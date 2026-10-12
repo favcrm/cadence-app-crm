@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic packaging and verification for the ``app/`` bundle.
 
-CAD-962: builds the unchanged ``app/`` tree into a versioned
+CAD-962/CRM-1: builds the ``app/`` tree into a versioned
 ``.tar.gz`` release archive plus a SHA256 sidecar under ``dist/``, or
 verifies a previously built archive against the bundle.
 
@@ -13,8 +13,8 @@ Scope and honesty notes:
   authorization or approval evidence.
 * The structural checks mirror the *shape* rules the v0 host loader
   applies in `src/issue/app.rs` (`bundle_files` + `parse_manifest`):
-  required `app.md`, required `workflows/`, the five known top-level
-  dirs, flat dirs only, no symlinks, no dotfiles, no unknown top-level
+  required `app.md`, required `workflows/`, the existing top-level
+  dirs plus bounded `screens/crm/`, no symlinks, no dotfiles, no unknown top-level
   entries, tag-shaped names, bounded file count and sizes, and the
   manifest frontmatter key allowlist. They run offline and do NOT
   reimplement workflow checks, the secret guard, slot cross-checks or
@@ -68,10 +68,10 @@ DESCRIPTOR_CONTRACTS = {
     "app-assistant.json": "app-assistant/v1",
     "app-chat.json": "app-chat/v1",
 }
-TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings")
+TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens")
 MANIFEST_KEYS = ("app", "title", "version", "needs", "summary")
 GATED_KEYS = ("records", "actions", "ui", "settings", "actors")
-NEEDS_KEYS = ("connections", "capabilities", "views", "bindings")
+NEEDS_KEYS = ("connections", "capabilities", "views", "bindings", "requires")
 VIEW_CONTRACT = "app-views/v1"
 BINDING_CONTRACT = "app-bindings/v1"
 VIEWS_FILE = "app-views-v1.json"
@@ -112,6 +112,7 @@ class Manifest:
     connections: tuple[str, ...]
     view_contract: str | None
     binding_contract: str | None
+    requires: tuple[tuple[str, tuple[int, ...]], ...] = ()
 
 
 # --- Restricted YAML frontmatter reader -------------------------------
@@ -325,14 +326,16 @@ def parse_manifest(text: str) -> Manifest:
             key, _, value = line.partition(":")
             key = key.strip()
             if indent > needs_child_indent:
-                if needs_sub is None or key != "contract":
+                if needs_sub is None or key != ("contracts" if needs_sub == "requires" else "contract"):
                     raise PackageError(
                         f"{MANIFEST} `needs.{needs_sub}` knows only `contract`"
                         if needs_sub
                         else f"{MANIFEST} frontmatter: nested content is only "
                         "supported under `needs.views`/`needs.bindings`"
                     )
-                needs[needs_sub] = f"contract:{value.strip()}"
+                if needs[needs_sub]:
+                    raise PackageError(f"{MANIFEST} duplicate nested needs.{needs_sub} field")
+                needs[needs_sub] = f"{key}:{value.strip()}"
                 continue
             needs_sub = None
             if key not in NEEDS_KEYS:
@@ -347,7 +350,7 @@ def parse_manifest(text: str) -> Manifest:
                 )
             seen_needs.add(key)
             needs[key] = value.strip()
-            if value.strip() == "" and key in ("views", "bindings"):
+            if value.strip() == "" and key in ("views", "bindings", "requires"):
                 needs_sub = key  # may carry a nested `contract:` line
         else:
             raise PackageError(
@@ -389,6 +392,29 @@ def parse_manifest(text: str) -> Manifest:
                 f"{MANIFEST} `summary:` — ≤160 chars, no control characters"
             )
 
+    requires = ()
+    if "requires" in needs:
+        value = needs["requires"]
+        if not value.startswith("contracts:"):
+            raise PackageError("packaging supports needs.requires.contracts as a block with an inline name-to-majors map")
+        raw = value.removeprefix("contracts:").strip()
+        if not (raw.startswith("{") and raw.endswith("}")):
+            raise PackageError("needs.requires.contracts must be an inline mapping")
+        entries = re.findall(r"([a-z0-9][a-z0-9-]{0,31}):\s*\[([0-9, ]+)\]", raw[1:-1])
+        remainder = re.sub(r"[a-z0-9][a-z0-9-]{0,31}:\s*\[[0-9, ]+\]", "", raw[1:-1])
+        if not entries or len(entries) > 16 or remainder.strip(" ,"):
+            raise PackageError("invalid needs.requires.contracts mapping")
+        names = set()
+        parsed = []
+        for name, numbers in entries:
+            if not re.fullmatch(r"\s*[1-9][0-9]*(?:\s*,\s*[1-9][0-9]*)*\s*", numbers):
+                raise PackageError("required majors are positive integers with no empty entries")
+            majors = tuple(int(n.strip()) for n in numbers.split(","))
+            if name in names or not 1 <= len(majors) <= 8 or min(majors) < 1 or len(set(majors)) != len(majors):
+                raise PackageError("duplicate or invalid required contract/major")
+            names.add(name)
+            parsed.append((name, majors))
+        requires = tuple(parsed)
     connections: list[str] = []
     view_contract = None
     binding_contract = None
@@ -423,6 +449,7 @@ def parse_manifest(text: str) -> Manifest:
         connections=tuple(connections),
         view_contract=view_contract,
         binding_contract=binding_contract,
+        requires=requires,
     )
 
 
@@ -547,6 +574,16 @@ def bundle_files(root: Path) -> list[str]:
         )
 
     for top in dirs:
+        if top == "screens":
+            tags = sorted(os.scandir(root / top), key=lambda e: e.name)
+            if len(tags) != 1 or tags[0].name != "crm" or tags[0].is_symlink() or not tags[0].is_dir(follow_symlinks=False):
+                raise PackageError("screens/ holds only the real crm/ screen directory")
+            for entry in sorted(os.scandir(root / "screens/crm"), key=lambda e: e.name):
+                rel = f"screens/crm/{entry.name}"
+                if entry.is_symlink() or not entry.is_file(follow_symlinks=False) or not screen_leaf(entry.name):
+                    raise PackageError(f"invalid screen member {rel}")
+                files.append(rel)
+            continue
         for entry in sorted(os.scandir(root / top), key=lambda e: e.name):
             name = entry.name
             rel = f"{top}/{name}"
@@ -586,13 +623,73 @@ def bundle_files(root: Path) -> list[str]:
     total = 0
     for rel in files:
         size = os.lstat(root / rel).st_size
-        if size > MAX_FILE_BYTES:
-            raise PackageError(f"{rel} is {size} bytes — a file is at most {MAX_FILE_BYTES}")
+        if size > file_cap(rel):
+            raise PackageError(f"{rel} is {size} bytes — a file is at most {file_cap(rel)}")
         total += size
         if total > MAX_APP_BYTES:
             raise PackageError(f"app is over {MAX_APP_BYTES} bytes of content — split it")
     files.sort()
     return files
+
+
+def screen_leaf(name: str) -> bool:
+    return name == "screens.json" or re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}\.(js|css|svg|json)", name) is not None
+
+
+def file_cap(rel: str) -> int:
+    if rel.startswith("screens/crm/") and rel.count("/") == 2:
+        if rel == "screens/crm/screens.json":
+            return 16384
+        return 393216 if rel.endswith(".js") else 131072
+    return MAX_FILE_BYTES
+
+
+def check_screen_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
+    screen = {rel.removeprefix("screens/crm/"): data for rel, data in contents if rel.startswith("screens/crm/")}
+    if not screen:
+        return
+    def closed_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise PackageError(f"{where}: duplicate screen JSON field {key}")
+            result[key] = value
+        return result
+    try:
+        raw = screen.pop("screens.json")
+        if len(raw) > 16384:
+            raise PackageError("screen manifest exceeds 16384 bytes")
+        decl = json.loads(raw.decode("utf-8"), object_pairs_hook=closed_pairs)
+        assets = decl["assets"]
+        if decl["app"] != "crm" or decl["contract"] != "app-screens/v2" or decl["host_contract"] != "screen-records.v1" or decl["entry"] != "client.js":
+            raise PackageError("CRM screen contract mismatch")
+        if not isinstance(assets, list) or not 1 <= len(assets) <= 32 or sum(map(len, screen.values())) > 524288:
+            raise PackageError("screen asset count/total exceeds bounds")
+        names = set()
+        media = {"js": "text/javascript", "css": "text/css", "svg": "image/svg+xml", "json": "application/json"}
+        for asset in assets:
+            name = asset["name"]
+            if set(asset) != {"name", "size", "sha256", "media_type"} or name in names or not screen_leaf(name) or name == "screens.json":
+                raise PackageError("invalid/duplicate screen asset")
+            names.add(name)
+            data = screen[name]
+            text = data.decode("utf-8")
+            if name.endswith(".js") and re.search(r"</script|<!--|-->", text, re.IGNORECASE):
+                raise PackageError(f"unsafe inline screen script: {name}")
+            if type(asset["size"]) is not int or asset["size"] != len(data) or len(data) > file_cap("screens/crm/" + name) or asset["sha256"] != "sha256:" + sha256_hex(data) or asset["media_type"] != media[name.rsplit(".", 1)[1]]:
+                raise PackageError(f"screen asset integrity mismatch: {name}")
+        if names != set(screen) or "client.js" not in names:
+            raise PackageError("missing/unspecified screen assets")
+        if "startup" in decl:
+            startup = decl["startup"]
+            scripts = {a["name"] for a in assets if a["media_type"] == "text/javascript"}
+            if not isinstance(startup, list) or not 2 <= len(startup) <= 32 or any(not isinstance(n, str) for n in startup) or len(set(startup)) != len(startup) or set(startup) != scripts or startup[-1] != decl["entry"]:
+                raise PackageError("startup must name all JavaScript assets once, entry last")
+            manifest = parse_manifest(dict(contents)[MANIFEST].decode("utf-8"))
+            if ("screen-startup", (1,)) not in manifest.requires:
+                raise PackageError("startup requires needs.requires.contracts screen-startup: [1]")
+    except (KeyError, TypeError, ValueError, UnicodeDecodeError) as e:
+        raise PackageError(f"{where}: invalid screen declaration: {e}") from e
 
 
 def _check_utf8_name(name: str, where: str) -> None:
@@ -612,6 +709,12 @@ def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
             f"{where}: app-actions.json carries no paired app-assistant.json — "
             "the read tools it proposes from install together or not at all"
         )
+    screen_members = [f for f in files if f.startswith("screens/")]
+    if screen_members:
+        if "screens/crm/screens.json" not in present or any((name, (1,)) not in manifest.requires for name in ("app-screens", "screen-records")):
+            raise PackageError(f"{where}: CRM screen needs its declaration and needs.requires.contracts app-screens/screen-records: [1]")
+    elif any(name in ("screen-records", "screen-startup") for name, _ in manifest.requires):
+        raise PackageError(f"{where}: screen-records/startup demand requires a CRM screen")
     if manifest.view_contract and f"views/{VIEWS_FILE}" not in present:
         raise PackageError(
             f"{where}: app.md declares `needs.views` but the bundle carries no "
@@ -664,8 +767,11 @@ def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
     reaches the manifest/guide stage. `contents` is the in-memory
     (relpath, bytes) list; never call this on unbounded untrusted input.
     """
+    check_screen_bytes(contents, where)
     total = 0
     for rel, data in contents:
+        if len(data) > file_cap(rel):
+            raise PackageError(f"{where}: {rel} exceeds {file_cap(rel)} bytes")
         total += len(data)
         if total > MAX_APP_BYTES:
             raise PackageError(
@@ -718,7 +824,7 @@ def _tar_info(name: str, data: bytes, dir_: bool = False) -> tarfile.TarInfo:
 
 def _member_names(prefix: str, files: list[str]) -> list[str]:
     """Archive member names: sorted dirs first, then files."""
-    dirnames = sorted({f"{top}" for top in TOP_DIRS if any(f.startswith(top + "/") for f in files)})
+    dirnames = sorted({str(parent) for rel in files for parent in PurePosixPath(rel).parents if str(parent) != "."})
     members = [f"{prefix}{d}/" for d in dirnames]
     members += [f"{prefix}{rel}" for rel in files]
     return members
@@ -771,8 +877,8 @@ def read_contents(root: Path, files: list[str]) -> list[tuple[str, bytes]]:
     for rel in files:
         path = root / rel
         data = path.read_bytes()
-        if len(data) > MAX_FILE_BYTES:
-            raise PackageError(f"{rel} is {len(data)} bytes — a file is at most {MAX_FILE_BYTES}")
+        if len(data) > file_cap(rel):
+            raise PackageError(f"{rel} is {len(data)} bytes — a file is at most {file_cap(rel)}")
         contents.append((rel, data))
     # A1 bundles are UTF-8 text; enforce the aggregate bound and decode
     # every file — not just app.md — so a non-UTF-8 byte never ships.
@@ -846,9 +952,10 @@ def _archive_members(archive: Path) -> tuple[list[tuple[str, bytes]], list[str]]
         if is_dir:
             dirs.append(norm)
             return
-        if size > MAX_FILE_BYTES:
+        rel = name.partition("/")[2]
+        if size > file_cap(rel):
             raise PackageError(
-                f"{archive.name}: {name} is {size} bytes — a file is at most {MAX_FILE_BYTES}"
+                f"{archive.name}: {name} is {size} bytes — a file is at most {file_cap(rel)}"
             )
         total += size
         if total > MAX_APP_BYTES:
@@ -1075,6 +1182,10 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
             files.append(rel)
             continue
         parts = PurePosixPath(rel).parts
+        if len(parts) == 3 and parts[:2] == ("screens", "crm") and screen_leaf(parts[2]):
+            files.append(rel)
+            dirs.add("screens")
+            continue
         if len(parts) != 2 or rel.endswith("/"):
             # A rel that is not exactly `top/name`, or a file member whose
             # name ends in `/` (masquerading as a directory entry), has no
@@ -1084,6 +1195,8 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
                 "no nested folders"
             )
         top, name = parts
+        if top == "screens":
+            raise PackageError(f"{archive_name}: screen files belong only under screens/crm/")
         if top not in TOP_DIRS:
             raise PackageError(
                 f"{archive_name}: member {rel} — v0 knows app.md, workflows/, "
@@ -1124,6 +1237,8 @@ def _check_member_dir(drel: str, archive_name: str, prefix: str, full: str) -> N
         raise PackageError(
             f"{archive_name}: directory member {full} is outside the bundle root {prefix}"
         )
+    if drel.rstrip("/") == "screens/crm":
+        return
     if not drel or "/" in drel.rstrip("/"):
         raise PackageError(
             f"{archive_name}: directory member {full} — v0 app dirs are flat, "

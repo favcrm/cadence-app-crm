@@ -1,0 +1,266 @@
+{
+  "package": "@cadence/screen-ui@1.0.0",
+  "closureSha256": "9470629ef26421a08fb494e591a33c6ac62d00b35dffdc6e6881fca944c360da",
+  "files": [
+    {
+      "path": "ui/package.json",
+      "sha256": "2708307c4b96c0fe2b5e9022d20b4f683f47e0505d2b8ab93f4e0cd1e8cd659d"
+    },
+    {
+      "path": "ui/pnpm-lock.yaml",
+      "sha256": "ce5e6bd5d36a445f45a5a79f0f9e6612422eb0d6a5afcfd5bd43836a26d31c21"
+    },
+    {
+      "path": "ui/screen-ui/package.json",
+      "sha256": "271e3210cbd839826ff9017b789d4f2fdd49db4cb670df5d1cfeae61cbbe0c29"
+    },
+    {
+      "path": "ui/screen-ui/src/base.css",
+      "sha256": "dafbca316309ba4c39e3d204f3968cafce21ff715deb9f6577ef1ff4222ad2b8"
+    },
+    {
+      "path": "ui/screen-ui/src/controls.css",
+      "sha256": "e74d0a5bd9b3561159d4d92f1ff3a5d3009ac3c6ac7cbc1cd25a5030c8edba14"
+    },
+    {
+      "path": "ui/screen-ui/src/drawer-base.css",
+      "sha256": "638060951a320af80f55bf951e4e0aca4b0a846e08ab5dd73e0eb59cf7102f23"
+    },
+    {
+      "path": "ui/screen-ui/src/drawer.css",
+      "sha256": "a306bf5ed4eb519e10c1f7568141e6badfc4a868b00211d6699041e56db457d5"
+    },
+    {
+      "path": "ui/screen-ui/src/index.ts",
+      "sha256": "8be65901a5cb0b97a38f0638d4154578c84c3ffd252cd864ec5e2d0b930e144c"
+    },
+    {
+      "path": "ui/screen-ui/src/navigation.tsx",
+      "sha256": "6a975762cea0a4879868711221bd25b6fa8388a34aaff710c7b46a9aade88939"
+    },
+    {
+      "path": "ui/screen-ui/src/primitives.css",
+      "sha256": "bd17a80d377eb82792ae046ce6ed52a6c539bdd3cdfd26195642f95bfb2faccb"
+    },
+    {
+      "path": "ui/screen-ui/src/styles.css",
+      "sha256": "29dc54133d8a49e866777a9edb4d5f0418cae31aa45419fcab758fc1a1539536"
+    },
+    {
+      "path": "ui/screen-ui/src/theme.css",
+      "sha256": "c5f75e60e83ab06020d624edec78bf8bc3976c7c339c008c023998201a052112"
+    },
+    {
+      "path": "ui/scripts/package-screen-ui.mjs",
+      "sha256": "4f5429783d19812aab8baefa03dc2489d8c11ec82cb181c0a4d5083e9d575cba"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/ConfirmDialog.tsx",
+      "sha256": "aaf7fe507e16dc6da362d7b37baefed03c9f43f3a48c698bc6f924278a68c841"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/DataTable.tsx",
+      "sha256": "e782db8e7b93078cbd9379d25d9f6b0beeb2a615741d6b2d9d384500aba52b44"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/Detail.tsx",
+      "sha256": "64b1e621f0c71190a299530e0e7b1b452f103c9dcd903017f2271e1465c0d4b4"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/DrawerShell.tsx",
+      "sha256": "876f1ea3dad7e92c6c27a343db6b0b92be57dacecc7226763f0749c5fde51638"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/Field.tsx",
+      "sha256": "e73af496df48173ac3919a3187b05aee27822217cf6e6f0d8189e248a34075a2"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/States.tsx",
+      "sha256": "0af1636933401eefaadea6dfe828cfd8940b0b2777cc12b48d5260b6b484c095"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/hostErrors.ts",
+      "sha256": "2431a760e1791b733675edef06aae42dafaff567c6d7e53e1f3cbf8b8e8506fb"
+    },
+    {
+      "path": "ui/src/features/app-shell/shared/useDrawerClose.ts",
+      "sha256": "9ded808da34fc51c1a48d583a21119d9c811b8e6e1962aaf6c888bcde4666541"
+    },
+    {
+      "path": "ui/src/lib/apiError.ts",
+      "sha256": "4b0dbc9ea83b2be417eb9bbe2907763ba7d9d0b37cd06621d14aad74da69b70d"
+    },
+    {
+      "path": "ui/src/lib/cache.ts",
+      "sha256": "6e81f096998cd9ae315eea54ff6d11c9c4d4c2e0d1755009a8df3a642c64b94c"
+    },
+    {
+      "path": "ui/src/lib/types.ts",
+      "sha256": "c66107290f7909415df4bd1e6ccde0d831880e818478caee8dc4fd3a00a8a310"
+    },
+    {
+      "path": "ui/src/lib/useResource.ts",
+      "sha256": "e69c4260b544c300f138f4a475c64904464accdfae9aa585b729e5c39e5ea216"
+    },
+    {
+      "path": "ui/src/ui/Button.tsx",
+      "sha256": "bb001ed446d61626c2245fcd082d4cf29e531bb104dbc170690e3f435f091a9b"
+    },
+    {
+      "path": "ui/src/ui/Link.tsx",
+      "sha256": "12af46848d497a2b523a37cce315ffd9e827b2254d4133af973ae1c42b123ba1"
+    },
+    {
+      "path": "ui/src/ui/Select.tsx",
+      "sha256": "cef16e82b82dffefc6f62a5ed79acdbb2a88b8728aa1f4e4a71fbf288f53e98e"
+    },
+    {
+      "path": "ui/src/ui/buttonActivate.ts",
+      "sha256": "71e1825adab1c333e6ce4a27baa495c323e61a033529d7604b5c54ffde47368e"
+    },
+    {
+      "path": "ui/src/ui/icons.tsx",
+      "sha256": "c763c7471fca263e24be69157b9e5ddbd6acd75add05f15beafcc7060714b422"
+    },
+    {
+      "path": "ui/src/ui/selectLogic.ts",
+      "sha256": "9b8b50e8d226e907aa8e80eaf9000cb1f877097dfb287528baa1c24495ddcb62"
+    }
+  ],
+  "toolchain": {
+    "node": "v22.23.2",
+    "pnpm": "12.2.1",
+    "packages": {
+      "react": "19.2.8",
+      "react-dom": "19.2.8",
+      "@types/react": "19.2.9",
+      "@types/react-dom": "19.2.7",
+      "@hugeicons/react": "1.1.10",
+      "@hugeicons/core-free-icons": "4.3.0",
+      "typescript": "5.9.3",
+      "vite": "8.2.2",
+      "@vitejs/plugin-react": "6.1.1",
+      "tailwindcss": "4.3.3",
+      "@tailwindcss/vite": "4.3.3"
+    }
+  },
+  "source": {
+    "kind": "commit",
+    "sourceSha": "bfce70f9a0aea9bff9a5bb1497d9cc10e07e52ee"
+  },
+  "archive": {
+    "filename": "cadence-screen-ui-1.0.0.tgz",
+    "sha256": "f86e36be9b40dad20adce0b6fff4e3257867ca32b57c9a5fa29c899918510d6d",
+    "bytes": 54803
+  },
+  "artifacts": [
+    {
+      "path": "apple-touch-icon.png",
+      "sha256": "1582b2aa83449b804ad118377f32472d55c690f6472076ed6c8966a00915154f"
+    },
+    {
+      "path": "build-manifest.json",
+      "sha256": "6be360c1a456631692ab2dccbe88ec0b8e265f712cd72e9239083e84fee0606a"
+    },
+    {
+      "path": "favicon.svg",
+      "sha256": "f19fe2c9fbec13d99334adf4c14c1bdc72831c3632f6cbe165fa6ab262232e28"
+    },
+    {
+      "path": "icon.svg",
+      "sha256": "9375aac66602f4cd0f8c5086ec7750d20cc0f885894ee4ad7efea0b225471f91"
+    },
+    {
+      "path": "index.js",
+      "sha256": "1e9dd44a253ebd413b996ae16b0c45146ae5f849719de6f1de4264187aeb1b16"
+    },
+    {
+      "path": "package.json",
+      "sha256": "d6816de26dafbeee533c89eaad52832782412a7e731829dc2250d0ae233f52bd"
+    },
+    {
+      "path": "styles.css",
+      "sha256": "af17e01260e0e1465b0d8a3b25c2a615f6dad5c45454ac7495c369df5880a199"
+    },
+    {
+      "path": "types/screen-ui/src/index.d.ts",
+      "sha256": "bbfbbe5fcd3d4d279d2469ac6f8f07aa2d4cd13bceca891168123e15a634db4d"
+    },
+    {
+      "path": "types/screen-ui/src/navigation.d.ts",
+      "sha256": "8bda661ee30a73d4d019db863eb6a2b0fea8320b676422efabbc965f5127b45a"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/ConfirmDialog.d.ts",
+      "sha256": "6888836abac7d886df12c02f9695bbeb7bec475763d5a07fa2d78e4554eea32f"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/DataTable.d.ts",
+      "sha256": "8992dd07252ad84fdcf3d796591238fd47b1688088333f008dde822d6261d270"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/Detail.d.ts",
+      "sha256": "b69c1f05dad41db3947ad5196e6a663e4f586df36497be81f521f6ab37d3ee24"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/DrawerShell.d.ts",
+      "sha256": "75ad80307e2009421522d288407f7591658835ecbc83634f14006fd15fc38073"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/Field.d.ts",
+      "sha256": "3fdc2ea748ef8e67737dc255ad05dacef1b63c0afd152f9eb841dafa44ec0ca9"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/hostErrors.d.ts",
+      "sha256": "6b2d24ce2c51270fb8852b73a8130266ee6b011c1a546893757f4985fa6e2350"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/States.d.ts",
+      "sha256": "ff0ad1fd59f27ed3758d18a6d5f9f0cbb1185b69be74e9e3421da5d68032ab90"
+    },
+    {
+      "path": "types/src/features/app-shell/shared/useDrawerClose.d.ts",
+      "sha256": "9abacb7a0c738c6ec7419f8941a109cc6eee2379141fddda5ae57590a653ff34"
+    },
+    {
+      "path": "types/src/lib/apiError.d.ts",
+      "sha256": "a36bb3717cac0ca9c12d7540cf361bbc12a23fb9d38cf74ede40ba02fa8ec2fb"
+    },
+    {
+      "path": "types/src/lib/cache.d.ts",
+      "sha256": "dd134fa8321ab000a3596a8b9c6049413f6c16cac5cb8aae1dc9f65bb806e7e6"
+    },
+    {
+      "path": "types/src/lib/types.d.ts",
+      "sha256": "79d01109a277974462d33877998cdc9bad00836063b850db6d4c4bdba22fb52f"
+    },
+    {
+      "path": "types/src/lib/useResource.d.ts",
+      "sha256": "dbc9a8d12129b15ef1f045691337e4f9435a04b94d1ecc16718a05c171743985"
+    },
+    {
+      "path": "types/src/ui/Button.d.ts",
+      "sha256": "c3d4c32bcb060ccaa1db3865059606f225fcdc61be614d7d82fe981c139d6624"
+    },
+    {
+      "path": "types/src/ui/buttonActivate.d.ts",
+      "sha256": "d5f295096393ac2bc50128b4676c4f07df85d1d64daff40ae27ec6f9c381d891"
+    },
+    {
+      "path": "types/src/ui/icons.d.ts",
+      "sha256": "0094a05a97a195859beb5ba061c4b7a0f858ccfdc3fd2a0a4eddda2f0fca2ce8"
+    },
+    {
+      "path": "types/src/ui/Link.d.ts",
+      "sha256": "13d3b093331ca54527987fceee17991944f0258923a3630661af5029a1d825a2"
+    },
+    {
+      "path": "types/src/ui/Select.d.ts",
+      "sha256": "d6cd9b8cdf1309b41dc9849cac211f4465ea4dff73b05a87d9ee1a59fb4d689d"
+    },
+    {
+      "path": "types/src/ui/selectLogic.d.ts",
+      "sha256": "248f82c5216b994b36626fb73bb1e49b0652a1c599e1057fd7aa1892d99f713f"
+    }
+  ]
+}

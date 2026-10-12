@@ -1,0 +1,112 @@
+{
+  "contract": "app-screens/v2",
+  "app": "crm",
+  "entry": "client.js",
+  "startup": [
+    "runtime.js",
+    "client.js"
+  ],
+  "assets": [
+    {
+      "name": "runtime.js",
+      "media_type": "text/javascript",
+      "size": 191081,
+      "sha256": "sha256:669983ef9809fb53fb0482661b4ed5e8dc9a9e7128da9386a1b2fab153a69d29"
+    },
+    {
+      "name": "client.js",
+      "media_type": "text/javascript",
+      "size": 229959,
+      "sha256": "sha256:5744eeb641cd8e51bd742b1d808e777f8e52355e588248463c906a3eb194285f"
+    },
+    {
+      "name": "crm.css",
+      "media_type": "text/css",
+      "size": 34818,
+      "sha256": "sha256:ee1a4314574da5ee32ce1189836aa317fbd7f2006c6f8b9777f4dc04a6a46d20"
+    }
+  ],
+  "provenance": {
+    "source_digest": "sha256:ebd613eb7c1210a413e805c1d75c92951bd1ce769de540f5d29504f533324807",
+    "sdk_digest": "sha256:f86e36be9b40dad20adce0b6fff4e3257867ca32b57c9a5fa29c899918510d6d",
+    "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
+  },
+  "host_contract": "screen-records.v1",
+  "may": [
+    "records.call",
+    "records.slot"
+  ],
+  "tools": {},
+  "operations": [
+    "records.list",
+    "records.show",
+    "records.create",
+    "records.update",
+    "records.csv.preview",
+    "segments.list",
+    "segments.show",
+    "segments.save",
+    "exclusions.list",
+    "exclusions.show",
+    "exclusions.save",
+    "suppressions.list",
+    "suppressions.add",
+    "audience.preview",
+    "audience.prepare",
+    "audience.show",
+    "content.list",
+    "content.show",
+    "content.save",
+    "content.clone",
+    "content.render",
+    "proposals.list",
+    "proposals.show",
+    "proposals.render",
+    "proposals.apply",
+    "proposals.discard",
+    "sender-bindings.list",
+    "sender-bindings.show",
+    "sender-bindings.save",
+    "content.test-prepare",
+    "content.send-prepare",
+    "sends.prepare",
+    "sends.show",
+    "sends.list",
+    "smtp.show",
+    "origin.show",
+    "screen.route.patch",
+    "screen.preview.show",
+    "screen.preview.clear",
+    "records.csv.import",
+    "records.csv.confirm",
+    "content.approve",
+    "smtp.manage",
+    "smtp.bind",
+    "smtp.rebind",
+    "smtp.revoke",
+    "smtp.test-send",
+    "sends.approve",
+    "sends.resolve",
+    "origin.manage",
+    "chat.campaign.open",
+    "chat.campaign.brief"
+  ],
+  "navigation": {
+    "section_query": "crm",
+    "default_section": "customers",
+    "sections": [
+      {
+        "id": "customers",
+        "label": "Customers"
+      },
+      {
+        "id": "segments",
+        "label": "Segments"
+      },
+      {
+        "id": "campaigns",
+        "label": "Campaigns"
+      }
+    ]
+  }
+}

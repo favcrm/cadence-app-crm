@@ -1,0 +1,26 @@
+{
+  "name": "cadence-app-crm",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.2.1",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build_screen.mjs",
+    "verify": "node scripts/verify_screen.mjs"
+  },
+  "dependencies": {
+    "@cadence/screen-ui": "file:.cadence-ui/cadence-screen-ui-1.0.0.tgz",
+    "@hugeicons/core-free-icons": "4.3.0",
+    "@hugeicons/react": "1.1.10",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.9",
+    "@types/react-dom": "19.2.7",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.2.2"
+  }
+}
