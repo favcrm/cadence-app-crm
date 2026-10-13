@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ScreenSdkProvenanceAcceptance(unittest.TestCase):
     def test_development_sdk_refused_before_extraction_or_toolchain(self):
-        workflow = (ROOT / ".github/workflows/package.yml").read_text()
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text()
         step = workflow.split(
             "- name: Verify committed SDK archive and extract closed package\n"
         )
