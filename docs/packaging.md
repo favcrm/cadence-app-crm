@@ -80,12 +80,17 @@ this platform; it is not claimed across Python versions or OSes. The
 sidecar pins the archive bytes, so any divergence after publication
 is detected by `verify` / `sha256sum -c`.
 
-## Customer-chat descriptors (CRM 0.1.1)
+## Customer-chat descriptors (CRM 0.1.2)
 
-`app/app-actions.json` and `app/app-assistant.json` are root descriptors
-admitted by exact name only (no wildcard). They are paired: the host
-requires both. The package tool checks their bytes and shape only; it
-does not parse their semantics and is not install approval.
+`app/app-actions.json`, `app/app-assistant.json` and `app/app-chat.json`
+are root descriptors admitted by exact name only (no wildcard). The
+allowlist is `ROOT_DESCRIPTORS` in `scripts/package_app.py`, with each
+contract marker in `DESCRIPTOR_CONTRACTS` (`app-chat/v1`,
+`app-assistant/v1`, `app-actions/v1`). Actions and assistant are paired:
+the host requires both. `app-chat.json` is the installed 0.1.0 chat
+contract, kept byte-identical for upgrade compatibility. The package tool
+checks bytes, JSON object shape and contract marker only; it does not parse
+their semantics and is not install approval.
 
 * Compatibility basis: the CAD-1415 host draft (`src/issue/app_action.rs`,
   `src/issue/app_assistant.rs`) on a local, uncommitted worktree. It is
@@ -96,7 +101,7 @@ does not parse their semantics and is not install approval.
 * The archive's `.sha256` sidecar and the tool's PASS are integrity
   evidence only. Neither is the Cadence bundle digest, an approval, or a
   host acceptance.
-* Install path is the extracted bundle root (`crm-0.1.1/`). The git
+* Install path is the extracted bundle root (`crm-0.1.2/`). The git
   subdirectory is not an install source.
 * Lifecycle, install, browser QA and independent review of this version are
   not run by this tool and are pending.

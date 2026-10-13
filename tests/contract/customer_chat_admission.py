@@ -44,8 +44,8 @@ def main():
 
     # Positive controls: real versioned package bytes and the real host validator.
     verified = package.verify_archive(args.archive.resolve())
-    assert verified["app"] == "crm" and verified["version"] == "0.1.1"
-    assert verified["files"] == 5
+    assert verified["app"] == "crm" and verified["version"] == "0.1.2"
+    assert verified["files"] == 6
     package.bundle_files(args.bundle.resolve())
     host_check(args.bundle.resolve(), 0)
 
@@ -74,11 +74,11 @@ def main():
         host_check(linked, 3, "inventory")
 
         # Valid archive integrity must not make an unsupported member admissible.
-        bad_archive = root / "crm-0.1.1.tar.gz"
+        bad_archive = root / "crm-0.1.2.tar.gz"
         with tarfile.open(args.archive, "r:gz") as source, tarfile.open(bad_archive, "w:gz") as target:
             for member in source.getmembers():
                 target.addfile(member, source.extractfile(member) if member.isfile() else None)
-            extra = tarfile.TarInfo("crm-0.1.1/app-actions.evil.json")
+            extra = tarfile.TarInfo("crm-0.1.2/app-actions.evil.json")
             extra.size = 3
             target.addfile(extra, io.BytesIO(b"{}\n"))
         package.write_sidecar(bad_archive)
@@ -97,7 +97,19 @@ def main():
         )
         (forged / "app-actions.json").write_text(json.dumps(declaration))
         host_check(forged, 3, "field")
-    print("PASS: real B admission; unknown root, descriptor symlink, archive member and consent declaration refused")
+
+        # CRM-3: extending the exact allowlist must not admit malformed chat.
+        malformed = root / "malformed-chat"
+        shutil.copytree(args.bundle, malformed)
+        (malformed / "app-chat.json").write_text('{"contract": "app-chat/v1", broken-json')
+        try:
+            package.read_contents(malformed, package.bundle_files(malformed))
+        except package.PackageError as error:
+            assert "not valid json" in str(error).lower(), str(error)
+        else:
+            raise AssertionError("packager admitted malformed app-chat descriptor")
+        host_check(malformed, 3, "json")
+    print("PASS: real package admission; unknown root, descriptor symlink, archive member, consent declaration and malformed chat refused")
 
 
 if __name__ == "__main__":

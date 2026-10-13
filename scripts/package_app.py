@@ -60,11 +60,13 @@ from pathlib import Path, PurePosixPath
 
 MANIFEST = "app.md"
 # Exact root descriptor names the host admits beside app.md (CAD-1415
-# draft: app-actions.json, app-assistant.json). Byte/shape checks only.
-ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json")
+# draft: app-actions.json, app-assistant.json; CRM-3: app-chat.json, the
+# installed 0.1.0 chat contract kept for upgrade). Byte/shape checks only.
+ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json", "app-chat.json")
 DESCRIPTOR_CONTRACTS = {
     "app-actions.json": "app-actions/v1",
     "app-assistant.json": "app-assistant/v1",
+    "app-chat.json": "app-chat/v1",
 }
 TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings")
 MANIFEST_KEYS = ("app", "title", "version", "needs", "summary")
