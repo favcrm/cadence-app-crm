@@ -59,14 +59,21 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="crm2-refusal-") as temp:
         root = Path(temp)
-        unknown = root / "unknown"
-        shutil.copytree(args.bundle, unknown)
+        def owned_copy(name):
+            bundle = root / name
+            shutil.copytree(args.bundle, bundle)
+            bundle.chmod(0o700)
+            for directory in bundle.rglob("*"):
+                if not directory.is_symlink() and directory.is_dir():
+                    directory.chmod(0o700)
+            return bundle
+
+        unknown = owned_copy("unknown")
         (unknown / "app-actions.evil.json").write_text("{}\n")
         package_refuses(unknown, "app-actions.evil.json")
         host_check(unknown, 3, "inventory")
 
-        linked = root / "linked"
-        shutil.copytree(args.bundle, linked)
+        linked = owned_copy("linked")
         (root / "outside.json").write_bytes((linked / "app-actions.json").read_bytes())
         (linked / "app-actions.json").unlink()
         (linked / "app-actions.json").symlink_to(root / "outside.json")
@@ -89,12 +96,12 @@ def main():
         else:
             raise AssertionError("archive verifier admitted unsupported root member")
 
-        forged = root / "forged"
-        shutil.copytree(args.bundle, forged)
+        forged = owned_copy("forged")
         declaration = json.loads((forged / "app-actions.json").read_text())
         declaration["actions"][0]["input"]["fields"].append(
             {"id": "consent", "label": "Consent", "type": "text"}
         )
+        (forged / "app-actions.json").chmod(0o600)
         (forged / "app-actions.json").write_text(json.dumps(declaration))
         host_check(forged, 3, "field")
 
