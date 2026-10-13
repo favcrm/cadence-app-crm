@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:5a3fa9faffbc971d4c235e3f2ff289c866ef6897eed1a652ce9286d35a5828ef",
+    "source_digest": "sha256:72c66de6476aadecbb268f499438ca2955ab066fa3a5da064fda53074611c571",
     "sdk_digest": "sha256:f86e36be9b40dad20adce0b6fff4e3257867ca32b57c9a5fa29c899918510d6d",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
