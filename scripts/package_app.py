@@ -62,6 +62,10 @@ MANIFEST = "app.md"
 # Exact root descriptor names the host admits beside app.md (CAD-1415
 # draft: app-actions.json, app-assistant.json). Byte/shape checks only.
 ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json")
+DESCRIPTOR_CONTRACTS = {
+    "app-actions.json": "app-actions/v1",
+    "app-assistant.json": "app-assistant/v1",
+}
 TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings")
 MANIFEST_KEYS = ("app", "title", "version", "needs", "summary")
 GATED_KEYS = ("records", "actions", "ui", "settings", "actors")
@@ -601,6 +605,11 @@ def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
     either alone refuses, both directions, same as the host. `files` is
     the already shape-checked rel-path list (source or archive)."""
     present = set(files)
+    if "app-actions.json" in present and "app-assistant.json" not in present:
+        raise PackageError(
+            f"{where}: app-actions.json carries no paired app-assistant.json — "
+            "the read tools it proposes from install together or not at all"
+        )
     if manifest.view_contract and f"views/{VIEWS_FILE}" not in present:
         raise PackageError(
             f"{where}: app.md declares `needs.views` but the bundle carries no "
@@ -630,6 +639,20 @@ def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
         )
 
 
+def _check_descriptor_json(rel: str, text: str, where: str) -> None:
+    """A root descriptor must be a JSON object carrying its own contract
+    marker. Semantic validation stays with the host loader."""
+    try:
+        doc = json.loads(text)
+    except ValueError as e:
+        raise PackageError(f"{where}: {rel}: not valid JSON — {e}") from e
+    want = DESCRIPTOR_CONTRACTS[rel]
+    if not isinstance(doc, dict) or doc.get("contract") != want:
+        raise PackageError(
+            f'{where}: {rel}: root must be a JSON object with contract "{want}"'
+        )
+
+
 def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
     """Aggregate size + all-files-UTF-8 over already shape-checked bytes.
 
@@ -647,11 +670,13 @@ def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
                 f"{where}: app is over {MAX_APP_BYTES} bytes of content — split it"
             )
         try:
-            data.decode("utf-8")
+            text = data.decode("utf-8")
         except UnicodeDecodeError as e:
             raise PackageError(
                 f"{where}: {rel}: not UTF-8 text — an A1 app carries text only"
             ) from e
+        if rel in DESCRIPTOR_CONTRACTS:
+            _check_descriptor_json(rel, text, where)
 
 
 def read_manifest(root: Path, files: list[str] | None = None) -> Manifest:
@@ -1163,6 +1188,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     """Offline shape check of the bundle source — not host validation."""
     files = bundle_files(args.source)
     manifest = read_manifest(args.source)
+    read_contents(args.source, files)
     print(
         json.dumps(
             {
