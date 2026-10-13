@@ -1,7 +1,7 @@
 ---
 app: crm
 title: CRM
-version: '0.1.1'
+version: '0.1.2'
 summary: Draft one independently reviewed email brief from pasted facts; customer records, campaign content, SMTP custody and sending stay operator-run host actions.
 needs:
   connections: []
@@ -79,12 +79,18 @@ a new run.
 
 ## Customer chat (app-assistant and app-actions)
 
-The bundle declares read-only assistant actions (`customers.search`,
-`customers.show`) in `app-assistant.json` and two customer actions in
-`app-actions.json`: `crm.customer.create` (create, requires `display_name`)
-and `crm.customer.update` (partial update of `phone`/`tags`). Both action
-files are checked by the host at install; the host owns storage, guards,
-approvals and every write.
+The bundle declares its assistant actions in `app-assistant.json` (the
+read tools `customers.search`, `customers.show`, and the existing legacy
+segment, campaign, draft and tag declarations, retained unchanged for
+installed compatibility) and two customer actions in `app-actions.json`:
+`crm.customer.create` (create, requires `display_name`; fields `email`,
+`phone`, `tags`, `source`) and `crm.customer.update` (partial update of
+`phone`/`tags`). The chat context declarations in `app-chat.json` are
+unchanged from the installed 0.1.0 contract. Both action files are checked
+by the host at install; the host owns storage, guards, approvals and every
+write. The legacy assistant declarations are host-compatibility metadata
+retained from the installed contract; this bundle adds no handler for them,
+and any write-effect entry among them is subject to host authorization only.
 
 Agent procedure:
 
