@@ -36,7 +36,6 @@ export interface SmtpBinding {
   state: string;
   digest: string;
   sender: { name: string; address: string };
-  transport: { host: string; port: number; tlsMode: string; username: string };
   /** CAD-1063: "agenticos" when the platform sends, else "smtp". */
   transportKind: string;
 }
@@ -50,7 +49,6 @@ export function parseSmtpBinding(value: unknown): SmtpBinding {
   }
   const row = binding as Record<string, unknown>;
   const sender = (row.sender as Record<string, unknown> | null) ?? {};
-  const transport = (row.transport as Record<string, unknown> | null) ?? {};
   if (
     typeof row.connection_id !== "string" ||
     typeof row.auth_revision !== "number" ||
@@ -58,10 +56,7 @@ export function parseSmtpBinding(value: unknown): SmtpBinding {
     typeof row.state !== "string" ||
     typeof row.digest !== "string" ||
     typeof sender.name !== "string" ||
-    typeof sender.address !== "string" ||
-    typeof transport.host !== "string" ||
-    typeof transport.port !== "number" ||
-    typeof transport.tls_mode !== "string"
+    typeof sender.address !== "string"
   ) {
     throw new ApiError("The server returned an invalid sender receipt", 502);
   }
@@ -72,12 +67,6 @@ export function parseSmtpBinding(value: unknown): SmtpBinding {
     state: row.state,
     digest: row.digest,
     sender: { name: sender.name, address: sender.address },
-    transport: {
-      host: transport.host,
-      port: transport.port,
-      tlsMode: transport.tls_mode,
-      username: typeof transport.username === "string" ? transport.username : "",
-    },
     transportKind: typeof row.transport_kind === "string" ? row.transport_kind : "smtp",
   };
 }
