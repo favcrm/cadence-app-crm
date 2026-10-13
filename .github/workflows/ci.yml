@@ -1,11 +1,10 @@
 # CAD-962: independent packaging checks for the app/ bundle.
 #
-# This workflow is a definition only — it runs nothing until the
-# proposed remote `favcrm/cadence-app-crm` exists and receives a push.
-# Actions are pinned to commit SHAs per project convention (same pins
-# as the host repository). Read-only token; no publication, no
-# deployment, no external sends. Python 3 from the runner image is the
-# only toolchain — no app runtime is selected by this workflow.
+# Runs on pull requests, pushes to main, the merge queue (merge_group)
+# and manual dispatch. Actions are pinned to commit SHAs per project
+# convention (same pins as the host repository). Read-only token; no
+# publication, no deployment, no external sends. Python 3 from the runner
+# image is the only toolchain — no app runtime is selected by this workflow.
 #
 # The archive filename is derived from `build`'s JSON output
 # (`archive`/`sidecar`/`app`/`version`), never a hardcoded
@@ -17,6 +16,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 
 permissions:

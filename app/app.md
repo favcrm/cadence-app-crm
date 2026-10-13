@@ -1,7 +1,7 @@
 ---
 app: crm
 title: CRM
-version: '0.1.0'
+version: '0.1.1'
 summary: Draft one independently reviewed email brief from pasted facts; customer records, campaign content, SMTP custody and sending stay operator-run host actions.
 needs:
   connections: []
@@ -76,6 +76,29 @@ authenticated result envelope in its kickoff. The independent reviewer
 fetches that exact artifact, verifies its SHA256 and returns `approve`
 or `revise` pinned to the digest. A rejected brief stays failed; create
 a new run.
+
+## Customer chat (app-assistant and app-actions)
+
+The bundle declares read-only assistant actions (`customers.search`,
+`customers.show`) in `app-assistant.json` and two customer actions in
+`app-actions.json`: `crm.customer.create` (create, requires `display_name`)
+and `crm.customer.update` (partial update of `phone`/`tags`). Both action
+files are checked by the host at install; the host owns storage, guards,
+approvals and every write.
+
+Agent procedure:
+
+1. Search or show customers first; read the current `revision` before any update.
+2. If a search is ambiguous, ask the operator to select one customer. Never guess.
+3. Propose exactly one reviewed change with the exact field values. Only the
+   listed fields are writable; no consent, identity or revision fields exist.
+4. Only the operator's native approval (allow once) writes. Show the
+   authoritative before/after preview from the host. Create leaves consent
+   unknown; update preserves existing consent.
+5. After approval, verify the durable receipt before reporting success.
+
+Upload is not import or consent. There is no standing allow, no custom
+attributes, no bulk operation and no sending from this app.
 
 ## What a brief is, and is not
 
