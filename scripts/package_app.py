@@ -59,6 +59,9 @@ from pathlib import Path, PurePosixPath
 # force a build.
 
 MANIFEST = "app.md"
+# Exact root descriptor names the host admits beside app.md (CAD-1415
+# draft: app-actions.json, app-assistant.json). Byte/shape checks only.
+ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json")
 TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings")
 MANIFEST_KEYS = ("app", "title", "version", "needs", "summary")
 GATED_KEYS = ("records", "actions", "ui", "settings", "actors")
@@ -507,6 +510,9 @@ def bundle_files(root: Path) -> list[str]:
         if entry.is_file(follow_symlinks=False):
             if name == MANIFEST:
                 manifest = True
+                files.append(name)
+                continue
+            if name in ROOT_DESCRIPTORS:
                 files.append(name)
                 continue
             raise PackageError(
@@ -1036,6 +1042,9 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
     for rel in rels:
         if rel == MANIFEST:
             manifest = True
+            files.append(rel)
+            continue
+        if rel in ROOT_DESCRIPTORS:
             files.append(rel)
             continue
         parts = PurePosixPath(rel).parts

@@ -80,6 +80,27 @@ this platform; it is not claimed across Python versions or OSes. The
 sidecar pins the archive bytes, so any divergence after publication
 is detected by `verify` / `sha256sum -c`.
 
+## Customer-chat descriptors (CRM 0.1.1)
+
+`app/app-actions.json` and `app/app-assistant.json` are root descriptors
+admitted by exact name only (no wildcard). They are paired: the host
+requires both. The package tool checks their bytes and shape only; it
+does not parse their semantics and is not install approval.
+
+* Compatibility basis: the CAD-1415 host draft (`src/issue/app_action.rs`,
+  `src/issue/app_assistant.rs`) on a local, uncommitted worktree. It is
+  not on `main` and is not a full CRM domain independence claim.
+* Legacy customer limits follow native `CustomerProfile`: `display_name` 120,
+  `email` 254, `phone` 24, `source` 40, `tags` 16 items of 40. Consent,
+  identity and revision are not writable.
+* The archive's `.sha256` sidecar and the tool's PASS are integrity
+  evidence only. Neither is the Cadence bundle digest, an approval, or a
+  host acceptance.
+* Install path is the extracted bundle root (`crm-0.1.1/`). The git
+  subdirectory is not an install source.
+* Lifecycle, install, browser QA and independent review of this version are
+  not run by this tool and are pending.
+
 ## Still missing (separate scope)
 
 * Host-side execution of `app install`/`app approve` against this

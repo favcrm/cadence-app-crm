@@ -280,7 +280,7 @@ class ManifestMetadataTests(unittest.TestCase):
     def test_real_app_md_parses_declared_fields(self):
         manifest = pkg.parse_manifest((REPO / "app" / "app.md").read_text(encoding="utf-8"))
         self.assertEqual(manifest.app, "crm")
-        self.assertEqual(manifest.version, "0.1.0")
+        self.assertEqual(manifest.version, "0.1.1")
         self.assertEqual(manifest.title, "CRM")
         self.assertEqual(manifest.connections, ())
         self.assertIsNone(manifest.view_contract)
@@ -409,23 +409,25 @@ class BuildAndExclusionTests(unittest.TestCase):
         # Package the real repo app/: the archive must carry only
         # bundle paths — no scripts/, src/, tests/, docs/, .git, .env.
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
-        archive = self.out / "crm-0.1.0.tar.gz"
+        archive = self.out / "crm-0.1.1.tar.gz"
         names = [n for n, _ in pkg._archive_members(archive)[0]]
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
-            self.assertIn(top, {"app.md", "workflows", "rubrics", "templates", "views", "bindings"})
+            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "workflows", "rubrics", "templates", "views", "bindings"})
             self.assertFalse(any(p.startswith(".") for p in rel.split("/")))
-        self.assertIn("crm-0.1.0/app.md", names)
-        self.assertIn("crm-0.1.0/workflows/email-brief.md", names)
-        self.assertIn("crm-0.1.0/rubrics/email.md", names)
+        self.assertIn("crm-0.1.1/app.md", names)
+        self.assertIn("crm-0.1.1/workflows/email-brief.md", names)
+        self.assertIn("crm-0.1.1/rubrics/email.md", names)
+        self.assertIn("crm-0.1.1/app-actions.json", names)
+        self.assertIn("crm-0.1.1/app-assistant.json", names)
 
     def test_verify_real_archive(self):
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
-        result = pkg.verify_archive(self.out / "crm-0.1.0.tar.gz")
+        result = pkg.verify_archive(self.out / "crm-0.1.1.tar.gz")
         self.assertEqual(result["app"], "crm")
-        self.assertEqual(result["version"], "0.1.0")
-        self.assertEqual(result["files"], 3)
+        self.assertEqual(result["version"], "0.1.1")
+        self.assertEqual(result["files"], 5)
 
 
 class VerifyParityTests(unittest.TestCase):
@@ -452,13 +454,13 @@ class VerifyParityTests(unittest.TestCase):
     def _tar_with(self, label, mutate):
         d = self.dir / label
         d.mkdir()
-        archive = d / "crm-0.1.0.tar.gz"
+        archive = d / "crm-0.1.1.tar.gz"
         import io as _io
         contents = dict(self.original)
         mutate(contents)
         with tarfile.open(archive, "w:gz") as tf:
             for rel, data in contents.items():
-                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info = tarfile.TarInfo("crm-0.1.1/" + rel)
                 info.size = len(data)
                 tf.addfile(info, _io.BytesIO(data))
         pkg.write_sidecar(archive)
@@ -494,12 +496,12 @@ class VerifyParityTests(unittest.TestCase):
             pkg.verify_archive(archive)
 
     def test_verify_refuses_zip_symlink_member(self):
-        archive = self.dir / "ziplink" / "crm-0.1.0.zip"
+        archive = self.dir / "ziplink" / "crm-0.1.1.zip"
         archive.parent.mkdir()
         with zipfile.ZipFile(archive, "w") as zf:
             for rel, data in self.original.items():
-                zf.writestr("crm-0.1.0/" + rel, data)
-            info = zipfile.ZipInfo("crm-0.1.0/rubrics/link.md")
+                zf.writestr("crm-0.1.1/" + rel, data)
+            info = zipfile.ZipInfo("crm-0.1.1/rubrics/link.md")
             info.create_system = 3
             info.external_attr = 0o120777 << 16  # unix symlink mode
             zf.writestr(info, "/outside")
@@ -508,12 +510,12 @@ class VerifyParityTests(unittest.TestCase):
             pkg.verify_archive(archive)
 
     def test_verify_refuses_dir_outside_prefix(self):
-        archive = self.dir / "dirout" / "crm-0.1.0.tar.gz"
+        archive = self.dir / "dirout" / "crm-0.1.1.tar.gz"
         archive.parent.mkdir()
         import io as _io
         with tarfile.open(archive, "w:gz") as tf:
             for rel, data in self.original.items():
-                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info = tarfile.TarInfo("crm-0.1.1/" + rel)
                 info.size = len(data)
                 tf.addfile(info, _io.BytesIO(data))
             extra = tarfile.TarInfo("sneaky/")
@@ -526,12 +528,12 @@ class VerifyParityTests(unittest.TestCase):
     # --- R3: non-canonical path aliases refuse; extract can't overwrite ---
 
     def _tar_with_extra_member(self, label, member_name, payload=b"EVIL\n"):
-        archive = self.dir / label / "crm-0.1.0.tar.gz"
+        archive = self.dir / label / "crm-0.1.1.tar.gz"
         archive.parent.mkdir()
         import io as _io
         with tarfile.open(archive, "w:gz") as tf:
             for rel, data in self.original.items():
-                info = tarfile.TarInfo("crm-0.1.0/" + rel)
+                info = tarfile.TarInfo("crm-0.1.1/" + rel)
                 info.size = len(data)
                 tf.addfile(info, _io.BytesIO(data))
             info = tarfile.TarInfo(member_name)
@@ -541,31 +543,31 @@ class VerifyParityTests(unittest.TestCase):
         return archive
 
     def test_verify_refuses_dot_component_alias(self):
-        # `crm-0.1.0/./workflows/email-brief.md` collapses to a path that
+        # `crm-0.1.1/./workflows/email-brief.md` collapses to a path that
         # already exists — verify must refuse, else extract overwrites.
         archive = self._tar_with_extra_member(
-            "dotalias", "crm-0.1.0/./workflows/email-brief.md"
+            "dotalias", "crm-0.1.1/./workflows/email-brief.md"
         )
         with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
             pkg.verify_archive(archive)
 
     def test_verify_refuses_mid_dot_component(self):
         archive = self._tar_with_extra_member(
-            "middot", "crm-0.1.0/workflows/./email-brief.md"
+            "middot", "crm-0.1.1/workflows/./email-brief.md"
         )
         with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
             pkg.verify_archive(archive)
 
     def test_verify_refuses_double_slash_alias(self):
         archive = self._tar_with_extra_member(
-            "dslash", "crm-0.1.0//workflows/email-brief.md"
+            "dslash", "crm-0.1.1//workflows/email-brief.md"
         )
         with self.assertRaisesRegex(pkg.PackageError, "canonical|alias"):
             pkg.verify_archive(archive)
 
     def test_verify_refuses_dotdot_alias(self):
         archive = self._tar_with_extra_member(
-            "ddot", "crm-0.1.0/rubrics/../workflows/email-brief.md"
+            "ddot", "crm-0.1.1/rubrics/../workflows/email-brief.md"
         )
         with self.assertRaises(pkg.PackageError):
             pkg.verify_archive(archive)
@@ -573,8 +575,8 @@ class VerifyParityTests(unittest.TestCase):
     def test_legit_dir_trailing_slash_still_passes(self):
         # The real built archive carries explicit dir entries with a
         # trailing slash — canonicalization must not reject it.
-        result = pkg.verify_archive(self.out / "crm-0.1.0.tar.gz")
-        self.assertEqual(result["files"], 3)
+        result = pkg.verify_archive(self.out / "crm-0.1.1.tar.gz")
+        self.assertEqual(result["files"], 5)
 
 
 class CleanRefusalTests(unittest.TestCase):
@@ -592,7 +594,7 @@ class CleanRefusalTests(unittest.TestCase):
         self.assertEqual(
             pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(out)]), 0
         )
-        return out / "crm-0.1.0.tar.gz"
+        return out / "crm-0.1.1.tar.gz"
 
     def test_non_ascii_sidecar_is_clean_refusal(self):
         archive = self._good_archive()
@@ -618,9 +620,9 @@ class CleanRefusalTests(unittest.TestCase):
             ),
             0,
         )
-        archive = out / "crm-0.1.0.zip"
+        archive = out / "crm-0.1.1.zip"
         raw = bytearray(archive.read_bytes())
-        idx = raw.find(b"crm-0.1.0/app.md")
+        idx = raw.find(b"crm-0.1.1/app.md")
         self.assertGreater(idx, 0)
         raw[idx] ^= 0xFF  # corrupt a filename byte in a local header
         archive.write_bytes(raw)
