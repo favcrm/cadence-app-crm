@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "9470629ef26421a08fb494e591a33c6ac62d00b35dffdc6e6881fca944c360da",
+  "closureSha256": "0389095f77e1f64f1982d7f4f3387cbc2af861fde3a9dd40349f721e312833d0",
   "files": [
     {
       "path": "ui/package.json",
@@ -52,11 +52,11 @@
     },
     {
       "path": "ui/scripts/package-screen-ui.mjs",
-      "sha256": "4f5429783d19812aab8baefa03dc2489d8c11ec82cb181c0a4d5083e9d575cba"
+      "sha256": "2490db42b5f3ea6fcdb1901c25782992fe2a4e97050e02b0e38f2188b20a136a"
     },
     {
       "path": "ui/src/features/app-shell/shared/ConfirmDialog.tsx",
-      "sha256": "aaf7fe507e16dc6da362d7b37baefed03c9f43f3a48c698bc6f924278a68c841"
+      "sha256": "07fcf310c033b2758e54b591304dc1fcd0b4af30977818a25025f2fa3d8a33d8"
     },
     {
       "path": "ui/src/features/app-shell/shared/DataTable.tsx",
@@ -68,7 +68,7 @@
     },
     {
       "path": "ui/src/features/app-shell/shared/DrawerShell.tsx",
-      "sha256": "876f1ea3dad7e92c6c27a343db6b0b92be57dacecc7226763f0749c5fde51638"
+      "sha256": "c28cd639cc5c778a9829e08d44aa89780d6610e1736a202dac12f5b5cb9a19b7"
     },
     {
       "path": "ui/src/features/app-shell/shared/Field.tsx",
@@ -76,7 +76,7 @@
     },
     {
       "path": "ui/src/features/app-shell/shared/States.tsx",
-      "sha256": "0af1636933401eefaadea6dfe828cfd8940b0b2777cc12b48d5260b6b484c095"
+      "sha256": "e699d774d0dd5883ab8caa4249ecb98a09bf1e11d4ee4ccbff2aaac93af2f7fd"
     },
     {
       "path": "ui/src/features/app-shell/shared/hostErrors.ts",
@@ -92,7 +92,11 @@
     },
     {
       "path": "ui/src/lib/cache.ts",
-      "sha256": "6e81f096998cd9ae315eea54ff6d11c9c4d4c2e0d1755009a8df3a642c64b94c"
+      "sha256": "fc7e4abefc1be96e0860fc78c79c0f15f0c8190937b058587c05ac15b384078c"
+    },
+    {
+      "path": "ui/src/lib/localeText.tsx",
+      "sha256": "94e906fdf7d9d48eef7cea3815f0d69e20639c37d9d86288c272323d38ad4032"
     },
     {
       "path": "ui/src/lib/types.ts",
@@ -112,7 +116,7 @@
     },
     {
       "path": "ui/src/ui/Select.tsx",
-      "sha256": "cef16e82b82dffefc6f62a5ed79acdbb2a88b8728aa1f4e4a71fbf288f53e98e"
+      "sha256": "380f5c38b6ecd8bc58bf2dc7b93c1734d04e0c23325dc0e8d60ee8b14a8b7c85"
     },
     {
       "path": "ui/src/ui/buttonActivate.ts",
@@ -120,7 +124,7 @@
     },
     {
       "path": "ui/src/ui/icons.tsx",
-      "sha256": "c763c7471fca263e24be69157b9e5ddbd6acd75add05f15beafcc7060714b422"
+      "sha256": "13b2176a24d9791cc1f9042a01882d87e4bef4d099a4cbbdca7cae752d6daa88"
     },
     {
       "path": "ui/src/ui/selectLogic.ts",
@@ -146,12 +150,12 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "70fda0e137b91c7d0ab3135169310ef66930934c"
+    "sourceSha": "fe3af56f7fd709542ae69d9714e3b974050386b5"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "f86e36be9b40dad20adce0b6fff4e3257867ca32b57c9a5fa29c899918510d6d",
-    "bytes": 54803
+    "sha256": "176c5df2d3b8eaf82d8395ef2b2ea3bd423582eb3e171af951cfae86eb18ec3f",
+    "bytes": 55130
   },
   "artifacts": [
     {
@@ -160,7 +164,7 @@
     },
     {
       "path": "build-manifest.json",
-      "sha256": "6be360c1a456631692ab2dccbe88ec0b8e265f712cd72e9239083e84fee0606a"
+      "sha256": "c132e148cacfb9f4cdda068b86803ec448669b01b636fcbc606b801e7c793bf8"
     },
     {
       "path": "favicon.svg",
@@ -172,7 +176,7 @@
     },
     {
       "path": "index.js",
-      "sha256": "1e9dd44a253ebd413b996ae16b0c45146ae5f849719de6f1de4264187aeb1b16"
+      "sha256": "23cac9d3960271c37a8ee5e92043ffd161c67e5d762a0915866bef8784b9a376"
     },
     {
       "path": "package.json",
@@ -228,7 +232,11 @@
     },
     {
       "path": "types/src/lib/cache.d.ts",
-      "sha256": "dd134fa8321ab000a3596a8b9c6049413f6c16cac5cb8aae1dc9f65bb806e7e6"
+      "sha256": "4ce6463ba8cfa913a344d2b0f57efe049c45f1cc0dcf89b0ba147396b75b6625"
+    },
+    {
+      "path": "types/src/lib/localeText.d.ts",
+      "sha256": "87058eaf09a5d395127fe8b99fa9d00ff0691b8a2769ad4fbeffa5c372fa1c82"
     },
     {
       "path": "types/src/lib/types.d.ts",
@@ -248,7 +256,7 @@
     },
     {
       "path": "types/src/ui/icons.d.ts",
-      "sha256": "0094a05a97a195859beb5ba061c4b7a0f858ccfdc3fd2a0a4eddda2f0fca2ce8"
+      "sha256": "2340ebe68f05be6b345c5629f0a6b31f51706d53e18e9325609211e9de21aa31"
     },
     {
       "path": "types/src/ui/Link.d.ts",
