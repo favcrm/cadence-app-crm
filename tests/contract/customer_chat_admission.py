@@ -106,8 +106,8 @@ def main():
         host_check(forged, 3, "field")
 
         # CRM-3: extending the exact allowlist must not admit malformed chat.
-        malformed = root / "malformed-chat"
-        shutil.copytree(args.bundle, malformed)
+        malformed = owned_copy("malformed-chat")
+        (malformed / "app-chat.json").chmod(0o600)
         (malformed / "app-chat.json").write_text('{"contract": "app-chat/v1", broken-json')
         try:
             package.read_contents(malformed, package.bundle_files(malformed))
