@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "4109bc68ff5c20e5b807c39e639f003d73b61519f15c61230c52c3e853f59af3",
+  "closureSha256": "bb3ee9fc00a349a6422278f1618adb855dae644f09607cb97edc3214c67b3bc5",
   "files": [
     {
       "path": "ui/package.json",
@@ -112,7 +112,7 @@
     },
     {
       "path": "ui/src/ui/Button.tsx",
-      "sha256": "bb001ed446d61626c2245fcd082d4cf29e531bb104dbc170690e3f435f091a9b"
+      "sha256": "90495ad8f0e130bc69aeb82daae597975710d89efb46ce8bd51c2ec99bacfb1c"
     },
     {
       "path": "ui/src/ui/Link.tsx",
@@ -154,11 +154,11 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "683c18355267f97a9f545523109a3589f9f588a4"
+    "sourceSha": "0cb14a7d739cf3878c8249b0986ecab1b104c93d"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "75d2c7078b8f77547aaafd2e71840de3ac169447f2f73990badb52be1791f63f",
+    "sha256": "c2fff97f78780da7526d7613735ef18ca4ca8e163e51952af941250dbcd9e81a",
     "bytes": 55711
   },
   "artifacts": [
@@ -168,7 +168,7 @@
     },
     {
       "path": "build-manifest.json",
-      "sha256": "aef8627e5e801802eadb7a15cf5c0b3424a5116bbfa098e2c05a8ff9ab8a96bc"
+      "sha256": "1f23ca985dada72898fddc1597689edbb51242c99e12147d535c420e1a6e7990"
     },
     {
       "path": "favicon.svg",
@@ -180,7 +180,7 @@
     },
     {
       "path": "index.js",
-      "sha256": "71e9e97f5e52cca760942f60e62d74909748747880d9bf3cb50e4b94c240fcdc"
+      "sha256": "19cde5a1a95f8c5004f74d214a3457442f36961258c5e1795f9b76e6a041ad2d"
     },
     {
       "path": "package.json",
@@ -252,7 +252,7 @@
     },
     {
       "path": "types/src/ui/Button.d.ts",
-      "sha256": "c3d4c32bcb060ccaa1db3865059606f225fcdc61be614d7d82fe981c139d6624"
+      "sha256": "1439b5abad4bee405f81f8e9aaab28916da8079c96160990ef692cc8bece4ace"
     },
     {
       "path": "types/src/ui/buttonActivate.d.ts",

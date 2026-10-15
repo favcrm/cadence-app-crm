@@ -144,7 +144,7 @@ importers:
 packages:
 
   '@cadence/screen-ui@file:.cadence-ui/cadence-screen-ui-1.0.0.tgz':
-    resolution: {integrity: sha512-FKjj2MVhS/DhkcXu213qaFlT7MKmMqUgTfPP3gTczQmp1b5f5egmKKMhSnG2pCw1h8xqRhMr7NC7YO2tF1vBbw==, tarball: file:.cadence-ui/cadence-screen-ui-1.0.0.tgz}
+    resolution: {integrity: sha512-DlMnXIJUnYNjxEYu+xIL7PzRnLzinIIR0jds2rwk7ibpMu2DsXInSIUm12sQhT98EX4WaZIultmO1+/GzHlbig==, tarball: file:.cadence-ui/cadence-screen-ui-1.0.0.tgz}
     version: 1.0.0
     peerDependencies:
       react: 19.2.8
