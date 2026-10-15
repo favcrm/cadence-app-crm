@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "0389095f77e1f64f1982d7f4f3387cbc2af861fde3a9dd40349f721e312833d0",
+  "closureSha256": "0f0ee457a95fc77ab64f06f8810f5a301005db796d0d7e84c8dec71a925d0619",
   "files": [
     {
       "path": "ui/package.json",
@@ -16,7 +16,7 @@
     },
     {
       "path": "ui/screen-ui/src/base.css",
-      "sha256": "dafbca316309ba4c39e3d204f3968cafce21ff715deb9f6577ef1ff4222ad2b8"
+      "sha256": "a584e6bf094fa322d0d2c719d6ba42964a4ec3a5bbf80e476cd05447b3d7dcb2"
     },
     {
       "path": "ui/screen-ui/src/controls.css",
@@ -29,6 +29,10 @@
     {
       "path": "ui/screen-ui/src/drawer.css",
       "sha256": "a306bf5ed4eb519e10c1f7568141e6badfc4a868b00211d6699041e56db457d5"
+    },
+    {
+      "path": "ui/screen-ui/src/foundation.css",
+      "sha256": "ac777dfda3d20cd423ce0db53a43acfc43bd732b19d94626813dfae799676ea6"
     },
     {
       "path": "ui/screen-ui/src/index.ts",
@@ -44,7 +48,7 @@
     },
     {
       "path": "ui/screen-ui/src/styles.css",
-      "sha256": "29dc54133d8a49e866777a9edb4d5f0418cae31aa45419fcab758fc1a1539536"
+      "sha256": "2bf90023f6030343422dbe31de86935d29ed2ccb183d4dedf1018b30ac36a76f"
     },
     {
       "path": "ui/screen-ui/src/theme.css",
@@ -52,7 +56,7 @@
     },
     {
       "path": "ui/scripts/package-screen-ui.mjs",
-      "sha256": "2490db42b5f3ea6fcdb1901c25782992fe2a4e97050e02b0e38f2188b20a136a"
+      "sha256": "08628f3f5ad643049516ecbf4857a8e8b3dda0f971f1de8858df0f79db98b84d"
     },
     {
       "path": "ui/src/features/app-shell/shared/ConfirmDialog.tsx",
@@ -150,12 +154,12 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "fe3af56f7fd709542ae69d9714e3b974050386b5"
+    "sourceSha": "11233a268138d72aad32819da6e7b7cb3c994b10"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "176c5df2d3b8eaf82d8395ef2b2ea3bd423582eb3e171af951cfae86eb18ec3f",
-    "bytes": 55130
+    "sha256": "aff5d1edb8aa3c1864585a28353d01ddb5d44fc5a804c2555ff53ea05c190c20",
+    "bytes": 55659
   },
   "artifacts": [
     {
@@ -164,7 +168,7 @@
     },
     {
       "path": "build-manifest.json",
-      "sha256": "c132e148cacfb9f4cdda068b86803ec448669b01b636fcbc606b801e7c793bf8"
+      "sha256": "5278969a50a0cf9a5e2b6d03198147bba44ea49d9d1003bdb9418a11eee7ebc3"
     },
     {
       "path": "favicon.svg",
@@ -184,7 +188,7 @@
     },
     {
       "path": "styles.css",
-      "sha256": "af17e01260e0e1465b0d8a3b25c2a615f6dad5c45454ac7495c369df5880a199"
+      "sha256": "0da196957643feb3edfd5d088aec04cdd9d19d1048eac53523f2712070397155"
     },
     {
       "path": "types/screen-ui/src/index.d.ts",

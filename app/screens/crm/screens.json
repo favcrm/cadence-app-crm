@@ -22,13 +22,13 @@
     {
       "name": "crm.css",
       "media_type": "text/css",
-      "size": 34818,
-      "sha256": "sha256:ee1a4314574da5ee32ce1189836aa317fbd7f2006c6f8b9777f4dc04a6a46d20"
+      "size": 39609,
+      "sha256": "sha256:fb5b77e7d7fd8b816c088b548c5b2a3876bd7ea6f6074543a6cbe6ce1feb7c24"
     }
   ],
   "provenance": {
-    "source_digest": "sha256:c155f13d114fa599bf9c59fdf12c3e1555952f4a1869179cbfbc6e07f2dcb22f",
-    "sdk_digest": "sha256:176c5df2d3b8eaf82d8395ef2b2ea3bd423582eb3e171af951cfae86eb18ec3f",
+    "source_digest": "sha256:bac1c86e6fb0941ab6ea8e8598bc00a254371abbd1d7a386a3dd4e4a7eb0f8c5",
+    "sdk_digest": "sha256:aff5d1edb8aa3c1864585a28353d01ddb5d44fc5a804c2555ff53ea05c190c20",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
   "host_contract": "screen-records.v1",

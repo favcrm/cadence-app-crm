@@ -2,6 +2,7 @@ import { ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
 import { FrameNavigationAdapter,patchRoute } from "../../bridge/route";
 import { scopeError,useScope } from "../../bridge/scope";
 import Campaigns from "./campaigns/CrmCampaigns";
+import "./crm-layout.css";
 import "./crm-campaign.css";
 import "./crm-drawer.css";
 import Customers from "./customers/Customers";
