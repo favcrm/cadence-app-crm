@@ -609,6 +609,7 @@ export const zhTW: Record<string, string> = {
   "are suppressed.": "已列入抑制名單。",
   "are on the exclusion list.": "位於排除名單中。",
   "Nobody in this audience can be emailed.": "此受眾中沒有可寄送電子郵件的對象。",
+  "All": "全部",
   "Import customers": "匯入客戶",
   "Read-only view. Customer imports are disabled on this board.": "唯讀檢視。此看板已停用客戶匯入功能。",
   "Sign in as the operator to import customer records.": "請以操作員身分登入以匯入客戶記錄。",

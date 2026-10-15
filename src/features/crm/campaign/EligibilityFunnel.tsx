@@ -8,21 +8,24 @@ import type { AudiencePreview } from "../segments/Segments";
  * here. When nobody can be emailed, one plain-language line names the
  * biggest reason.
  */
-export function blockingReason(preview: AudiencePreview): string | null {
+export function blockingReason(
+  preview: AudiencePreview,
+  translate: (english: string) => string = (english) => english,
+): string | null {
   if (preview.finalCount > 0) return null;
-  if (preview.baseCount === 0) return "No customers match this audience. Pick another segment.";
+  if (preview.baseCount === 0) return translate("No customers match this audience. Pick another segment.");
   const reasons: [number, string][] = [
-    [preview.excluded.noConsent, "lack email consent. Record consent on those customers or pick another segment."],
-    [preview.excluded.invalid, "have no valid email address."],
-    [preview.excluded.unsubscribed, "have unsubscribed."],
-    [preview.excluded.suppressed, "are suppressed."],
-    [preview.exclusionCount, "are on the exclusion list."],
+    [preview.excluded.noConsent, translate("lack email consent. Record consent on those customers or pick another segment.")],
+    [preview.excluded.invalid, translate("have no valid email address.")],
+    [preview.excluded.unsubscribed, translate("have unsubscribed.")],
+    [preview.excluded.suppressed, translate("are suppressed.")],
+    [preview.exclusionCount, translate("are on the exclusion list.")],
   ];
   const [count, why] = reasons.reduce((best, row) => (row[0] > best[0] ? row : best));
-  if (count <= 0) return "Nobody in this audience can be emailed.";
+  if (count <= 0) return translate("Nobody in this audience can be emailed.");
   return count === preview.baseCount
-    ? `All ${count} ${why}`
-    : `${count} of ${preview.baseCount} ${why}`;
+    ? `${translate("All")} ${count} ${why}`
+    : `${count} ${translate("of")} ${preview.baseCount} ${why}`;
 }
 
 export default function EligibilityFunnel({
@@ -67,7 +70,7 @@ export default function EligibilityFunnel({
     { key: "suppressed", label: "Suppressed", n: preview.excluded.suppressed, drop: true },
     { key: "final", label: "Can be emailed", n: preview.finalCount, drop: false },
   ];
-  const reason = blockingReason(preview);
+  const reason = blockingReason(preview, t);
   return (
     <div className="grid gap-2" aria-label={t("Eligibility")} data-funnel>
       <ul className="crm-funnel">
