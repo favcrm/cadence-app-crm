@@ -12,14 +12,16 @@ export default function HostPreview({ title, document: html, mode, device = "des
     const scope = getScope()?.scope;
     if (!scope || !node.current) return;
     let live = true;
+    let showRevision = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     setReady(false); setError(null);
     const show = () => {
+      const revision = ++showRevision;
       clearTimeout(timer);
       timer = setTimeout(() => {
         const rect = node.current?.getBoundingClientRect();
         if (!live || !rect) return;
-        void serviceCall(scope, "screen.preview.show", { preview_id: previewId, document: html, anchor: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, mode }).then(() => { if (live) { setReady(true); setError(null); } }, e => { if (live) { setReady(false); setError(e instanceof Error ? e.message : "Host preview is unavailable"); } });
+        void serviceCall(scope, "screen.preview.show", { preview_id: previewId, document: html, anchor: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, mode }).then(() => { if (live && revision === showRevision) { setReady(true); setError(null); } }, e => { if (live && revision === showRevision) { setReady(false); setError(e instanceof Error ? e.message : "Host preview is unavailable"); } });
       }, 100);
     };
     const resize = new ResizeObserver(show); resize.observe(node.current);
