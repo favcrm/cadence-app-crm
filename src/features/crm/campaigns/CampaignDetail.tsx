@@ -1,6 +1,6 @@
 import { ApiError,Button,ConfirmDialog } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
-import { navigateLogical as navigate } from "../../../bridge/route";
+import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
+import { channel } from "../../../bridge/channel";
 import {
 audienceClient,
 type AudienceScope
@@ -52,7 +52,25 @@ export default function CampaignDetail({
   const setDoc = (next: NonNullable<typeof doc>) => queryState.store.write(() => next);
   const [unsaved, setUnsaved] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  // Keep callbacks and cleanup bound to this editor, even if a later editor
+  // on the same port has already acquired its own warning publisher.
+  const leaveState = useMemo(() => ({ active: false, publisher: null as ReturnType<typeof channel.ownCampaignLeaveState> }),
+    [scope.installId, scope.contextId, campaignId]);
+  useLayoutEffect(() => {
+    leaveState.active = true;
+    leaveState.publisher = channel.ownCampaignLeaveState();
+    leaveState.publisher?.publish(false);
+    return () => {
+      leaveState.active = false;
+      leaveState.publisher?.release();
+      leaveState.publisher = null;
+    };
+  }, [leaveState]);
+  const onDirtyChange = useCallback((dirty: boolean) => {
+    if (!leaveState.active) return;
+    setUnsaved(dirty);
+    leaveState.publisher?.publish(dirty);
+  }, [leaveState]);
   // CAD-1058: a campaign just created from the dialog lands on its Email
   // tab, with the segment the operator picked there (if any). Peeked on
   // mount and cleared in an effect, so the hand-off is one-shot.
@@ -233,7 +251,7 @@ export default function CampaignDetail({
             doc={doc}
             onDoc={setDoc}
             onCloned={onCloned}
-            onDirtyChange={setUnsaved}
+            onDirtyChange={onDirtyChange}
             starterSenderBindingId={starterSenderBindingId}
             freezeId={freezeId}
             freeze={freeze}
@@ -334,21 +352,17 @@ export default function CampaignDetail({
           />
         </>
       )}
-      {(confirmLeave || pendingNavigation !== null) && (
+      {confirmLeave && (
         <ConfirmDialog
           title="Leave with unsaved email changes?"
           body={<p>Your email draft has not been saved. Leave this campaign and discard those local edits?</p>}
-          confirmLabel={pendingNavigation === null ? "Leave campaign" : "Leave page"}
+          confirmLabel="Leave campaign"
           pending={false}
           error={null}
-          onCancel={() => { setConfirmLeave(false); setPendingNavigation(null); }}
+          onCancel={() => setConfirmLeave(false)}
           onConfirm={() => {
             setConfirmLeave(false);
-            if (pendingNavigation !== null) {
-              const destination = pendingNavigation;
-              setPendingNavigation(null);
-              navigate(destination);
-            } else onBack();
+            onBack();
           }}
         />
       )}

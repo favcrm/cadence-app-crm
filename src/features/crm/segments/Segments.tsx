@@ -18,6 +18,7 @@ SEGMENT_OPS,
 } from "../segmentGrammar";
 import type { Viewer } from "../viewer";
 import { QueryRefresh,useCrmQuery } from "../resources";
+import { useListMemory } from "../listMemory";
 
 /** Human-readable predicate: the same labels the rule form offers.
  *  Unknown stored values fall back to the raw tokens, never hide. */
@@ -250,6 +251,7 @@ function SegmentList({
   const queryState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
   const segments = queryState.data ?? NO_SEGMENTS;
   const { loading, error } = queryState;
+  const listRef = useListMemory(scope, "segments", scope.contextId !== "" && viewer.operator === true && queryState.data !== null, queryState.failure);
   const [counts, setCounts] = useState<Record<string, AudiencePreview | null>>({});
 
   // Per-row exact host counts (bounded); a failed row shows an em dash.
@@ -271,7 +273,7 @@ function SegmentList({
 
 
   return (
-    <section aria-label="Segments list" className="crm-list">
+    <section ref={listRef} aria-label="Segments list" className="crm-list">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         Segments
       </h3>

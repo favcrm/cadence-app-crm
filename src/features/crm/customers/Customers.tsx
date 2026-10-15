@@ -1,5 +1,7 @@
 import { ApiError,Button,DataTable,Detail,DrawerShell,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
+import { onScopeRetired } from "../../../bridge/scope";
+import { readCustomerList,useListMemory } from "../listMemory";
 import {
 activityItems,
 buildConsentChange,
@@ -31,8 +33,8 @@ import CustomerCsvImport from "./CustomerCsvImport";
  * text, page cursor or unsaved draft survives the boundary. The
  * nested section itself lives in the route (`crm=`), so direct links
  * and browser back keep it; switching sections clears the record
- * view in the shell. Search text lives in component state only — the
- * route URL keeps scope (`ctx`, `record`) and never record content.
+ * view in the shell. Bounded list selectors/scroll survive same-scope
+ * navigation in frame memory only; the route never holds record content.
  *
  * The shell's own header row is the single Apps → App breadcrumb and
  * title; each section renders its own real heading instead of a
@@ -148,9 +150,10 @@ function CustomerList({
   onImport: () => void;
 }) {
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  const [query, setQuery] = useState("");
-  const [committed, setCommitted] = useState("");
-  const [cursors, setCursors] = useState<string[]>([]);
+  const [initialList] = useState(() => readCustomerList(scope));
+  const [query, setQuery] = useState(initialList?.query ?? "");
+  const [committed, setCommitted] = useState(initialList?.committed ?? "");
+  const [cursors, setCursors] = useState<string[]>(initialList?.cursors ?? []);
   const cursor = cursors.length > 0 ? cursors[cursors.length - 1] : undefined;
   const queryState = useCrmQuery(scope, "records.list", { query: committed || undefined, limit: PAGE_SIZE, cursor }, parseRecordList);
   const records = queryState.data?.records ?? NO_RECORDS;
@@ -159,9 +162,12 @@ function CustomerList({
   const { loading, error } = queryState;
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
-  const [consentFilter, setConsentFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [tagFilter, setTagFilter] = useState("");
+  const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
+  const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
+  const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
+  const listRef = useListMemory(scope, "customers", scope.contextId !== "" && viewer.operator === true && queryState.data !== null,
+    queryState.failure, { query, committed, cursors, consentFilter, sourceFilter, tagFilter },
+    JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const sources = Array.from(
     new Set(records.map((r) => viewProfile(r.profile).source).filter((v): v is string => v !== null)),
@@ -182,18 +188,30 @@ function CustomerList({
   // Debounced search: typing never navigates, so no customer content
   // reaches the URL, history or session storage.
   useEffect(() => {
-    const timer = setTimeout(() => setCommitted(query.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [query]);
+    const timer = setTimeout(() => {
+      const next = query.trim();
+      // Mounting a restored search must not erase its restored page. A pending
+      // query/committed difference still finishes its ordinary debounce.
+      if (next !== committed) {
+        setCursors([]);
+        setCommitted(next);
+      }
+    }, 250);
+    const unsubscribe = onScopeRetired(() => clearTimeout(timer));
+    return () => { clearTimeout(timer); unsubscribe(); };
+  }, [query, committed]);
 
-  // A new search restarts paging from the first page.
   useEffect(() => {
-    setCursors([]);
-  }, [committed, scope.installId, scope.contextId]);
+    if (viewer.operator !== true || (queryState.failure instanceof ApiError && [401, 403].includes(queryState.failure.status))) {
+      setQuery(""); setCommitted(""); setCursors([]);
+      setConsentFilter(""); setSourceFilter(""); setTagFilter("");
+      setSelected(new Set());
+    }
+  }, [viewer.operator, queryState.failure]);
 
 
   return (
-    <section aria-label="Customers list" className="crm-list">
+    <section ref={listRef} aria-label="Customers list" className="crm-list">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         Customers
       </h3>

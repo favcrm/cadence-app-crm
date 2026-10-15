@@ -1,7 +1,8 @@
 import { ApiError } from "@cadence/screen-ui";
-import { acceptPush,clearScope } from "./scope";
+import { acceptPush,clearScope,getScope } from "./scope";
 import { OPERATIONS } from "./services";
 
+type CampaignLeaveState = { publish: (unsaved: boolean) => void; release: () => void };
 type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout>; kind: "call" | "slot"; large: boolean };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function exact(v: Record<string, unknown>, keys: readonly string[]): boolean { return Object.keys(v).every(k => keys.includes(k)); }
@@ -16,6 +17,7 @@ function refusal(v: unknown): ApiError {
 class Channel {
   private port: MessagePort | null = null;
   private retired = false;
+  private leaveOwner: symbol | null = null;
   private serial = 0;
   private pending = new Map<string, Pending>();
   start(): void {
@@ -36,6 +38,27 @@ class Channel {
     window.parent.postMessage({ v: 1, op: "init", tag: boot.tag, bridge_nonce: boot.bridge_nonce, generation: boot.generation }, boot.parent_origin, [pair.port2]);
     pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1"] });
     window.addEventListener("pagehide", () => this.retire(new ApiError("CRM mount retired", 403)), { once: true });
+  }
+  /** A live editor owns only a boolean warning hint, not a navigation request. */
+  ownCampaignLeaveState(): CampaignLeaveState | null {
+    const port = this.port;
+    const scope = getScope();
+    // A validated scope PUSH must precede any warning publication.
+    if (!port || this.retired || !scope) return null;
+    const owner = Symbol();
+    this.leaveOwner = owner;
+    const live = () => {
+      const current = getScope();
+      return !this.retired && this.port === port && this.leaveOwner === owner && !!current &&
+        current.scope.installId === scope.scope.installId && current.scope.contextId === scope.scope.contextId &&
+        current.digest === scope.digest;
+    };
+    const publish = (unsaved: boolean) => {
+      if (typeof unsaved !== "boolean" || !live()) return;
+      try { port.postMessage({ v: 1, op: "state", data: JSON.stringify({ contract: "crm-leave.v1", unsaved }) }); }
+      catch { /* Best effort; never allocate an RPC or retry on a retired port. */ }
+    };
+    return { publish, release: () => { if (live()) { publish(false); this.leaveOwner = null; } } };
   }
   request(kind: "call" | "slot", verb: string, args: Record<string, unknown>): Promise<unknown> {
     if (!this.port || this.retired) return Promise.reject(new ApiError("CRM bridge is unavailable", 503));
@@ -89,7 +112,8 @@ class Channel {
   }
   retire(error: ApiError): void {
     if (this.retired) return;
-    this.retired = true; this.port?.close(); this.port = null;
+    this.retired = true; this.leaveOwner = null;
+    this.port?.close(); this.port = null;
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
     this.pending.clear(); clearScope(error.message);
   }

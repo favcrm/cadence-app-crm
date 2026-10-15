@@ -9,6 +9,7 @@ parseContentList,
 parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
+import { useListMemory } from "../listMemory";
 import "../crm-campaign.css";
 import {
 parseSendList,
@@ -36,6 +37,7 @@ export default function CampaignList({
   const campaigns = queryState.data ?? [];
   const pendingDrafts = proposalState.data?.filter(row => row.state === "pending") ?? [];
   const { loading, error } = queryState;
+  const listRef = useListMemory(scope, "campaigns", scope.contextId !== "" && viewer.operator === true && queryState.data !== null, queryState.failure);
   const [sends, setSends] = useState<SendListEntry[]>([]);
 
   const reloadToken = `${scope.installId}:${scope.contextId}`;
@@ -68,7 +70,7 @@ export default function CampaignList({
   })();
 
   return (
-    <section aria-label="Campaigns list" className="crm-list">
+    <section ref={listRef} aria-label="Campaigns list" className="crm-list">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         Campaigns
       </h3>
