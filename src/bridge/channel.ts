@@ -36,7 +36,7 @@ class Channel {
     pair.port1.onmessageerror = () => this.retire(invalid());
     pair.port1.start();
     window.parent.postMessage({ v: 1, op: "init", tag: boot.tag, bridge_nonce: boot.bridge_nonce, generation: boot.generation }, boot.parent_origin, [pair.port2]);
-    pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1"] });
+    pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1", "crm-locale.v1"] });
     window.addEventListener("pagehide", () => this.retire(new ApiError("CRM mount retired", 403)), { once: true });
   }
   /** A live editor owns only a boolean warning hint, not a navigation request. */

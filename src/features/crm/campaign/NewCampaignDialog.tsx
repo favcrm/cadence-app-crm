@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { ApiError,Button,Field,Select } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
 import { campaignChat } from "../../../bridge/chat";
@@ -51,6 +52,7 @@ export default function NewCampaignDialog({
   onCreated: (campaignId: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLocale();
   const [name, setName] = useState("");
   const [start, setStart] = useState<StartWith>("ai");
   const [brief, setBrief] = useState("");
@@ -82,17 +84,17 @@ export default function NewCampaignDialog({
     try {
       checkCampaignName(trimmed);
     } catch (e) {
-      setNameError(e instanceof ApiError ? e.message : "Give the campaign a name.");
+      setNameError(e instanceof ApiError ? t(e.message) : t("Give the campaign a name."));
       nameRef.current?.focus();
       return;
     }
     setNameError(null);
     if (start === "ai" && brief.trim() === "") {
-      setError("Describe what the email should say so the assistant can draft it.");
+      setError(t("Describe what the email should say so the assistant can draft it."));
       return;
     }
     if (start === "html" && html.trim() === "") {
-      setError("Paste the email HTML to start from it.");
+      setError(t("Paste the email HTML to start from it."));
       return;
     }
     setPending(true);
@@ -123,8 +125,8 @@ export default function NewCampaignDialog({
           await campaignChat.brief(scope, campaignId, text);
         } catch (e) {
           setError(
-            `The campaign is saved, but the brief was not sent to the assistant: ${
-              e instanceof ApiError ? e.message : "request failed"
+            `${t("The campaign is saved, but the brief was not sent to the assistant:")} ${
+              e instanceof ApiError ? e.message : t("request failed")
             }`,
           );
           return;
@@ -138,7 +140,7 @@ export default function NewCampaignDialog({
     }
   };
 
-  const action = saved && start === "ai" ? "Send brief again" : startAction(start);
+  const action = t(saved && start === "ai" ? "Send brief again" : startAction(start));
   return (
     <div className="crm-confirm-wrap" role="presentation" data-new-campaign>
       <div className="crm-confirm-scrim" onClick={pending ? undefined : onCancel} />
@@ -162,17 +164,17 @@ export default function NewCampaignDialog({
         <div className="crm-newc-head">
           <div>
             <h4 id="crm-newc-title" className="text-cardtitle font-medium text-ink-100">
-              New campaign
+              {t("New campaign")}
             </h4>
             <p className="text-label text-ink-400">
-              Name it and choose how to start. You can change everything later.
+              {t("Name it and choose how to start. You can change everything later.")}
             </p>
           </div>
-          <Button size="sm" variant="ghost" aria-label="Close" onClick={onCancel} disabled={pending}>
+          <Button size="sm" variant="ghost" aria-label={t("Close")} onClick={onCancel} disabled={pending}>
             ✕
           </Button>
         </div>
-        <Field label="Name" required error={nameError ?? undefined} className="crm-field">
+        <Field label={t("Name")} required error={nameError ?? undefined} className="crm-field">
           {(c) => (
             <input
               {...c}
@@ -186,8 +188,8 @@ export default function NewCampaignDialog({
             />
           )}
         </Field>
-        <div role="radiogroup" aria-label="Start with" className="grid gap-1">
-          <span className="text-label text-ink-300">Start with</span>
+        <div role="radiogroup" aria-label={t("Start with")} className="grid gap-1">
+          <span className="text-label text-ink-300">{t("Start with")}</span>
           <div className="crm-starts">
             {STARTS.map((s) => (
               <button
@@ -200,14 +202,14 @@ export default function NewCampaignDialog({
                 disabled={pending || saved}
                 onClick={() => setStart(s.key)}
               >
-                <span className="crm-start-title">{s.title}</span>
-                <span className="crm-start-hint">{s.hint}</span>
+                <span className="crm-start-title">{t(s.title)}</span>
+                <span className="crm-start-hint">{t(s.hint)}</span>
               </button>
             ))}
           </div>
         </div>
         {start === "ai" && (
-          <Field label="What should it say?" className="crm-field">
+          <Field label={t("What should it say?")} className="crm-field">
             {(c) => (
               <textarea
                 {...c}
@@ -217,15 +219,15 @@ export default function NewCampaignDialog({
                 onChange={(e) => setBrief(e.target.value)}
                 maxLength={2000}
                 disabled={pending && !saved}
-                placeholder="Welcome new customers warmly, keep it short, and link to the booking page."
+                placeholder={t("Welcome new customers warmly, keep it short, and link to the booking page.")}
               />
             )}
           </Field>
         )}
         {start === "html" && (
           <Field
-            label="HTML"
-            hint="Scripts, forms and tracking pixels are removed; the unsubscribe footer is added for you"
+            label={t("HTML")}
+            hint={t("Scripts, forms and tracking pixels are removed; the unsubscribe footer is added for you")}
             className="crm-field"
           >
             {(c) => (
@@ -236,29 +238,29 @@ export default function NewCampaignDialog({
                 value={html}
                 onChange={(e) => setHtml(e.target.value)}
                 disabled={pending || saved}
-                placeholder="<h1>Hello</h1>…"
+                placeholder={t("<h1>Hello</h1>…")}
               />
             )}
           </Field>
         )}
         {start === "blank" && (
-          <p className="text-secondary text-ink-400">Opens the editor with a heading and a paragraph.</p>
+          <p className="text-secondary text-ink-400">{t("Opens the editor with a heading and a paragraph.")}</p>
         )}
-        <Field label="Audience" hint="optional — you can choose later" className="crm-field">
+        <Field label={t("Audience")} hint={t("optional — you can choose later")} className="crm-field">
           {(c) => (
             <Select
               id={c.id}
               value={segmentId}
               onChange={setSegmentId}
               options={[
-                { value: "", label: "Decide later" },
+                { value: "", label: t("Decide later") },
                 ...segments.map((row) => ({ value: row.id, label: row.name })),
                 // A preselected segment that is not in the list yet stays pickable.
                 ...(segmentId !== "" && !segments.some((row) => row.id === segmentId)
                   ? [{ value: segmentId, label: segmentId }]
                   : []),
               ]}
-              aria-label="Audience"
+              aria-label={t("Audience")}
               disabled={pending || saved}
               full
             />
@@ -266,18 +268,18 @@ export default function NewCampaignDialog({
         </Field>
         {error && (
           <p className="text-label text-fail" role="alert">
-            {error}
+            {t(error)}
           </p>
         )}
         <div className="crm-newc-foot">
           <span className="text-label text-ink-400">No customer email is sent here. An assistant brief needs a host confirmation.</span>
           {saved && start === "ai" && (
             <Button size="sm" variant="ghost" onClick={land} disabled={pending}>
-              Open without the brief
+              {t("Open without the brief")}
             </Button>
           )}
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={pending}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button size="sm" variant="primary" type="submit" loading={pending} disabled={pending}>
             {action}

@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { useEffect,useRef,useState } from "react";
 import {
 type AudienceScope
@@ -25,6 +26,7 @@ export default function SendProgressPanel({
   viewer: Viewer;
   sendId: string;
 }) {
+  const { t, formatNumber } = useLocale();
   const [view, setView] = useState<SendView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<{ timer: ReturnType<typeof setTimeout> | null }>({ timer: null });
@@ -63,14 +65,14 @@ export default function SendProgressPanel({
   if (view === null && error === null) {
     return (
       <p className="text-label text-ink-400" role="status">
-        Reading the send…
+        {t("Reading the send…")}
       </p>
     );
   }
   if (view === null) {
     return (
       <p className="text-label text-fail" role="alert">
-        {error}
+        {error !== null ? t(error) : null}
       </p>
     );
   }
@@ -86,36 +88,36 @@ export default function SendProgressPanel({
     ["closed", counts.closed],
   ];
   return (
-    <section aria-label="Send progress" className="grid gap-3">
+    <section aria-label={t("Send progress")} className="grid gap-3">
       <p className="text-label text-ink-300">
         <span className="chip crm-send-chip" data-state={view.send.state}>
-          {view.send.state}
+          {t(view.send.state)}
         </span>{" "}
         <span className="num">
-          {view.send.sendId} · digest {view.send.sendDigest.slice(0, 18)}…
+          {view.send.sendId} · {t("digest")} {view.send.sendDigest.slice(0, 18)}…
         </span>
         {view.send.closeReason !== null && (
           <span className="text-fail"> · {view.send.closeReason}</span>
         )}
       </p>
-      <dl className="crm-detail" aria-label="Delivery counts">
+      <dl className="crm-detail" aria-label={t("Delivery counts")}>
         {cells.map(([label, count]) => (
           <div key={label}>
-            <dt>{label}</dt>
+            <dt>{t(label)}</dt>
             <dd className="num" data-count={label}>
-              {count}
+              {formatNumber(count)}
             </dd>
           </div>
         ))}
       </dl>
       <p className="text-micro text-ink-500">
         {DELIVERY_CLAIM === "smtp-acceptance-only" || view.deliveryClaim === DELIVERY_CLAIM
-          ? "SMTP accepted the message — this is not proof of inbox delivery."
+          ? t("SMTP accepted the message — this is not proof of inbox delivery.")
           : view.deliveryClaim}
       </p>
       {error && (
         <p className="text-label text-fail" role="alert">
-          {error}
+          {t(error)}
         </p>
       )}
       {view.deliveries.length > 0 && (

@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 235163,
-      "sha256": "sha256:38f8af0bb7696457a03173c131901d5a45b6fd6524e90d3d765d1edc1fc0272e"
+      "size": 290718,
+      "sha256": "sha256:eca25e59a4cd03cc24cd9fe10938fd0f6d7fef7b5ba2c5dc56932f281e8dd83b"
     },
     {
       "name": "crm.css",
@@ -27,8 +27,8 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:a852faf893b67a7fd1685c8c1d8b6a0a8dbcbc85b86b7df20cab7c003666f2f1",
-    "sdk_digest": "sha256:aff5d1edb8aa3c1864585a28353d01ddb5d44fc5a804c2555ff53ea05c190c20",
+    "source_digest": "sha256:5328635c8b1686b535367b52c258989c519ed42c9187b2fd3670ccde8eb2d579",
+    "sdk_digest": "sha256:75d2c7078b8f77547aaafd2e71840de3ac169447f2f73990badb52be1791f63f",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
   "host_contract": "screen-records.v1",

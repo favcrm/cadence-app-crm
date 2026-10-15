@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "0f0ee457a95fc77ab64f06f8810f5a301005db796d0d7e84c8dec71a925d0619",
+  "closureSha256": "4109bc68ff5c20e5b807c39e639f003d73b61519f15c61230c52c3e853f59af3",
   "files": [
     {
       "path": "ui/package.json",
@@ -36,7 +36,7 @@
     },
     {
       "path": "ui/screen-ui/src/index.ts",
-      "sha256": "8be65901a5cb0b97a38f0638d4154578c84c3ffd252cd864ec5e2d0b930e144c"
+      "sha256": "870c792e0349e5356baea9b3b3c205945a6be502b7c0da048c60b4a735ff1d5f"
     },
     {
       "path": "ui/screen-ui/src/navigation.tsx",
@@ -154,12 +154,12 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "11233a268138d72aad32819da6e7b7cb3c994b10"
+    "sourceSha": "0e89cada2e0b34d0e4ef8a32bcf2d1e0bd01c385"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "aff5d1edb8aa3c1864585a28353d01ddb5d44fc5a804c2555ff53ea05c190c20",
-    "bytes": 55659
+    "sha256": "75d2c7078b8f77547aaafd2e71840de3ac169447f2f73990badb52be1791f63f",
+    "bytes": 55711
   },
   "artifacts": [
     {
@@ -168,7 +168,7 @@
     },
     {
       "path": "build-manifest.json",
-      "sha256": "5278969a50a0cf9a5e2b6d03198147bba44ea49d9d1003bdb9418a11eee7ebc3"
+      "sha256": "aef8627e5e801802eadb7a15cf5c0b3424a5116bbfa098e2c05a8ff9ab8a96bc"
     },
     {
       "path": "favicon.svg",
@@ -180,7 +180,7 @@
     },
     {
       "path": "index.js",
-      "sha256": "23cac9d3960271c37a8ee5e92043ffd161c67e5d762a0915866bef8784b9a376"
+      "sha256": "71e9e97f5e52cca760942f60e62d74909748747880d9bf3cb50e4b94c240fcdc"
     },
     {
       "path": "package.json",
@@ -192,7 +192,7 @@
     },
     {
       "path": "types/screen-ui/src/index.d.ts",
-      "sha256": "bbfbbe5fcd3d4d279d2469ac6f8f07aa2d4cd13bceca891168123e15a634db4d"
+      "sha256": "8ee36a002395e3293f2992f12f360e1f35984f87f43ec6a6af05e3e93b6f03c7"
     },
     {
       "path": "types/screen-ui/src/navigation.d.ts",

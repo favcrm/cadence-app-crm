@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { useEffect,useState } from "react";
 import {
 type AudienceScope
@@ -23,6 +24,7 @@ export default function CampaignSends({
   viewer: Viewer;
   campaignId: string;
 }) {
+  const { t, formatNumber } = useLocale();
   const [sends, setSends] = useState<SendListEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -46,22 +48,22 @@ export default function CampaignSends({
   }, [token]);
 
   return (
-    <section aria-label="Campaign sends" className="card px-4 py-4 grid gap-3">
-      <h4 className="text-cardtitle font-medium text-ink-100">Sends of this campaign</h4>
+    <section aria-label={t("Campaign sends")} className="card px-4 py-4 grid gap-3">
+      <h4 className="text-cardtitle font-medium text-ink-100">{t("Sends of this campaign")}</h4>
       {error !== null ? (
         <p className="text-label text-fail" role="alert">
-          {error}
+          {t(error)}
         </p>
       ) : sends === null ? (
         <p className="text-label text-ink-400" role="status">
-          Reading sends…
+          {t("Reading sends…")}
         </p>
       ) : sends.length === 0 ? (
         <p className="text-label text-ink-400" data-empty="sends">
-          No sends of this campaign yet — prepare and approve above.
+          {t("No sends of this campaign yet — prepare and approve above.")}
         </p>
       ) : (
-        <ol className="crm-history" aria-label="Sends">
+        <ol className="crm-history" aria-label={t("Sends")}>
           {sends.map((row) => {
             const total =
               row.counts.queued +
@@ -76,17 +78,17 @@ export default function CampaignSends({
                 <p className="text-label text-ink-200">
                   <span className="num">{row.sendId}</span>{" "}
                   <span className="chip crm-send-chip" data-state={row.state}>
-                    {row.state}
+                    {t(row.state)}
                   </span>{" "}
                   <span className="num text-ink-400">
-                    {row.counts.accepted}/{total} accepted · digest {row.sendDigest.slice(0, 18)}…
+                    {formatNumber(row.counts.accepted)}/{formatNumber(total)} {t("accepted")} · {t("digest")} {row.sendDigest.slice(0, 18)}…
                   </span>{" "}
                   <button
                     type="button"
                     className="lnk"
                     onClick={() => setOpenId(openId === row.sendId ? null : row.sendId)}
                   >
-                    {openId === row.sendId ? "Hide" : "Show"}
+                    {t(openId === row.sendId ? "Hide" : "Show")}
                   </button>
                 </p>
                 {openId === row.sendId && (

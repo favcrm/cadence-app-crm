@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { Button } from "@cadence/screen-ui";
 import { useState } from "react";
 import {
@@ -34,6 +35,7 @@ export default function ProposalRow({
   onDiscarded: (proposalId: string) => void;
   onError: (message: string | null) => void;
 }) {
+  const { t, formatNumber } = useLocale();
   const [pending, setPending] = useState<"apply" | "discard" | null>(null);
   const [showBody, setShowBody] = useState(false);
   const [bodyRender, setBodyRender] = useState<ProposalRenderDoc | null>(null);
@@ -69,12 +71,12 @@ export default function ProposalRow({
           <span
             className="chip"
             data-badge="verified-assistant"
-            title="Host-verified: the assistant produced this draft on this campaign — the browser's copy is never the authority"
+            title={t("Host-verified: the assistant produced this draft on this campaign — the browser's copy is never the authority")}
           >
-            Verified assistant draft
+            {t("Verified assistant draft")}
           </span>{" "}
           <span className="num text-micro text-ink-500">
-            {receipt.agent} · campaign {receipt.campaignId} · source r{receipt.sourceRevision}
+            {receipt.agent} {t("· campaign")}{receipt.campaignId} {t("· source r")}{receipt.sourceRevision}
           </span>
         </p>
       ) : (
@@ -82,12 +84,12 @@ export default function ProposalRow({
           <span
             className="chip"
             data-badge="operator-submitted"
-            title="Submitted through the operator proposal route — no assistant provenance"
+            title={t("Submitted through the operator proposal route — no assistant provenance")}
           >
-            Operator-submitted
+            {t("Operator-submitted")}
           </span>{" "}
           <span className="num text-micro text-ink-500">
-            actor {proposal.actor} · origin {proposal.origin} · source r{proposal.sourceRevision}
+            {t("actor")}{proposal.actor} {t("· origin")}{proposal.origin} {t("· source r")}{formatNumber(proposal.sourceRevision)}
           </span>
         </p>
       )}
@@ -103,36 +105,36 @@ export default function ProposalRow({
         data-proposal-preview={proposal.proposalId}
         onClick={() => (showBody ? setShowBody(false) : openBody())}
       >
-        {showBody ? "Hide preview" : "Preview draft"}
+        {t(showBody ? "Hide preview" : "Preview draft")}
       </button>
       {showBody && (
         <div className="crm-proposal-body mt-2" data-proposal-body={proposal.proposalId}>
           {bodyPending && (
             <p className="text-label text-ink-500" role="status" data-preview="loading">
-              Rendering the draft preview…
+              {t("Rendering the draft preview…")}
             </p>
           )}
           {bodyError !== null && (
             <p className="text-label text-fail" role="alert">
-              {bodyError}
+              {t(bodyError)}
             </p>
           )}
           {bodyRender !== null ? (
             <>
               <p className="text-label text-ink-300">
-                <span className="chip" title="Preview-only sender material — host-locked">
-                  preview-only
+                <span className="chip" title={t("Preview-only sender material — host-locked")}>
+                  {t("preview-only")}
                 </span>{" "}
                 <span className="num">
                   {bodyRender.sender.name} · {bodyRender.sender.address}
                 </span>
               </p>
-              <div className="app-outlet-tabs" role="tablist" aria-label="Draft preview format">
+              <div className="app-outlet-tabs" role="tablist" aria-label={t("Draft preview format")}>
                 {(
                   [
-                    ["visual", "Visual"],
+                    ["visual", t("Visual")],
                     ["html", "HTML"],
-                    ["text", "Text"],
+                    ["text", t("Text")],
                   ] as const
                 ).map(([key, label]) => (
                   <button
@@ -148,7 +150,7 @@ export default function ProposalRow({
                 ))}
               </div>
               {bodyTab === "visual" && (
-                <HostPreview title="Draft email preview" document={bodyRender.html} mode="saved" />
+                <HostPreview title={t("Draft email preview")} document={bodyRender.html} mode="saved" />
               )}
               {bodyTab !== "visual" && (
                 <pre className="crm-preview" data-preview={bodyTab}>
@@ -160,21 +162,21 @@ export default function ProposalRow({
             bodyError === null && !bodyPending ? null : (
               <>
                 <p className="text-label text-ink-200">
-                  <span className="text-ink-500">Subject:</span> {proposal.subject}
+                  <span className="text-ink-500">{t("Subject:")}</span> {proposal.subject}
                 </p>
                 {proposal.preheader !== "" && (
                   <p className="text-label text-ink-400">
-                    <span className="text-ink-500">Preheader:</span> {proposal.preheader}
+                    <span className="text-ink-500">{t("Preheader:")}</span> {proposal.preheader}
                   </p>
                 )}
-                <ol className="grid gap-1 mt-1" aria-label="Draft body blocks">
+                <ol className="grid gap-1 mt-1" aria-label={t("Draft body blocks")}>
                   {proposal.blocks.map((block, index) => (
                     <li key={index} className="text-label text-ink-300">
                       {block.type === "heading" ? (
                         <strong className="text-ink-100">{block.text}</strong>
                       ) : block.type === "button" ? (
                         <span className="chip" data-block="button">
-                          Button: {block.label}
+                          {t("Button:")} {block.label}
                         </span>
                       ) : (
                         block.text
@@ -189,8 +191,7 @@ export default function ProposalRow({
       )}
       {stale && proposal.state === "pending" && (
         <p className="text-label text-warn mt-1" data-state="stale">
-          Needs review (stale) — drafted against r{proposal.sourceRevision}, the saved version is
-          now r{expectedRevision}. Re-review its text before asking the assistant to draft again.
+          {t("Needs review (stale) — drafted against revision")} {formatNumber(proposal.sourceRevision)}, {t("the saved version is now revision")} {formatNumber(expectedRevision)}. {t("Re-review its text before asking the assistant to draft again.")}
         </p>
       )}
       {canWrite && (
@@ -202,8 +203,8 @@ export default function ProposalRow({
             disabled={pending !== null || stale}
             title={
               stale
-                ? "Apply is disabled: the proposal's stamped source revision is behind the current draft"
-                : `Apply as a new revision (expects the draft at r${expectedRevision})`
+                ? t("Apply is disabled: the proposal's stamped source revision is behind the current draft")
+                : `${t("Apply as a new revision (expects the draft at revision")} ${formatNumber(expectedRevision)})`
             }
             onClick={() => {
               onError(null);
@@ -225,7 +226,7 @@ export default function ProposalRow({
                 .finally(() => setPending(null));
             }}
           >
-            Apply (new revision)
+            {t("Apply (new revision)")}
           </Button>
           <Button
             size="sm"
@@ -241,7 +242,7 @@ export default function ProposalRow({
                 .finally(() => setPending(null));
             }}
           >
-            Discard
+            {t("Discard")}
           </Button>
         </div>
       )}

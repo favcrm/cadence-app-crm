@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { Button,Link } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
 import { campaignChat } from "../../../bridge/chat";
@@ -16,7 +17,7 @@ TEST_ANCHOR,
 sendReadiness,
 type CampaignTab
 } from "../campaign/readiness";
-import { useEmailDraft } from "../campaign/useEmailDraft";
+import { displayUiNotice, type UiNotice, useEmailDraft } from "../campaign/useEmailDraft";
 import {
 CAMPAIGN_NAME_MAX,
 campaignTitle,
@@ -93,6 +94,7 @@ export default function CampaignWorkspace({
   tab?: CampaignTab;
   onTab?: (tab: CampaignTab) => void;
 }) {
+  const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const emailDraft = useEmailDraft(scope, campaignId, doc, onDoc);
   const [contentBindings, setContentBindings] = useState<{ id: string; name: string; address: string }[]>([]);
@@ -108,7 +110,7 @@ export default function CampaignWorkspace({
   const cloneDialogRef = useRef<HTMLDialogElement | null>(null);
   const [render, setRender] = useState<ContentRender | null>(null);
   const [renderPending, setRenderPending] = useState(false);
-  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<UiNotice | null>(null);
   const [renderToken, setRenderToken] = useState(0);
   const [previewTab, setPreviewTab] = useState<"visual" | "html" | "text">("visual");
   const [sampleName, setSampleName] = useState("");
@@ -186,7 +188,7 @@ export default function CampaignWorkspace({
         const next = parseRender(value);
         if (next.bindingId !== (contentBindingId ?? "preview")) {
           setRender(null);
-          setRenderError("The rendered sender selection changed while rendering — retry to refresh the preview.");
+          setRenderError({ key: "The rendered sender selection changed while rendering — retry to refresh the preview." });
           return;
         }
         if (expected !== null && (next.revision !== expected.revision || next.contentDigest !== expected.digest)) {
@@ -194,9 +196,10 @@ export default function CampaignWorkspace({
           // surface the mismatch as a reload-needed state, never as
           // the current editor's render.
           setRender(null);
-          setRenderError(
-            `The saved campaign changed to r${next.revision} while the preview rendered — reload the campaign to see the current email.`,
-          );
+          setRenderError({
+            key: "The saved campaign changed to r{rev} while the preview rendered — reload the campaign to see the current email.",
+            slots: { rev: String(next.revision) },
+          });
           return;
         }
         setRender(next);
@@ -297,15 +300,14 @@ export default function CampaignWorkspace({
   const previewBody =
     doc === null ? (
       <p className="text-label text-ink-400" data-preview="unsaved">
-        No saved email yet. Ask the assistant in the left chat to draft this campaign&apos;s
-        email, then Apply its verified proposal below to create revision 1.
+        {t("No saved email yet. Ask the assistant in the left chat to draft this campaign's email, then Apply its verified proposal below to create revision 1.")}
       </p>
     ) : (
       <>
         <div className="crm-field-row">
           <div className="crm-field">
             <label className="text-label text-ink-300" htmlFor="cmp-sample">
-              Sample first name (optional)
+              {t("Sample first name (optional)")}
             </label>
             <input
               id="cmp-sample"
@@ -314,58 +316,58 @@ export default function CampaignWorkspace({
               onChange={(e) => setSampleName(e.target.value)}
               maxLength={40}
               autoComplete="off"
-              placeholder="Ada"
+              placeholder={t("Ada")}
             />
           </div>
           <div>
-            <span className="text-label text-ink-300">Saved render</span>
+            <span className="text-label text-ink-300">{t("Saved render")}</span>
             <div className="mt-1">
               <Button
                 size="sm"
                 loading={renderPending}
                 disabled={renderPending}
-                title="Re-render the last saved version with the current sample name"
+                title={t("Re-render the last saved version with the current sample name")}
                 onClick={() => setRenderToken((count) => count + 1)}
               >
-                Refresh preview
+                {t("Refresh preview")}
               </Button>
             </div>
           </div>
         </div>
         {renderError !== null && !renderPending && (
           <p className="text-label text-fail" role="alert">
-            {renderError}{" "}
+            {displayUiNotice(renderError, t)}{" "}
             <button type="button" className="lnk" onClick={() => setRenderToken((count) => count + 1)}>
-              Retry
+              {t("Retry")}
             </button>
           </p>
         )}
         {render === null && renderPending && (
           <p className="text-label text-ink-500" role="status" data-preview="loading">
-            Rendering the saved email…
+            {t("Rendering the saved email…")}
           </p>
         )}
         {dirty && (
           <p className="text-micro text-ink-500" data-preview="dirty">
-            Preview shows the last saved version. Save changes to refresh.
+            {t("Preview shows the last saved version. Save changes to refresh.")}
           </p>
         )}
         {render !== null && (
           <>
             <p className="text-label text-ink-300">
-              <span className="chip" title="Sender material is host-locked preview-only bytes">
-                preview-only
+              <span className="chip" title={t("Sender material is host-locked preview-only bytes")}>
+                {t("preview-only")}
               </span>{" "}
               <span className="num">
                 {render.sender.name} · {render.sender.address}
               </span>
             </p>
-            <div className="app-outlet-tabs" role="tablist" aria-label="Preview format">
+            <div className="app-outlet-tabs" role="tablist" aria-label={t("Preview format")}>
               {(
                 [
-                  ["visual", "Visual"],
+                  ["visual", t("Visual")],
                   ["html", "HTML"],
-                  ["text", "Text"],
+                  ["text", t("Text")],
                 ] as ["visual" | "html" | "text", string][]
               ).map(([tab, label]) => (
                 <button
@@ -382,7 +384,7 @@ export default function CampaignWorkspace({
               ))}
             </div>
             {previewTab === "visual" && (
-              <HostPreview title={`Visual email preview, saved revision ${render.revision}`} document={render.html} mode="saved" />
+              <HostPreview title={`${t("Visual email preview, saved revision")} ${formatNumber(render.revision)}`} document={render.html} mode="saved" />
             )}
             {previewTab !== "visual" && (
               <pre className="crm-preview" data-preview={previewTab}>
@@ -396,42 +398,40 @@ export default function CampaignWorkspace({
     );
 
   const previewSection = (
-    <section aria-label="Email preview" className="card px-4 py-4 grid gap-3">
+    <section aria-label={t("Email preview")} className="card px-4 py-4 grid gap-3">
       <h4 className="text-cardtitle font-medium text-ink-100">
-        Preview{doc !== null ? " — saved version" : ""}
+        {t("Preview")}{doc !== null ? ` — ${t("saved version")}` : ""}
       </h4>
       {previewBody}
     </section>
   );
 
   const contentForm = (
-      <div className="card px-4 py-4 grid gap-3" aria-label="Email content">
+      <div className="card px-4 py-4 grid gap-3" aria-label={t("Email content")}>
         <h4 className="text-cardtitle font-medium text-ink-100">
-          Content {doc === null ? "— not drafted yet" : `— revision ${doc.revision}`}
+          {t("Content")} {doc === null ? `— ${t("not drafted yet")}` : `— ${t("revision")} ${formatNumber(doc.revision)}`}
         </h4>
         {doc === null && (
           <p className="text-label text-ink-400" data-state="no-draft">
-            No email draft yet. Ask the assistant in the left chat to draft this campaign&apos;s
-            email, then Apply its verified proposal below to create revision 1 — or use the
-            inline editor after a draft exists.
+            {t("No email draft yet. Ask the assistant in the left chat to draft this campaign's email, then Apply its verified proposal below to create revision 1 — or use the inline editor after a draft exists.")}
           </p>
         )}
         {doc !== null && (
           <dl className="sdetail" data-content-summary>
             <div>
-              <dt>Subject</dt>
+              <dt>{t("Subject")}</dt>
               <dd>{doc.subject}</dd>
             </div>
             <div>
-              <dt>Preheader</dt>
+              <dt>{t("Preheader")}</dt>
               <dd>{doc.preheader === "" ? "—" : doc.preheader}</dd>
             </div>
             <div>
-              <dt>Body</dt>
+              <dt>{t("Body")}</dt>
               <dd>
                 {doc.mode === "html"
-                  ? "HTML body"
-                  : `${doc.blocks.length} block${doc.blocks.length === 1 ? "" : "s"}`}{" "}
+                  ? t("HTML body")
+                  : `${formatNumber(doc.blocks.length)} ${t(doc.blocks.length === 1 ? "block" : "blocks")}`}{" "}
                 · {doc.contentDigest.slice(0, 18)}…
               </dd>
             </div>
@@ -439,31 +439,30 @@ export default function CampaignWorkspace({
         )}
         {doc !== null && (
           <p className="text-label text-ink-400">
-            Edit the email on the campaign&apos;s Email tab.
+            {t("Edit the email on the campaign's Email tab.")}
           </p>
         )}
       </div>
   );
 
   const approvalSection = doc !== null && (
-        <section aria-label="Content approval" id={APPROVAL_ANCHOR} tabIndex={-1} className="card px-4 py-4 grid gap-2">
-          <h4 className="text-cardtitle font-medium text-ink-100">Approval — content-only</h4>
+        <section aria-label={t("Content approval")} id={APPROVAL_ANCHOR} tabIndex={-1} className="card px-4 py-4 grid gap-2">
+          <h4 className="text-cardtitle font-medium text-ink-100">{t("Approval — content-only")}</h4>
           <p className="text-label text-ink-300">
             {doc.approval.valid ? (
-              <span className="chip" title="Content-only approval on this revision">
-                Approved r{doc.approval.revision}
+              <span className="chip" title={t("Content-only approval on this revision")}>
+                {t("Approved")} r{doc.approval.revision === null ? "" : formatNumber(doc.approval.revision)}
               </span>
             ) : (
-              "No content approval on this revision. Any content edit invalidates approval."
+              t("No content approval on this revision. Any content edit invalidates approval.")
             )}{" "}
             <span className="text-ink-500">
-              Approval never sends — the bounded send below is a separate operator decision over
-              exact revisions.
+              {t("Approval never sends — the bounded send below is a separate operator decision over exact revisions.")}
             </span>
           </p>
           {approveError && (
             <p className="text-label text-fail" role="alert">
-              {approveError}
+              {t(approveError)}
             </p>
           )}
           {canWrite && !doc.approval.valid && (
@@ -482,7 +481,7 @@ export default function CampaignWorkspace({
                     .finally(() => setApprovePending(false));
                 }}
               >
-                Approve r{doc.revision} (content-only)
+                {t("Approve r")}{formatNumber(doc.revision)} ({t("content-only")})
               </Button>
             </div>
           )}
@@ -490,18 +489,16 @@ export default function CampaignWorkspace({
   );
 
   const testSection = doc !== null && (
-        <section aria-label="Test send" id={TEST_ANCHOR} tabIndex={-1} className="card px-4 py-4 grid gap-2 crm-test">
+        <section aria-label={t("Test send")} id={TEST_ANCHOR} tabIndex={-1} className="card px-4 py-4 grid gap-2 crm-test">
           <h4 className="text-cardtitle font-medium text-ink-100">
-            Test send — one operator address
+            {t("Test send — one operator address")}
           </h4>
           <p className="text-label text-ink-400">
-            Sends the exact frozen content through the campaign sender to one operator-typed
-            address. The receipt records acceptance or refusal only — a campaign send needs one
-            accepted test send of this exact content and sender.
+            {t("Sends the exact frozen content through the campaign sender to one operator-typed address. The receipt records acceptance or refusal only — a campaign send needs one accepted test send of this exact content and sender.")}
           </p>
           {bindingError !== null && (
             <p className="text-label text-fail" role="alert">
-              {bindingError}{" "}
+              {t(bindingError)}{" "}
               <button
                 type="button"
                 className="lnk"
@@ -511,14 +508,12 @@ export default function CampaignWorkspace({
                   setBindingToken((count) => count + 1);
                 }}
               >
-                Retry
-              </button>
+                {t("Retry")}</button>
             </p>
           )}
           {binding !== undefined && sendingFrom(binding) === null && bindingError === null && (
             <p className="text-label text-ink-500" data-testsend="disabled">
-              No sender is set up — <Link href={EMAIL_SENDING_HREF}>set up sending</Link> to send a
-              test.
+              {t("No sender is set up")} — <Link href={EMAIL_SENDING_HREF}>{t("set up sending")}</Link> {t("to send a test.")}
             </p>
           )}
           <form
@@ -537,7 +532,7 @@ export default function CampaignWorkspace({
           >
             <p className="text-label text-ink-300">Enter the recipient in the host-owned test-send confirmation.</p>
             <div>
-              <span className="text-label text-ink-300">Send</span>
+              <span className="text-label text-ink-300">{t("Send")}</span>
               <div className="mt-1">
                 <Button
                   type="submit"
@@ -547,28 +542,28 @@ export default function CampaignWorkspace({
                   disabled={!canWrite || testPending || sendingFrom(binding) === null}
                   title={
                     sendingFrom(binding) === null
-                      ? "No sender is set up"
-                      : "Send one test message through the campaign sender"
+                      ? t("No sender is set up")
+                      : t("Send one test message through the campaign sender")
                   }
                 >
-                  Send test
+                  {t("Send test")}
                 </Button>
               </div>
             </div>
           </form>
           {testError && (
             <p className="text-label text-fail" role="alert">
-              {testError}
+              {t(testError)}
             </p>
           )}
           {testReceipt && (
-            <dl className="crm-detail" aria-label="Test-send receipt" data-testreceipt>
+            <dl className="crm-detail" aria-label={t("Test-send receipt")} data-testreceipt>
               <div>
-                <dt>Result</dt>
+                <dt>{t("Result")}</dt>
                 <dd>
                   {testReceipt.pendingApproval ? (
                     <span className="chip crm-send-chip" data-state="pending">
-                      {WAITING_APPROVAL_TEXT}
+                      {t(WAITING_APPROVAL_TEXT)}
                     </span>
                   ) : (
                     <>
@@ -576,7 +571,7 @@ export default function CampaignWorkspace({
                         className="chip crm-send-chip"
                         data-state={testReceipt.accepted ? "accepted" : "failed"}
                       >
-                        {testReceipt.accepted ? "Accepted" : "Refused"}
+                        {t(testReceipt.accepted ? "Accepted" : "Refused")}
                       </span>{" "}
                       <span className="num">
                         SMTP {testReceipt.smtpCode ?? "—"} {testReceipt.smtpMessage}
@@ -586,24 +581,24 @@ export default function CampaignWorkspace({
                 </dd>
               </div>
               <div>
-                <dt>Recipient</dt>
+                <dt>{t("Recipient")}</dt>
                 <dd className="num">{testReceipt.to}</dd>
               </div>
               <div>
-                <dt>Claim</dt>
+                <dt>{t("Claim")}</dt>
                 <dd className="text-ink-300">
                   {testReceipt.pendingApproval
-                    ? "Nothing was sent yet. Send the same test again once the owner has approved it."
-                    : "The sender accepted the message — this is not proof of inbox delivery."}
+                    ? t("Nothing was sent yet. Send the same test again once the owner has approved it.")
+                    : t("The sender accepted the message — this is not proof of inbox delivery.")}
                 </dd>
               </div>
               <div>
-                <dt>Details</dt>
+                <dt>{t("Details")}</dt>
                 <dd>
                   <details>
-                    <summary className="cursor-pointer text-ink-400">Show</summary>
+                    <summary className="cursor-pointer text-ink-400">{t("Show")}</summary>
                     <span className="num break-all">
-                      r{testReceipt.contentRevision} · {testReceipt.contentDigest.slice(0, 18)}…
+                      r{formatNumber(testReceipt.contentRevision)} · {testReceipt.contentDigest.slice(0, 18)}…
                     </span>
                   </details>
                 </dd>
@@ -619,15 +614,15 @@ export default function CampaignWorkspace({
     setRender(null);
     setTestReceipt(null);
     setProposalNote(
-      `Applied as revision ${next.revision} — content approval invalidated; re-approve before any send preparation.`,
+      `${t("Applied as revision")} ${formatNumber(next.revision)} — ${t("content approval invalidated; re-approve before any send preparation.")}`,
     );
   };
   const discardProposal = (id: string) => {
     setProposalToken((count) => count + 1);
     setProposalNote(
       doc === null
-        ? `Proposal ${id} discarded — still no saved revision.`
-        : `Proposal ${id} discarded — draft unchanged at r${doc.revision} (${doc.contentDigest.slice(0, 18)}…).`,
+        ? `${t("Proposal")} ${id} ${t("discarded — still no saved revision.")}`
+        : `${t("Proposal")} ${id} ${t("discarded — draft unchanged at r")}${formatNumber(doc.revision)} (${doc.contentDigest.slice(0, 18)}…).`,
     );
   };
 
@@ -635,23 +630,21 @@ export default function CampaignWorkspace({
   // mint/apply path is the creation route now that the manual composer is
   // gone. expectedRevision is 0 for an unsaved campaign (source_revision=0).
   const proposalsSection = (
-        <section aria-label="Assistant proposals" className="card px-4 py-4 grid gap-3">
-          <h4 className="text-cardtitle font-medium text-ink-100">Proposals — Apply or Discard</h4>
+        <section aria-label={t("Assistant proposals")} className="card px-4 py-4 grid gap-3">
+          <h4 className="text-cardtitle font-medium text-ink-100">{t("Proposals — Apply or Discard")}</h4>
           <p className="text-label text-ink-400">
-            Only Apply changes the saved version (approval invalidates); Discard is
-            non-mutating. Nothing proposes, edits or sends silently.
+            {t("Only Apply changes the saved version (approval invalidates); Discard is non-mutating. Nothing proposes, edits or sends silently.")}
           </p>
           {proposalsError && (
             <p className="text-label text-fail" role="alert">
-              {proposalsError}{" "}
+              {t(proposalsError)}{" "}
               <button type="button" className="lnk" onClick={() => setProposalToken((count) => count + 1)}>
-                Retry
-              </button>
+                {t("Retry")}</button>
             </p>
           )}
           {proposalError && (
             <p className="text-label text-fail" role="alert">
-              {proposalError}
+              {t(proposalError)}
             </p>
           )}
           {proposalNote && (
@@ -661,23 +654,22 @@ export default function CampaignWorkspace({
           )}
           {canWrite && (
             <p className="text-label text-ink-500" data-assistant-hint>
-              Ask the assistant in the left chat to draft this email — its
-              proposal appears below for review.{" "}
+              {t("Ask the assistant in the left chat to draft this email — its proposal appears below for review.")}{" "}
               <button
                 type="button"
                 className="lnk"
                 onClick={() => setProposalToken((count) => count + 1)}
               >
-                Refresh drafts
+                {t("Refresh drafts")}
               </button>
             </p>
           )}
           {proposals.filter((row) => row.state === "pending").length === 0 ? (
             <p className="text-label text-ink-400" data-empty="proposals">
-              No pending proposals for this campaign.
+              {t("No pending proposals for this campaign.")}
             </p>
           ) : (
-            <ol className="crm-history" aria-label="Pending proposals">
+            <ol className="crm-history" aria-label={t("Pending proposals")}>
               {proposals
                 .filter((row) => row.state === "pending")
                 .map((row) => (
@@ -789,7 +781,7 @@ export default function CampaignWorkspace({
     testEvidence: testReceipt,
   });
   const pendingProposals = proposals.filter((row) => row.state === "pending");
-  const emailBadge = pendingProposals.length > 0 ? `${pendingProposals.length} draft` : null;
+  const emailBadge = pendingProposals.length > 0 ? t("{count} draft").replace("{count}", () => formatNumber(pendingProposals.length)) : null;
   return (
     <>
       {onCloned !== undefined && doc !== null && (
@@ -805,7 +797,7 @@ export default function CampaignWorkspace({
               setCloneOpen(true);
             }}
           >
-            Clone campaign
+            {t("Clone campaign")}
           </Button>
         </div>
       )}
@@ -817,25 +809,25 @@ export default function CampaignWorkspace({
         onClose={() => setCloneOpen(false)}
       >
         <form className="grid gap-3 p-4" onSubmit={cloneSavedCampaign}>
-          <h2 id="cmp-clone-title" className="text-cardtitle font-medium text-ink-100">Clone campaign</h2>
-          <p className="text-label text-ink-300">Creates a new draft from this campaign&apos;s saved revision. Approval, frozen recipients, proposals, test receipts, preparation and send history are not copied. Sender selection is context-shared preview metadata only; it never rebinds SMTP or authorizes sending.</p>
+          <h2 id="cmp-clone-title" className="text-cardtitle font-medium text-ink-100">{t("Clone campaign")}</h2>
+          <p className="text-label text-ink-300">{t("Creates a new draft from this campaign's saved revision. Approval, frozen recipients, proposals, test receipts, preparation and send history are not copied. Sender selection is context-shared preview metadata only; it never rebinds SMTP or authorizes sending.")}</p>
           <label className="grid gap-1 text-label text-ink-300" htmlFor="cmp-clone-name">
-            New campaign name
+            {t("New campaign name")}
             <input id="cmp-clone-name" className="field" value={cloneName} maxLength={CAMPAIGN_NAME_MAX} required disabled={clonePending} onChange={(event) => setCloneName(event.target.value)} />
           </label>
           <label className="flex items-center gap-2 text-label text-ink-300">
             <input type="checkbox" checked={cloneAudience} disabled={!canCopyAudience || clonePending} onChange={(event) => setCloneAudience(event.target.checked)} />
-            Copy audience criteria {canCopyAudience ? "from the current valid freeze" : "(no valid source freeze)"}
+            {t("Copy audience criteria")}{canCopyAudience ? t("from the current valid freeze") : t("(no valid source freeze)")}
           </label>
           <label className="flex items-center gap-2 text-label text-ink-300">
             <input type="checkbox" checked={cloneSender} disabled={!canCopySender || clonePending} onChange={(event) => setCloneSender(event.target.checked)} />
-            Copy selected sender preview {canCopySender ? `(${render?.sender.name})` : "(select a non-preview sender in Email first)"}
+            {t("Copy selected sender preview")} {canCopySender ? `(${render?.sender.name})` : t("(select a non-preview sender in Email first)")}
           </label>
-          {emailDraft.dirty && <p className="text-label text-warn" role="status">Unsaved edits are not included. Save them first if you want to clone the changes.</p>}
-          {cloneError !== null && <p className="text-label text-fail" role="alert">{cloneError}</p>}
+          {emailDraft.dirty && <p className="text-label text-warn" role="status">{t("Unsaved edits are not included. Save them first if you want to clone the changes.")}</p>}
+          {cloneError !== null && <p className="text-label text-fail" role="alert">{t(cloneError)}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" disabled={clonePending} onClick={() => setCloneOpen(false)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={clonePending} disabled={clonePending || !canWrite || doc === null}>Clone as new draft</Button>
+            <Button type="button" variant="ghost" disabled={clonePending} onClick={() => setCloneOpen(false)}>{t("Cancel")}</Button>
+            <Button type="submit" variant="primary" loading={clonePending} disabled={clonePending || !canWrite || doc === null}>{t("Clone as new draft")}</Button>
           </div>
         </form>
       </dialog>
@@ -860,19 +852,19 @@ export default function CampaignWorkspace({
           />
           {approvalSection !== null && (
             <details className="crm-diag" data-overview-guard="content-approval">
-              <summary className="text-label text-ink-300">Content approval — separate decision</summary>
+              <summary className="text-label text-ink-300">{t("Content approval — separate decision")}</summary>
               {approvalSection}
             </details>
           )}
           {testSection !== null && (
             <details className="crm-diag" data-overview-guard="test-send">
-              <summary className="text-label text-ink-300">Test email — separate action</summary>
+              <summary className="text-label text-ink-300">{t("Test email — separate action")}</summary>
               {testSection}
             </details>
           )}
           {finalSend !== null && (
             <details className="crm-diag" data-overview-guard="final-send">
-              <summary className="text-label text-ink-300">Final send — separate operator review</summary>
+              <summary className="text-label text-ink-300">{t("Final send — separate operator review")}</summary>
               {finalSend}
             </details>
           )}

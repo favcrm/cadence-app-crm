@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { ApiError,Button,ConfirmDialog } from "@cadence/screen-ui";
 import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import { channel } from "../../../bridge/channel";
@@ -40,6 +41,7 @@ export default function CampaignDetail({
   onBack: () => void;
   onCloned: (campaignId: string) => void;
 }) {
+  const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const queryState = useCrmQuery(scope, "content.show", { campaign_id: campaignId }, parseContentDoc);
@@ -196,42 +198,42 @@ export default function CampaignDetail({
   };
 
   return (
-    <section aria-label="Campaign details" className="grid gap-3">
+    <section aria-label={t("Campaign details")} className="grid gap-3">
       <div>
         <h3 ref={headRef} className="text-cardtitle font-medium text-ink-100" tabIndex={-1} data-outlet-heading>
-          {loading ? "Campaign details" : (doc !== null ? campaignTitle(doc) : "Campaign details")}{" "}
+          {loading ? t("Campaign details") : (doc !== null ? campaignTitle(doc) : t("Campaign details"))}{" "}
           {doc !== null && (
             <span className="chip align-middle" data-campaign-status>
-              {doc.approval.valid && doc.approval.revision === doc.revision ? "Approved" : "Draft"}
+              {doc.approval.valid && doc.approval.revision === doc.revision ? t("Approved") : t("Draft")}
             </span>
           )}
         </h3>
         <p className="text-label text-ink-400 mt-1">
           <button type="button" className="lnk" onClick={requestBack}>
-            ← Campaigns
+            ← {t("Campaigns")}
           </button>
         </p>
         <details className="crm-diag">
-          <summary className="text-micro text-ink-500">Details</summary>
-          <p className="num text-micro text-ink-500 mt-1" title="Campaign ID">
-            Campaign ID {campaignId}
+          <summary className="text-micro text-ink-500">{t("Details")}</summary>
+          <p className="num text-micro text-ink-500 mt-1" title={t("Campaign ID")}>
+            {t("Campaign ID")} {campaignId}
           </p>
         </details>
       </div>
       {loading && (
         <p className="text-secondary text-ink-400" role="status">
-          Reading the campaign…
+          {t("Reading the campaign…")}
         </p>
       )}
       {error !== null && !loading && (
         <p className="card px-4 py-3 text-label text-fail border-fail/40" role="alert">
-          {error}{" "}
+          {t(error)}{" "}
           <button
             type="button"
             className="lnk"
             onClick={() => { void queryState.store.refresh(); void proposalState.store.refresh(); }}
           >
-            Retry
+            {t("Retry")}
           </button>
         </p>
       )}
@@ -240,8 +242,7 @@ export default function CampaignDetail({
         <>
           {pendingOnly && doc === null && (
             <p className="card px-4 py-3 text-label text-ink-300" data-pending-only>
-              This campaign exists only as a pending assistant draft — no content is saved yet.
-              Review it below and Apply to save the first revision, or Discard it.
+              {t("This campaign exists only as a pending assistant draft — no content is saved yet. Review it below and Apply to save the first revision, or Discard it.")}
             </p>
           )}
           <CampaignWorkspace
@@ -273,16 +274,14 @@ export default function CampaignDetail({
                   onPreview={recordAudiencePreview}
                   layout="detail"
                 />
-                <section aria-label="Frozen audience" className="card px-4 py-4 grid gap-3">
-                  <h4 className="text-cardtitle font-medium text-ink-100">Freeze</h4>
+                <section aria-label={t("Frozen audience")} className="card px-4 py-4 grid gap-3">
+                  <h4 className="text-cardtitle font-medium text-ink-100">{t("Freeze")}</h4>
                   <p className="text-label text-ink-400">
-                    A freeze snapshots exactly who receives this campaign, so later customer
-                    changes cannot alter it. The audience above is the freeze — no ids to
-                    handle: freeze it, and recheck whenever the audience changes.
+                    {t("A freeze snapshots exactly who receives this campaign, so later customer changes cannot alter it. The audience above is the freeze — no ids to handle: freeze it, and recheck whenever the audience changes.")}
                   </p>
                   {freezeError && (
                     <p className="text-label text-fail" role="alert">
-                      {freezeError}
+                      {t(freezeError)}
                     </p>
                   )}
                   <p className="text-label text-ink-100" data-freeze-state={
@@ -290,11 +289,11 @@ export default function CampaignDetail({
                   }>
                     {freeze === null
                       ? freezeMissing
-                        ? "This audience is not frozen yet. Freezing snapshots exactly who receives the campaign, so later customer changes cannot alter it."
-                        : "Checking the freeze…"
+                        ? t("This audience is not frozen yet. Freezing snapshots exactly who receives the campaign, so later customer changes cannot alter it.")
+                        : t("Checking the freeze…")
                       : freeze.valid === true
-                        ? `Audience frozen · ${freeze.finalCount} recipient${freeze.finalCount === 1 ? "" : "s"} · checked just now`
-                        : `Audience changed since you froze it (was ${freeze.finalCount}, now ${freeze.currentCount ?? "—"}) — refreeze to continue.`}
+                        ? `${t("Audience frozen")} · ${formatNumber(freeze.finalCount)} ${t("recipients")} · ${t("checked just now")}`
+                        : `${t("Audience changed since you froze it")} (${t("was")} ${formatNumber(freeze.finalCount)}, ${t("now")} ${freeze.currentCount === null ? "—" : formatNumber(freeze.currentCount)}) — ${t("refreeze to continue.")}`}
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -304,44 +303,44 @@ export default function CampaignDetail({
                       disabled={freezePending || !canWrite || audiencePreview === null || audiencePreview.finalCount === 0}
                       onClick={freezeAudience}
                     >
-                      {freeze !== null && freeze.valid === false ? "Use audience · refresh snapshot" : freeze === null ? "Use audience · create snapshot" : "Use audience · refresh snapshot"}
+                      {t(freeze !== null && freeze.valid === false ? "Use audience · refresh snapshot" : freeze === null ? "Use audience · create snapshot" : "Use audience · refresh snapshot")}
                     </Button>
                     {freeze !== null && (
                       <Button size="sm" loading={freezePending} disabled={freezePending} onClick={checkFreeze}>
-                        Recheck
+                        {t("Recheck")}
                       </Button>
                     )}
                   </div>
                   {freeze && (
                     <>
-                      <dl className="crm-detail" aria-label="Freeze validity">
+                      <dl className="crm-detail" aria-label={t("Freeze validity")}>
                         <div>
-                          <dt>Frozen recipients</dt>
-                          <dd className="num">{freeze.finalCount}</dd>
+                          <dt>{t("Frozen recipients")}</dt>
+                          <dd className="num">{formatNumber(freeze.finalCount)}</dd>
                         </div>
                         <div>
-                          <dt>Current recount</dt>
-                          <dd className="num">{freeze.currentCount ?? "—"}</dd>
+                          <dt>{t("Current recount")}</dt>
+                          <dd className="num">{freeze.currentCount === null ? "—" : formatNumber(freeze.currentCount)}</dd>
                         </div>
                         <div>
-                          <dt>Validity</dt>
+                          <dt>{t("Validity")}</dt>
                           <dd>
                             <span
                               className="chip"
-                              title={freeze.drift ?? "The frozen digest still matches the live audience"}
+                              title={freeze.drift ?? t("The frozen digest still matches the live audience")}
                             >
-                              {freeze.valid === true ? "Valid" : freeze.valid === false ? `Invalid — ${freeze.drift}` : "Unknown"}
+                              {freeze.valid === true ? t("Valid") : freeze.valid === false ? `${t("Invalid")} — ${freeze.drift}` : t("Unknown")}
                             </span>
                           </dd>
                         </div>
                       </dl>
                       <details className="crm-diag">
-                        <summary className="text-micro text-ink-500">Technical details</summary>
-                        <p className="num text-micro text-ink-500 mt-1" title="Freeze ID (derived from the audience)">
-                          Freeze {freezeId}
+                        <summary className="text-micro text-ink-500">{t("Technical details")}</summary>
+                        <p className="num text-micro text-ink-500 mt-1" title={t("Freeze ID (derived from the audience)")}>
+                          {t("Freeze")} {freezeId}
                         </p>
-                        <p className="num text-micro text-ink-500 mt-1" title="Frozen audience digest">
-                          Digest {freeze.digest}
+                        <p className="num text-micro text-ink-500 mt-1" title={t("Frozen audience digest")}>
+                          {t("Digest")} {freeze.digest}
                         </p>
                       </details>
                     </>
@@ -354,9 +353,9 @@ export default function CampaignDetail({
       )}
       {confirmLeave && (
         <ConfirmDialog
-          title="Leave with unsaved email changes?"
-          body={<p>Your email draft has not been saved. Leave this campaign and discard those local edits?</p>}
-          confirmLabel="Leave campaign"
+          title={t("Leave with unsaved email changes?")}
+          body={<p>{t("Your email draft has not been saved. Leave this campaign and discard those local edits?")}</p>}
+          confirmLabel={t("Leave campaign")}
           pending={false}
           error={null}
           onCancel={() => setConfirmLeave(false)}

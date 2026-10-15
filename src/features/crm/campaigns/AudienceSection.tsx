@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { Button,Select } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
 import {
@@ -40,6 +41,7 @@ export default function AudienceSection({
    *  suppressions behind an Advanced disclosure. */
   layout?: "full" | "detail";
 }) {
+  const { t } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const segmentState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
   const segments = segmentState.data ?? [];
@@ -193,21 +195,21 @@ export default function AudienceSection({
   };
 
   return (
-    <section aria-label="Audience" className="card px-4 py-4 grid gap-3">
+    <section aria-label={t("Audience")} className="card px-4 py-4 grid gap-3">
       <h4 className="text-cardtitle font-medium text-ink-100">
-        {layout === "detail" ? "Send to" : "Audience — one base mode"}
+        {layout === "detail" ? t("Send to") : t("Audience — one base mode")}
       </h4>
       {listsError && (
         <p className="text-label text-fail" role="alert">
           {listsError}
         </p>
       )}
-      <div role="radiogroup" aria-label="Base audience mode" className="crm-toolbar">
+      <div role="radiogroup" aria-label={t("Base audience mode")} className="crm-toolbar">
         {(
           [
-            ["all", "All eligible customers"],
-            ["segment", "One saved segment"],
-            ["custom", "Custom customer IDs"],
+            ["all", t("All eligible customers")],
+            ["segment", t("One saved segment")],
+            ["custom", t("Custom customer IDs")],
           ] as [AudienceBaseInput["mode"], string][]
         ).map(([mode, label]) => (
           <label key={mode} className="text-label text-ink-200">
@@ -219,21 +221,21 @@ export default function AudienceSection({
               onChange={() => setMode(mode)}
             />{" "}
             {label}
-            {mode === "segment" && segments.length === 0 ? " (none saved yet)" : ""}
+            {mode === "segment" && segments.length === 0 ? ` (${t("none saved yet")})` : ""}
           </label>
         ))}
       </div>
       {pick.base.mode === "segment" && (
         <div className="crm-field">
           <label className="text-label text-ink-300" htmlFor="aud-segment">
-            Saved segment
+            {t("Saved segment")}
           </label>
           <Select
             id="aud-segment"
             value={pick.base.segmentId}
             onChange={(value) => onPick({ ...pick, base: { mode: "segment", segmentId: value } })}
             options={segments.map((row) => ({ value: row.id, label: `${row.name} · ${row.id}` }))}
-            aria-label="Saved segment"
+            aria-label={t("Saved segment")}
             disabled={!canWrite}
             full
           />
@@ -242,7 +244,7 @@ export default function AudienceSection({
       {pick.base.mode === "custom" && (
         <div className="crm-field">
           <label className="text-label text-ink-300" htmlFor="aud-custom">
-            Customer IDs (comma or space separated — the final suppression union still applies)
+            {t("Customer IDs (comma or space separated — the final suppression union still applies)")}
           </label>
           <textarea
             id="aud-custom"
@@ -269,21 +271,20 @@ export default function AudienceSection({
             onRetry={() => setPreviewToken((count) => count + 1)}
           />
           <details className="crm-diag" data-advanced>
-            <summary className="text-label text-ink-300">Advanced: exclusions and suppressions</summary>
+            <summary className="text-label text-ink-300">{t("Advanced: exclusions and suppressions")}</summary>
             <div className="grid gap-3 mt-2">
       <div className="crm-field">
         <label className="text-label text-ink-300" htmlFor="aud-exclusion">
-          Saved exclusion list (applies on every base mode)
-        </label>
+          {t("Saved exclusion list (applies on every base mode)")}</label>
         <Select
           id="aud-exclusion"
           value={pick.exclusionListId ?? ""}
           onChange={(value) => onPick({ ...pick, exclusionListId: value === "" ? null : value })}
           options={[
-            { value: "", label: "No exclusion list" },
+            { value: "", label: t("No exclusion list") },
             ...exclusions.map((row) => ({ value: row.id, label: `${row.name} · ${row.id}` })),
           ]}
-          aria-label="Saved exclusion list"
+          aria-label={t("Saved exclusion list")}
           disabled={!canWrite}
           full
         />
@@ -291,8 +292,7 @@ export default function AudienceSection({
       {canWrite && !showExclusionForm && (
         <p>
           <button type="button" className="lnk text-label" onClick={() => setShowExclusionForm(true)}>
-            + New exclusion list
-          </button>
+            {t("+ New exclusion list")}</button>
         </p>
       )}
       {canWrite && showExclusionForm && (
@@ -324,8 +324,7 @@ export default function AudienceSection({
           <div className="crm-field-row">
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-exc-name">
-                List name
-              </label>
+                {t("List name")}</label>
               <input
                 id="aud-exc-name"
                 className="field"
@@ -338,8 +337,7 @@ export default function AudienceSection({
             </div>
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-exc-ids">
-                Member customer IDs
-              </label>
+                {t("Member customer IDs")}</label>
               <input
                 id="aud-exc-ids"
                 className="field"
@@ -359,27 +357,24 @@ export default function AudienceSection({
           )}
           <div className="crm-toolbar">
             <Button type="submit" size="sm" loading={exclusionPending} disabled={exclusionPending}>
-              Save exclusion list
-            </Button>
+              {t("Save exclusion list")}</Button>
             <button type="button" className="lnk text-label" onClick={() => setShowExclusionForm(false)}>
-              Cancel
-            </button>
+              {t("Cancel")}</button>
           </div>
         </form>
       )}
-      <section aria-label="Suppressions" className="mt-1">
+      <section aria-label={t("Suppressions")} className="mt-1">
         <h4 className="text-label font-medium text-ink-200">
-          Suppressions ({suppressions.length}) — always excluded, even from custom IDs
+          {t("Suppressions ({count}) — always excluded, even from custom IDs").replace("{count}", String(suppressions.length))}
         </h4>
         {suppressionError !== null ? (
           <p className="text-label text-fail" role="alert">
             {suppressionError}{" "}
             <button type="button" className="lnk" onClick={() => setSuppressionToken((count) => count + 1)}>
-              Retry
-            </button>
+              {t("Retry")}</button>
           </p>
         ) : suppressions.length === 0 ? (
-          <p className="text-label text-ink-400">No suppressions yet.</p>
+          <p className="text-label text-ink-400">{t("No suppressions yet.")}</p>
         ) : (
           <ol className="crm-history">
             {suppressions.slice(0, 10).map((row) => (
@@ -388,7 +383,7 @@ export default function AudienceSection({
               </li>
             ))}
             {suppressions.length > 10 && (
-              <li className="num text-label text-ink-500">…and {suppressions.length - 10} more</li>
+              <li className="num text-label text-ink-500">{t("…and {count} more").replace("{count}", String(suppressions.length - 10))}</li>
             )}
           </ol>
         )}
@@ -417,8 +412,7 @@ export default function AudienceSection({
           >
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-suppress-email">
-                Suppress an email
-              </label>
+                {t("Suppress an email")}</label>
               <input
                 id="aud-suppress-email"
                 className="field"
@@ -433,8 +427,7 @@ export default function AudienceSection({
             </div>
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-suppress-reason">
-                Reason
-              </label>
+                {t("Reason")}</label>
               <input
                 id="aud-suppress-reason"
                 className="field"
@@ -443,7 +436,7 @@ export default function AudienceSection({
                 maxLength={80}
                 autoComplete="off"
                 disabled={suppressPending}
-                placeholder="opted out by phone"
+                placeholder={t("opted out by phone")}
               />
             </div>
             {suppressError && (
@@ -453,8 +446,7 @@ export default function AudienceSection({
             )}
             <div>
               <Button type="submit" size="sm" loading={suppressPending} disabled={suppressPending}>
-                Add suppression
-              </Button>
+                {t("Add suppression")}</Button>
             </div>
           </form>
         )}
@@ -466,17 +458,16 @@ export default function AudienceSection({
         <>
       <div className="crm-field">
         <label className="text-label text-ink-300" htmlFor="aud-exclusion">
-          Saved exclusion list (applies on every base mode)
-        </label>
+          {t("Saved exclusion list (applies on every base mode)")}</label>
         <Select
           id="aud-exclusion"
           value={pick.exclusionListId ?? ""}
           onChange={(value) => onPick({ ...pick, exclusionListId: value === "" ? null : value })}
           options={[
-            { value: "", label: "No exclusion list" },
+            { value: "", label: t("No exclusion list") },
             ...exclusions.map((row) => ({ value: row.id, label: `${row.name} · ${row.id}` })),
           ]}
-          aria-label="Saved exclusion list"
+          aria-label={t("Saved exclusion list")}
           disabled={!canWrite}
           full
         />
@@ -484,8 +475,7 @@ export default function AudienceSection({
       {canWrite && !showExclusionForm && (
         <p>
           <button type="button" className="lnk text-label" onClick={() => setShowExclusionForm(true)}>
-            + New exclusion list
-          </button>
+            {t("+ New exclusion list")}</button>
         </p>
       )}
       {canWrite && showExclusionForm && (
@@ -517,8 +507,7 @@ export default function AudienceSection({
           <div className="crm-field-row">
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-exc-name">
-                List name
-              </label>
+                {t("List name")}</label>
               <input
                 id="aud-exc-name"
                 className="field"
@@ -531,8 +520,7 @@ export default function AudienceSection({
             </div>
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-exc-ids">
-                Member customer IDs
-              </label>
+                {t("Member customer IDs")}</label>
               <input
                 id="aud-exc-ids"
                 className="field"
@@ -552,11 +540,9 @@ export default function AudienceSection({
           )}
           <div className="crm-toolbar">
             <Button type="submit" size="sm" loading={exclusionPending} disabled={exclusionPending}>
-              Save exclusion list
-            </Button>
+              {t("Save exclusion list")}</Button>
             <button type="button" className="lnk text-label" onClick={() => setShowExclusionForm(false)}>
-              Cancel
-            </button>
+              {t("Cancel")}</button>
           </div>
         </form>
       )}
@@ -565,21 +551,20 @@ export default function AudienceSection({
         loading={previewLoading}
         error={previewError}
         onRetry={() => setPreviewToken((count) => count + 1)}
-        label="Audience preview"
+        label={t("Audience preview")}
       />
-      <section aria-label="Suppressions" className="mt-1">
+      <section aria-label={t("Suppressions")} className="mt-1">
         <h4 className="text-label font-medium text-ink-200">
-          Suppressions ({suppressions.length}) — always excluded, even from custom IDs
+          {t("Suppressions ({count}) — always excluded, even from custom IDs").replace("{count}", String(suppressions.length))}
         </h4>
         {suppressionError !== null ? (
           <p className="text-label text-fail" role="alert">
             {suppressionError}{" "}
             <button type="button" className="lnk" onClick={() => setSuppressionToken((count) => count + 1)}>
-              Retry
-            </button>
+              {t("Retry")}</button>
           </p>
         ) : suppressions.length === 0 ? (
-          <p className="text-label text-ink-400">No suppressions yet.</p>
+          <p className="text-label text-ink-400">{t("No suppressions yet.")}</p>
         ) : (
           <ol className="crm-history">
             {suppressions.slice(0, 10).map((row) => (
@@ -588,7 +573,7 @@ export default function AudienceSection({
               </li>
             ))}
             {suppressions.length > 10 && (
-              <li className="num text-label text-ink-500">…and {suppressions.length - 10} more</li>
+              <li className="num text-label text-ink-500">{t("…and {count} more").replace("{count}", String(suppressions.length - 10))}</li>
             )}
           </ol>
         )}
@@ -617,8 +602,7 @@ export default function AudienceSection({
           >
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-suppress-email">
-                Suppress an email
-              </label>
+                {t("Suppress an email")}</label>
               <input
                 id="aud-suppress-email"
                 className="field"
@@ -633,8 +617,7 @@ export default function AudienceSection({
             </div>
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="aud-suppress-reason">
-                Reason
-              </label>
+                {t("Reason")}</label>
               <input
                 id="aud-suppress-reason"
                 className="field"
@@ -643,7 +626,7 @@ export default function AudienceSection({
                 maxLength={80}
                 autoComplete="off"
                 disabled={suppressPending}
-                placeholder="opted out by phone"
+                placeholder={t("opted out by phone")}
               />
             </div>
             {suppressError && (
@@ -653,8 +636,7 @@ export default function AudienceSection({
             )}
             <div>
               <Button type="submit" size="sm" loading={suppressPending} disabled={suppressPending}>
-                Add suppression
-              </Button>
+                {t("Add suppression")}</Button>
             </div>
           </form>
         )}

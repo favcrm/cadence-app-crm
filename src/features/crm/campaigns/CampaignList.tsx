@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { Button,ErrorNotice } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import {
@@ -31,6 +32,7 @@ export default function CampaignList({
   onSelect: (campaignId: string) => void;
   onNew: () => void;
 }) {
+  const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const queryState = useCrmQuery(scope, "content.list", {}, parseContentList);
   const proposalState = useCrmQuery(scope, "proposals.list", {}, parseProposalList);
@@ -70,18 +72,17 @@ export default function CampaignList({
   })();
 
   return (
-    <section ref={listRef} aria-label="Campaigns list" className="crm-list">
+    <section ref={listRef} aria-label={t("Campaigns list")} className="crm-list">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
-        Campaigns
+        {t("Campaigns")}
       </h3>
       <div className="crm-toolbar mb-4">
         <p className="crm-toolbar-lede text-secondary text-ink-300">
-          Versioned email content with content-only approval. Audience freezes and test-send
-          receipts live on each campaign's page.
+          {t("Versioned email content with content-only approval. Audience freezes and test-send receipts live on each campaign's page.")}
         </p>
         {canWrite && (
           <Button variant="primary" size="sm" onClick={onNew}>
-            New campaign
+            {t("New campaign")}
           </Button>
         )}
       </div>
@@ -90,49 +91,47 @@ export default function CampaignList({
           // CAD-1193: a completed unanswered check is unavailable, not
           // still checking — the retry re-runs the real access probe.
           <p className="card px-4 py-3 text-label text-ink-400" data-state="access-unavailable">
-            Access could not be confirmed — the board's access check did
-            not answer, so campaigns stay closed.{" "}
+            {t("Access could not be confirmed — the board's access check did not answer, so campaigns stay closed.")}{" "}
             {viewer.onRetryAccess && (
               <button type="button" className="lnk" onClick={viewer.onRetryAccess}>
-                Retry access check
+                {t("Retry access check")}
               </button>
             )}
           </p>
         ) : (
           <p className="card px-4 py-3 text-label text-ink-400" role="status">
-            Checking whether this session may inspect campaigns…
+            {t("Checking whether this session may inspect campaigns…")}
           </p>
         )
       )}
       {viewer.operator === false && (
         <p className="card px-4 py-3 text-label text-ink-400">
-          Sign in as the operator to inspect campaigns.
+          {t("Sign in as the operator to inspect campaigns.")}
         </p>
       )}
       {viewer.operator && viewer.readOnly && (
         <p className="card px-4 py-3 text-label text-ink-400" data-state="read-only">
-          Read-only view. Campaign creation and edits are unavailable.
+          {t("Read-only view. Campaign creation and edits are unavailable.")}
         </p>
       )}
       {scope.contextId === "" && viewer.operator && (
         <p className="card px-4 py-3 text-label text-ink-400">
-          Administrator CRM setup is required before campaigns open.
+          {t("Administrator CRM setup is required before campaigns open.")}
         </p>
       )}
       {scope.contextId !== "" && viewer.operator && loading && (
         <p className="text-secondary text-ink-400" role="status">
-          Reading campaigns…
+          {t("Reading campaigns…")}
         </p>
       )}
       {scope.contextId !== "" && viewer.operator && error !== null && !loading && (
-        <ErrorNotice onRetry={() => { void queryState.store.refresh(); void proposalState.store.refresh(); }}>{error}</ErrorNotice>
+        <ErrorNotice onRetry={() => { void queryState.store.refresh(); void proposalState.store.refresh(); }} retryLabel={t("Retry")}>{t(error)}</ErrorNotice>
       )}
       {scope.contextId !== "" && viewer.operator && error === null && !loading && campaigns.length === 0 && (
         <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="campaigns" role="status">
-          <p className="font-medium text-ink-200">No campaigns yet</p>
+          <p className="font-medium text-ink-200">{t("No campaigns yet")}</p>
           <p className="mt-1">
-            Create the first campaign with New campaign — audience, editor, preview and test-send
-            all live there, never on this list. Only real server rows appear here.
+            {t("Create the first campaign with New campaign — audience, editor, preview and test-send all live there, never on this list. Only real server rows appear here.")}
           </p>
         </div>
       )}
@@ -142,16 +141,16 @@ export default function CampaignList({
           className="crm-table-wrap"
           tabIndex={0}
           role="region"
-          aria-label="Campaigns table — scroll horizontally to reach every column"
+          aria-label={t("Campaigns table — scroll horizontally to reach every column")}
         >
           <table className="crm-table">
             <thead>
               <tr>
-                <th scope="col">Campaign</th>
-                <th scope="col">Content</th>
-                <th scope="col">Latest send</th>
+                <th scope="col">{t("Campaign")}</th>
+                <th scope="col">{t("Content")}</th>
+                <th scope="col">{t("Latest send")}</th>
                 <th scope="col">
-                  <span className="sr-only">Open</span>
+                  <span className="sr-only">{t("Open")}</span>
                 </th>
               </tr>
             </thead>
@@ -168,16 +167,18 @@ export default function CampaignList({
                     <span
                       className="chip"
                       title={
+                        t(
                         campaign.approval.valid
                           ? `The saved content is approved${campaign.approval.revision !== campaign.revision ? " on an earlier saved version" : ""}`
-                          : "The saved content is not approved yet"
+                          : "The saved content is not approved yet",
+                      )
                       }
                     >
                       {campaign.approval.valid
                         ? campaign.approval.revision === campaign.revision
-                          ? "Approved"
-                          : "Needs review — edited since approval"
-                        : "Draft"}
+                          ? t("Approved")
+                          : t("Needs review — edited since approval")
+                        : t("Draft")}
                     </span>
                   </td>
                   <td className="num text-ink-300" data-send-state>
@@ -191,9 +192,9 @@ export default function CampaignList({
                           <span
                             className="chip crm-send-chip"
                             data-state={send.state}
-                            title="Prepared but not yet approved — nothing was sent"
+                            title={t("Prepared but not yet approved — nothing was sent")}
                           >
-                            Pending send
+                            {t("Pending send")}
                           </span>
                         );
                       }
@@ -209,16 +210,16 @@ export default function CampaignList({
                         <span
                           className="chip crm-send-chip"
                           data-state={send.state}
-                          title="SMTP acceptance only — not proof of inbox delivery"
+                          title={t("SMTP acceptance only — not proof of inbox delivery")}
                         >
-                          {send.state} · {send.counts.accepted}/{total} accepted
+                          {t(send.state)} · {formatNumber(send.counts.accepted)}/{formatNumber(total)} {t("accepted")}
                         </span>
                       );
                     })()}
                   </td>
                   <td>
                     <button type="button" className="lnk" onClick={() => onSelect(campaign.campaignId)}>
-                      Open
+                      {t("Open")}
                     </button>
                   </td>
                 </tr>
@@ -241,17 +242,16 @@ export default function CampaignList({
         return (
           <div className="card px-4 py-4 mt-4" data-pending-drafts>
             <h4 className="text-cardtitle font-medium text-ink-100">
-              Assistant drafts awaiting review
+              {t("Assistant drafts awaiting review")}
             </h4>
             <p className="text-secondary text-ink-400">
-              The assistant drafted these emails from your chat. Nothing is saved until you
-              open one and Apply.
+              {t("The assistant drafted these emails from your chat. Nothing is saved until you open one and Apply.")}
             </p>
             <ul className="grid gap-2 mt-2">
               {draftOnly.map((proposal) => (
                 <li key={proposal.proposalId} className="flex items-center gap-3">
                   <span className="text-ink-100 flex-1">
-                    {proposal.subject !== "" ? proposal.subject : <em>Untitled draft</em>}
+                    {proposal.subject !== "" ? proposal.subject : <em>{t("Untitled draft")}</em>}
                     <span className="num text-micro text-ink-500"> · {proposal.campaignId}</span>
                   </span>
                   <button
@@ -259,7 +259,7 @@ export default function CampaignList({
                     className="lnk"
                     onClick={() => onSelect(proposal.campaignId)}
                   >
-                    Review draft
+                    {t("Review draft")}
                   </button>
                 </li>
               ))}

@@ -1,3 +1,4 @@
+import { useLocale } from "../locale";
 import { Button } from "@cadence/screen-ui";
 import { useState } from "react";
 import {
@@ -45,6 +46,7 @@ export default function FinalSendPanel({
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
 }) {
+  const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const [prepared, setPrepared] = useState<PreparedSend | null>(null);
   const [preparePending, setPreparePending] = useState(false);
@@ -68,19 +70,16 @@ export default function FinalSendPanel({
   };
 
   return (
-    <section id="cmp-final-send" tabIndex={-1} aria-label="Final send" className="card px-4 py-4 grid gap-3 crm-send">
+    <section id="cmp-final-send" tabIndex={-1} aria-label={t("Final send")} className="card px-4 py-4 grid gap-3 crm-send">
       <h4 className="text-cardtitle font-medium text-ink-100">
-        Final send — approved, bounded, no resend
+        {t("Final send — approved, bounded, no resend")}
       </h4>
       <p className="text-label text-ink-400">
-        Prepare commits content revision + digest, the audience freeze, the sender link and the
-        unsubscribe origin into one send digest the operator then approves. Any material change
-        between prepare and approve refuses the send. SMTP acceptance is recorded — never inbox
-        delivery, never reads.
+        {t("Prepare commits content revision + digest, the audience freeze, the sender link and the unsubscribe origin into one send digest the operator then approves. Any material change between prepare and approve refuses the send. SMTP acceptance is recorded — never inbox delivery, never reads.")}
       </p>
       {missing.length > 0 ? (
         <div className="card px-3 py-3" data-prerequisites="missing">
-          <p className="text-label text-ink-300">Prepare stays unavailable — missing:</p>
+          <p className="text-label text-ink-300">{t("Prepare stays unavailable — missing:")}</p>
           <ul className="crm-history">
             {missing.map((item) => (
               <li key={item} className="text-label text-warn">
@@ -91,14 +90,13 @@ export default function FinalSendPanel({
         </div>
       ) : (
         <p className="text-label text-ok" data-prerequisites="met">
-          Every prerequisite is in place — approved r{doc.revision}, the frozen audience
-          (checked just now), sender {binding?.sender.address}, accepted test send of this content.
+          {t("Every prerequisite is in place — approved revision")} {formatNumber(doc.revision)}, {t("the frozen audience (checked just now), sender")} {binding?.sender.address}, {t("accepted test send of this content.")}
         </p>
       )}
       {error && (
         <p className="text-label text-fail" role="alert">
-          {error}{" "}
-          {prepared === null && <span className="text-ink-500">Prepare again.</span>}
+          {t(error)}{" "}
+          {prepared === null && <span className="text-ink-500">{t("Prepare again.")}</span>}
         </p>
       )}
       {canWrite && (
@@ -110,76 +108,76 @@ export default function FinalSendPanel({
             disabled={!canPrepare || preparePending}
             title={
               canPrepare
-                ? "Freeze the send's material and show what approval commits"
-                : `Missing: ${missing.join("; ")}`
+                ? t("Freeze the send's material and show what approval commits")
+                : `${t("Missing:")} ${missing.map((item) => t(item)).join("; ")}`
             }
             onClick={prepare}
           >
-            Prepare send
+            {t("Prepare send")}
           </Button>
         </div>
       )}
       {prepared !== null && (
-        <section aria-label="Prepared send" className="card px-3 py-3 grid gap-3" data-prepared>
+        <section aria-label={t("Prepared send")} className="card px-3 py-3 grid gap-3" data-prepared>
           <p className="text-label text-ink-200">
-            Send <span className="num">{prepared.send.sendId}</span> — state{" "}
+            {t("Send")} <span className="num">{prepared.send.sendId}</span> — {t("state")} {" "}
             <span className="chip crm-send-chip" data-state={prepared.send.state}>
-              {prepared.send.state}
+              {t(prepared.send.state)}
             </span>
           </p>
-          <dl className="crm-detail" aria-label="Prepared counts">
+          <dl className="crm-detail" aria-label={t("Prepared counts")}>
             <div>
-              <dt>Included</dt>
+              <dt>{t("Included")}</dt>
               <dd className="num" data-count="included">
                 {prepared.counts.included}
               </dd>
             </div>
             <div>
-              <dt>Excluded</dt>
+              <dt>{t("Excluded")}</dt>
               <dd className="num" data-count="excluded">
                 {prepared.counts.excluded}
               </dd>
             </div>
             <div>
-              <dt>Suppressed now</dt>
+              <dt>{t("Suppressed now")}</dt>
               <dd className="num" data-count="suppressed_now">
                 {prepared.counts.suppressedNow}
               </dd>
             </div>
             <div>
-              <dt>Final recipients</dt>
+              <dt>{t("Final recipients")}</dt>
               <dd className="num" data-count="final">
-                {prepared.counts.final} / ceiling {prepared.counts.maxRecipients}
+                {formatNumber(prepared.counts.final)} / {t("ceiling")} {formatNumber(prepared.counts.maxRecipients)}
               </dd>
             </div>
             <div>
-              <dt>Content</dt>
+              <dt>{t("Content")}</dt>
               <dd className="num">
-                r{prepared.send.contentRevision} · {prepared.send.contentDigest.slice(0, 18)}…
+                r{formatNumber(prepared.send.contentRevision)} · {prepared.send.contentDigest.slice(0, 18)}…
               </dd>
             </div>
             <div>
-              <dt>Audience freeze</dt>
+              <dt>{t("Audience freeze")}</dt>
               <dd className="num">
                 {prepared.send.audienceFreezeId} · {prepared.send.audienceDigest.slice(0, 18)}…
               </dd>
             </div>
             <div>
-              <dt>Sender</dt>
+              <dt>{t("Sender")}</dt>
               <dd className="num break-all">
                 {binding?.sender.address ?? "—"}
                 <details>
-                  <summary className="cursor-pointer text-ink-400">Details</summary>
-                  {prepared.send.connectionId} · link r{prepared.send.linkRevision}
+                  <summary className="cursor-pointer text-ink-400">{t("Details")}</summary>
+                  {prepared.send.connectionId} {t("· link r")}{prepared.send.linkRevision}
                 </details>
               </dd>
             </div>
             <div>
-              <dt>Unsubscribe origin</dt>
+              <dt>{t("Unsubscribe origin")}</dt>
               <dd className="num">{prepared.send.unsubscribeOrigin}</dd>
             </div>
             <div>
-              <dt>Send digest</dt>
+              <dt>{t("Send digest")}</dt>
               <dd className="num" title={prepared.sendDigest}>
                 {prepared.sendDigest.slice(0, 24)}…
               </dd>
@@ -187,7 +185,7 @@ export default function FinalSendPanel({
           </dl>
           {prepared.sample.length > 0 && (
             <p className="text-micro text-ink-500">
-              Sample (masked):{" "}
+              {t("Sample (masked):")}{" "}
               {prepared.sample.map((row) => `${row.customerId} · ${row.email}`).join(", ")}
             </p>
           )}
@@ -210,14 +208,14 @@ export default function FinalSendPanel({
                 }).finally(() => setApprovePending(false));
               }}
             >
-              Approve and send…
+              {t("Approve and send…")}
             </Button>
             <button
               type="button"
               className="lnk text-label"
               onClick={() => setPrepared(null)}
             >
-              Discard prepared view
+              {t("Discard prepared view")}
             </button>
           </div>
         </section>

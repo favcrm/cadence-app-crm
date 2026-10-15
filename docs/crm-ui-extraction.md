@@ -49,4 +49,27 @@ navigation is invoked. This is a candidate for independent installed create/edit
 validation and click/Enter acceptance, not a proven root-cause fix. Forms without a
 submit button and input-type submit/image controls are outside this bounded adapter.
 
+## Locale/count/absence repair rollout order
+
+Install the reviewed paired HOST first, then the reviewed APP bundle. The new
+APP advertises `crm-locale.v1`; an older HOST does not recognize that ready
+opt-in and may refuse its mount. A new HOST preserves the original projection
+shape for an older, non-opt-in APP. Keep Native CRM and `?screen=native`
+available; this compatibility statement is not installed lifecycle acceptance.
+
+The HOST alone selects the presentation-only `en`/`zh-TW` projection. The SDK's
+pure text provider exposes no session, preferences or authority API. Locale
+updates do not remount the frame or change its scope/action rights. Segment
+counts use serial cancellable reads, retaining the existing pending-eight and
+protected-operation guards. Only typed genuine absent audience/content reads
+map to service HTTP404; authentication, malformed scope, corruption and stale
+bindings remain errors.
+
+Use the exact committed SDK producer, archive digest and toolchain recorded in
+`screen-ui.lock.json`, not the older development-size example above. Follow the
+paired HOST rollout checklist and app bundle's supported operator flow; retain
+the previous bundle/backup and verify the actual served build and behavior
+before expansion. No installation, refresh or Native replacement is authorized
+by the development checks.
+
 The shared UI export now pins genuine committed candidate source in paired host draft PR #992, with its toolchain and archive bytes verified reproducibly. That source is not yet reviewed or approved for release; a release must verify its actual reviewed source rather than treat candidate provenance as approval. Native CRM stays available until the actual replacement and unchanged-host package update/rollback checks pass. Full CAD-811 backend domain/migration independence remains a separate unmet outcome; this UI extraction does not assert it is complete.

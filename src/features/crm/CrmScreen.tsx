@@ -7,6 +7,7 @@ import "./crm-campaign.css";
 import "./crm-drawer.css";
 import Customers from "./customers/Customers";
 import Segments from "./segments/Segments";
+import { CrmLocaleProvider } from "./locale";
 export default function CrmScreen() {
   const snapshot = useScope();
   if (!snapshot) return scopeError() ? <ErrorNotice>{scopeError()}</ErrorNotice> : <Loading>Waiting for the verified CRM mount…</Loading>;
@@ -21,9 +22,9 @@ export default function CrmScreen() {
   };
   // Scope retirement destroys every draft/cache; section navigation doesn't
   // retire the bridge or the persistent host chat.
-  return <NavigationProvider adapter={FrameNavigationAdapter}>
+  return <CrmLocaleProvider locale={snapshot.presentationLocale}><NavigationProvider adapter={FrameNavigationAdapter}>
     <main className="app-outlet crm" key={`${scope.installId}:${scope.contextId}:${snapshot.digest}`}>
       {route.section === "customers" ? <Customers {...props} /> : route.section === "segments" ? <Segments {...props} /> : <Campaigns {...props} />}
     </main>
-  </NavigationProvider>;
+  </NavigationProvider></CrmLocaleProvider>;
 }

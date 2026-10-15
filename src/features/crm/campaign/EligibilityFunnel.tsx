@@ -1,3 +1,4 @@
+import { useTranslate } from "../locale";
 import type { AudiencePreview } from "../segments/Segments";
 
 /**
@@ -35,10 +36,11 @@ export default function EligibilityFunnel({
   error: string | null;
   onRetry: () => void;
 }) {
+  const t = useTranslate();
   if (loading) {
     return (
       <p className="text-secondary text-ink-400" role="status">
-        Reading host audience counts…
+        {t("Reading host audience counts…")}
       </p>
     );
   }
@@ -47,7 +49,7 @@ export default function EligibilityFunnel({
       <p className="card px-4 py-3 text-label text-fail border-fail/40" role="alert">
         {error}{" "}
         <button type="button" className="lnk" onClick={onRetry}>
-          Retry
+          {t("Retry")}
         </button>
       </p>
     );
@@ -67,11 +69,11 @@ export default function EligibilityFunnel({
   ];
   const reason = blockingReason(preview);
   return (
-    <div className="grid gap-2" aria-label="Eligibility" data-funnel>
+    <div className="grid gap-2" aria-label={t("Eligibility")} data-funnel>
       <ul className="crm-funnel">
         {rows.map((row) => (
           <li key={row.key} data-step={row.key} data-drop={row.drop || undefined}>
-            <span>{row.label}</span>
+            <span>{t(row.label)}</span>
             <span className="crm-funnel-bar" aria-hidden="true">
               <i style={{ width: `${Math.min(100, Math.round((row.n / base) * 100))}%` }} />
             </span>
