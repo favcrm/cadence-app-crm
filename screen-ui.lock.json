@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "bb3ee9fc00a349a6422278f1618adb855dae644f09607cb97edc3214c67b3bc5",
+  "closureSha256": "013e84aa2903120dc7a2027aaabeaf30c4a7a3baab63eca2da836ee36edd02ce",
   "files": [
     {
       "path": "ui/package.json",
@@ -56,7 +56,7 @@
     },
     {
       "path": "ui/scripts/package-screen-ui.mjs",
-      "sha256": "08628f3f5ad643049516ecbf4857a8e8b3dda0f971f1de8858df0f79db98b84d"
+      "sha256": "ba2276270db827119fbe27537f8380c6ce388fd260c80ce76386af5804f9a976"
     },
     {
       "path": "ui/src/features/app-shell/shared/ConfirmDialog.tsx",
@@ -154,29 +154,17 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "4f7cdd9475cac6b02c05b1506226d15a80cd1d65"
+    "sourceSha": "70d72eb13fb9135cb1219b472fa5e05aa2874480"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "c2fff97f78780da7526d7613735ef18ca4ca8e163e51952af941250dbcd9e81a",
-    "bytes": 55711
+    "sha256": "f98f2433da234f0c13096943ff6488675cf1a16d2e2c488ea05ab1b115ae09ee",
+    "bytes": 47526
   },
   "artifacts": [
     {
-      "path": "apple-touch-icon.png",
-      "sha256": "1582b2aa83449b804ad118377f32472d55c690f6472076ed6c8966a00915154f"
-    },
-    {
       "path": "build-manifest.json",
-      "sha256": "1f23ca985dada72898fddc1597689edbb51242c99e12147d535c420e1a6e7990"
-    },
-    {
-      "path": "favicon.svg",
-      "sha256": "f19fe2c9fbec13d99334adf4c14c1bdc72831c3632f6cbe165fa6ab262232e28"
-    },
-    {
-      "path": "icon.svg",
-      "sha256": "9375aac66602f4cd0f8c5086ec7750d20cc0f885894ee4ad7efea0b225471f91"
+      "sha256": "885bacc43e49779a6da3def52568b58c26a02e94052728a005d339cdc304850e"
     },
     {
       "path": "index.js",
