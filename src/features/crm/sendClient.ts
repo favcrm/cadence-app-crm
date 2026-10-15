@@ -40,8 +40,7 @@ export interface SmtpBinding {
   transportKind: string;
 }
 
-/** `null` where the host reports no live binding (its refusal is
- *  scoped to the binding state, not an HTTP failure). */
+/** Parse a sender binding; readSmtpBinding handles explicit empty-state refusals. */
 export function parseSmtpBinding(value: unknown): SmtpBinding {
   const binding = (value as { binding?: unknown } | null)?.binding;
   if (!binding || typeof binding !== "object") {
@@ -348,14 +347,13 @@ export function friendlySendError(error: unknown): string {
   return hostErrorText(error, "The send request was refused — retry.");
 }
 
-/** `smtpShow`'s "none bound" refusal is the host's report of an
- *  empty state, not a transport failure — callers map it to null. */
+/** Only explicit smtpShow sender-state codes report an empty state;
+ *  all other refusals remain errors, regardless of their message. */
 export function isNoSenderBound(error: unknown): boolean {
   return (
     error instanceof ApiError &&
-    (error.message.includes("no SMTP sender is bound") ||
-      error.message.includes("sender binding is revoked") ||
-      error.message.includes("sender refused or unavailable"))
+    error.status === 400 &&
+    (error.code === "smtp_sender_unbound" || error.code === "smtp_sender_revoked")
   );
 }
 
