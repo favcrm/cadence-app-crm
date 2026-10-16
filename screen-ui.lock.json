@@ -1,6 +1,6 @@
 {
   "package": "@cadence/screen-ui@1.0.0",
-  "closureSha256": "013e84aa2903120dc7a2027aaabeaf30c4a7a3baab63eca2da836ee36edd02ce",
+  "closureSha256": "a995e7272e3cae993a0d4602006653447f4480dbaf9704a39683bc80f79caf7b",
   "files": [
     {
       "path": "ui/package.json",
@@ -36,7 +36,7 @@
     },
     {
       "path": "ui/screen-ui/src/index.ts",
-      "sha256": "870c792e0349e5356baea9b3b3c205945a6be502b7c0da048c60b4a735ff1d5f"
+      "sha256": "7c41b0dfe74ddb5d6d33b3d9078ae013a12541ec3d156e8f50c356ebc7fa62da"
     },
     {
       "path": "ui/screen-ui/src/navigation.tsx",
@@ -56,7 +56,7 @@
     },
     {
       "path": "ui/scripts/package-screen-ui.mjs",
-      "sha256": "ba2276270db827119fbe27537f8380c6ce388fd260c80ce76386af5804f9a976"
+      "sha256": "5cf2cdc4148ed68ae0ebddd48929289c5d20808f7762acfaf434ce5cfc2346aa"
     },
     {
       "path": "ui/src/features/app-shell/shared/ConfirmDialog.tsx",
@@ -95,8 +95,8 @@
       "sha256": "4b0dbc9ea83b2be417eb9bbe2907763ba7d9d0b37cd06621d14aad74da69b70d"
     },
     {
-      "path": "ui/src/lib/cache.ts",
-      "sha256": "fc7e4abefc1be96e0860fc78c79c0f15f0c8190937b058587c05ac15b384078c"
+      "path": "ui/src/lib/cacheCore.ts",
+      "sha256": "1a9a79e789498b7cee0db8e65269715611bc35cc456bfcb1d56155abb0955723"
     },
     {
       "path": "ui/src/lib/localeText.tsx",
@@ -104,11 +104,11 @@
     },
     {
       "path": "ui/src/lib/types.ts",
-      "sha256": "c66107290f7909415df4bd1e6ccde0d831880e818478caee8dc4fd3a00a8a310"
+      "sha256": "45c3c5e8c00907f0dbf7947185d7c98df5a7124d997b586e58aef3bbba0fe821"
     },
     {
       "path": "ui/src/lib/useResource.ts",
-      "sha256": "e69c4260b544c300f138f4a475c64904464accdfae9aa585b729e5c39e5ea216"
+      "sha256": "a1e27d0e7b78c35def1881109db9f2089d41aada09e347c62003a2bca2f220b2"
     },
     {
       "path": "ui/src/ui/Button.tsx",
@@ -154,21 +154,21 @@
   },
   "source": {
     "kind": "commit",
-    "sourceSha": "70d72eb13fb9135cb1219b472fa5e05aa2874480"
+    "sourceSha": "d3da9bfc51d2055ac7b7db2c4824050429fc30da"
   },
   "archive": {
     "filename": "cadence-screen-ui-1.0.0.tgz",
-    "sha256": "f98f2433da234f0c13096943ff6488675cf1a16d2e2c488ea05ab1b115ae09ee",
-    "bytes": 47526
+    "sha256": "fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
+    "bytes": 47744
   },
   "artifacts": [
     {
       "path": "build-manifest.json",
-      "sha256": "885bacc43e49779a6da3def52568b58c26a02e94052728a005d339cdc304850e"
+      "sha256": "5a2f5159c0a680eb644a851f7065205496c7c2ab22d7981b3420f764eeb00a29"
     },
     {
       "path": "index.js",
-      "sha256": "19cde5a1a95f8c5004f74d214a3457442f36961258c5e1795f9b76e6a041ad2d"
+      "sha256": "aaebe9de1df4096e475d34cd8ca8c3cf77dc00fa7933cfa6e48320cdb178262a"
     },
     {
       "path": "package.json",
@@ -180,7 +180,7 @@
     },
     {
       "path": "types/screen-ui/src/index.d.ts",
-      "sha256": "8ee36a002395e3293f2992f12f360e1f35984f87f43ec6a6af05e3e93b6f03c7"
+      "sha256": "8c8d6a76e0413135f3fd6041111c3142c53a6a3d1c36b6b216a15d42ce649613"
     },
     {
       "path": "types/screen-ui/src/navigation.d.ts",
@@ -223,8 +223,8 @@
       "sha256": "a36bb3717cac0ca9c12d7540cf361bbc12a23fb9d38cf74ede40ba02fa8ec2fb"
     },
     {
-      "path": "types/src/lib/cache.d.ts",
-      "sha256": "4ce6463ba8cfa913a344d2b0f57efe049c45f1cc0dcf89b0ba147396b75b6625"
+      "path": "types/src/lib/cacheCore.d.ts",
+      "sha256": "81ad20f4ab2b250f4e00dab1d5395ff0ff6640d1d6c0b27af265e10cd2b424fe"
     },
     {
       "path": "types/src/lib/localeText.d.ts",
@@ -232,11 +232,11 @@
     },
     {
       "path": "types/src/lib/types.d.ts",
-      "sha256": "79d01109a277974462d33877998cdc9bad00836063b850db6d4c4bdba22fb52f"
+      "sha256": "4874ef093e96c7e6d38b9b645e06b7c3959a71ffa217efdf9df01686fe173104"
     },
     {
       "path": "types/src/lib/useResource.d.ts",
-      "sha256": "dbc9a8d12129b15ef1f045691337e4f9435a04b94d1ecc16718a05c171743985"
+      "sha256": "cfbee798c42ebc12b861fe58de68c8423aba51cc7d8aef56bef5b6052830c428"
     },
     {
       "path": "types/src/ui/Button.d.ts",
