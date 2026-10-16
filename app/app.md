@@ -5,17 +5,28 @@ version: '0.1.2'
 summary: Draft one independently reviewed email brief from pasted facts; customer records, campaign content, SMTP custody and sending stay operator-run host actions.
 needs:
   connections: []
+  requires:
+    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1]}
 ---
 
 # CRM — reviewed email briefs
 
-This bundle installs the `crm` app the host-compiled CRM screens key on:
-Customers, Segments, Campaigns, content review and bounded send controls
-are daemon/UI features for an installation whose app is named `crm`.
-They are not granted or described by this bundle — this package is
-metadata plus one local-only workflow, not the CRM UI or domain code.
-The bundle's only runnable content is `email-brief`, which turns pasted
-facts into a single reviewed email brief text artifact.
+This development bundle preserves the installed app identity `crm` and
+carries app-owned Customers, Segments and Campaigns screens, including
+CSV and email composition, under `screens/crm/`. Shared controls come from
+the pinned host-owned screen UI SDK. Backend domain execution, scoped
+data authority, credential custody, approval controls and sends stay
+host-owned; the CAD-811 domain/migration extraction is not complete.
+
+The package requires `app-screens`, `screen-records` and `screen-startup`
+v1. Its declaration orders two static inline scripts: `runtime.js` contains
+the existing production React/ReactDOM/JSX implementation; `client.js` uses
+that same app-local instance. No parent runtime or network loader is used.
+Older hosts must refuse the unknown startup capability, not run a client
+without its runtime. These requirements do not prove host readiness or
+runtime acceptance, and this development package is not a release or
+native CRM cutover. The `email-brief` workflow still turns pasted facts
+into one reviewed email brief text artifact.
 
 An approved brief is text for a person to read. It is not campaign
 content: applying content to a campaign, approving it, freezing an

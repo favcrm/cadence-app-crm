@@ -414,7 +414,7 @@ class BuildAndExclusionTests(unittest.TestCase):
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
-            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "workflows", "rubrics", "templates", "views", "bindings"})
+            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "workflows", "rubrics", "templates", "views", "bindings", "screens"})
             self.assertFalse(any(p.startswith(".") for p in rel.split("/")))
         self.assertIn("crm-0.1.2/app.md", names)
         self.assertIn("crm-0.1.2/workflows/email-brief.md", names)
@@ -422,13 +422,22 @@ class BuildAndExclusionTests(unittest.TestCase):
         self.assertIn("crm-0.1.2/app-actions.json", names)
         self.assertIn("crm-0.1.2/app-assistant.json", names)
         self.assertIn("crm-0.1.2/app-chat.json", names)
+        self.assertEqual(
+            {n for n in names if n.startswith("crm-0.1.2/screens/")},
+            {
+                "crm-0.1.2/screens/crm/runtime.js",
+                "crm-0.1.2/screens/crm/client.js",
+                "crm-0.1.2/screens/crm/crm.css",
+                "crm-0.1.2/screens/crm/screens.json",
+            },
+        )
 
     def test_verify_real_archive(self):
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
         result = pkg.verify_archive(self.out / "crm-0.1.2.tar.gz")
         self.assertEqual(result["app"], "crm")
         self.assertEqual(result["version"], "0.1.2")
-        self.assertEqual(result["files"], 6)
+        self.assertEqual(result["files"], 10)
 
 
 class VerifyParityTests(unittest.TestCase):
@@ -577,7 +586,7 @@ class VerifyParityTests(unittest.TestCase):
         # The real built archive carries explicit dir entries with a
         # trailing slash — canonicalization must not reject it.
         result = pkg.verify_archive(self.out / "crm-0.1.2.tar.gz")
-        self.assertEqual(result["files"], 6)
+        self.assertEqual(result["files"], 10)
 
 
 class CleanRefusalTests(unittest.TestCase):

@@ -45,7 +45,7 @@ def main():
     # Positive controls: real versioned package bytes and the real host validator.
     verified = package.verify_archive(args.archive.resolve())
     assert verified["app"] == "crm" and verified["version"] == "0.1.2"
-    assert verified["files"] == 6
+    assert verified["files"] == 10
     package.bundle_files(args.bundle.resolve())
     host_check(args.bundle.resolve(), 0)
 
@@ -59,14 +59,21 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="crm2-refusal-") as temp:
         root = Path(temp)
-        unknown = root / "unknown"
-        shutil.copytree(args.bundle, unknown)
+        def owned_copy(name):
+            bundle = root / name
+            shutil.copytree(args.bundle, bundle)
+            bundle.chmod(0o700)
+            for directory in bundle.rglob("*"):
+                if not directory.is_symlink() and directory.is_dir():
+                    directory.chmod(0o700)
+            return bundle
+
+        unknown = owned_copy("unknown")
         (unknown / "app-actions.evil.json").write_text("{}\n")
         package_refuses(unknown, "app-actions.evil.json")
         host_check(unknown, 3, "inventory")
 
-        linked = root / "linked"
-        shutil.copytree(args.bundle, linked)
+        linked = owned_copy("linked")
         (root / "outside.json").write_bytes((linked / "app-actions.json").read_bytes())
         (linked / "app-actions.json").unlink()
         (linked / "app-actions.json").symlink_to(root / "outside.json")
@@ -89,18 +96,18 @@ def main():
         else:
             raise AssertionError("archive verifier admitted unsupported root member")
 
-        forged = root / "forged"
-        shutil.copytree(args.bundle, forged)
+        forged = owned_copy("forged")
         declaration = json.loads((forged / "app-actions.json").read_text())
         declaration["actions"][0]["input"]["fields"].append(
             {"id": "consent", "label": "Consent", "type": "text"}
         )
+        (forged / "app-actions.json").chmod(0o600)
         (forged / "app-actions.json").write_text(json.dumps(declaration))
         host_check(forged, 3, "field")
 
         # CRM-3: extending the exact allowlist must not admit malformed chat.
-        malformed = root / "malformed-chat"
-        shutil.copytree(args.bundle, malformed)
+        malformed = owned_copy("malformed-chat")
+        (malformed / "app-chat.json").chmod(0o600)
         (malformed / "app-chat.json").write_text('{"contract": "app-chat/v1", broken-json')
         try:
             package.read_contents(malformed, package.bundle_files(malformed))
