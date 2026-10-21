@@ -4,9 +4,9 @@ import { serviceCall, serviceSlot, type CallArgs } from "../../bridge/services";
 /**
  * Typed host action client for versioned campaign email content (CAD-782).
  *
- * Independent of CAD-781's record client: the installation and context
- * IDs always come from the trusted route/scope — never from a form
- * field, a chat message or a stored draft. Request bodies carry only
+ * Independent of CAD-781's record client: the installation identity
+ * always comes from the trusted route/scope (install + digest) — never
+ * from a form field, a chat message or a stored draft. Request bodies carry only
  * the operator-checked grammar the HTTP peer accepts; anything else
  * throws client-side before a byte is sent, and the server's
  * `deny_unknown_fields` refuses it again. No actor claims, receipt
@@ -23,7 +23,7 @@ import { serviceCall, serviceSlot, type CallArgs } from "../../bridge/services";
 /** URL-bound scope: the only identity this client will use. */
 export interface ContentScope {
   installId: string;
-  contextId: string;
+  digest: string;
 }
 
 export type ContentBlock =

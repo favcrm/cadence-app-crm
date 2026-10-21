@@ -68,9 +68,9 @@ export default function AudienceSection({
   const [suppressPending, setSuppressPending] = useState(false);
   const [suppressError, setSuppressError] = useState<string | null>(null);
 
-  const listsToken = `${scope.installId}:${scope.contextId}`;
+  const listsToken = scope.installId;
   useEffect(() => {
-    if (scope.contextId === "" || !viewer.operator) return;
+    if (!viewer.operator) return;
     const controller = new AbortController();
     setListsError(null);
     audienceClient.exclusionList(scope)
@@ -98,7 +98,7 @@ export default function AudienceSection({
   }, [listsToken, suppressionToken]);
 
   useEffect(() => {
-    if (scope.contextId === "" || !viewer.operator) return;
+    if (!viewer.operator) return;
     const controller = new AbortController();
     audienceClient
       .suppressionList(scope)
@@ -135,7 +135,7 @@ export default function AudienceSection({
   const currentPreview = previewForKey === previewKey ? preview : null;
   useEffect(() => {
     const generation = ++previewGeneration.current;
-    if (scope.contextId === "" || !viewer.operator) {
+    if (!viewer.operator) {
       setPreview(null);
       setPreviewForKey(null);
       onPreview(null);

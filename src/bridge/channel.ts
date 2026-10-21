@@ -50,7 +50,7 @@ class Channel {
     const live = () => {
       const current = getScope();
       return !this.retired && this.port === port && this.leaveOwner === owner && !!current &&
-        current.scope.installId === scope.scope.installId && current.scope.contextId === scope.scope.contextId &&
+        current.scope.installId === scope.scope.installId &&
         current.digest === scope.digest;
     };
     const publish = (unsaved: boolean) => {

@@ -9,7 +9,7 @@ import { hostErrorText } from "./hostErrors";
  *
  * Unlike the record/content clients these routes are flat
  * `/api/crm-smtp/*` and `/api/crm-send/*` endpoints, so
- * `install_id`/`context_id` travel inside the POST body or the read
+ * `install_id` travels inside the POST body or the read
  * query — but only ever the trusted route scope's values, never a
  * form field, chat message or stored draft. Bodies carry exactly the
  * peer's allowlisted grammar (the Rust handlers are

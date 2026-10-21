@@ -55,7 +55,7 @@ export interface ConsentProvenance {
 /** URL-bound scope: the only identity this client will use. */
 export interface HostScope {
   installId: string;
-  contextId: string;
+  digest: string;
 }
 
 /** Body keys the HTTP peer accepts. Everything else is forged. */
@@ -87,8 +87,8 @@ function segment(id: string): boolean {
 
 /** The same segment grammar the HTTP peer enforces — refuse early. */
 export function assertScope(scope: HostScope): void {
-  if (!segment(scope.installId) || !segment(scope.contextId)) {
-    throw new ApiError("invalid installation or context scope", 400);
+  if (!segment(scope.installId)) {
+    throw new ApiError("invalid installation scope", 400);
   }
 }
 

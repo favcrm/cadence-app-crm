@@ -354,7 +354,6 @@ export interface AssistantReceipt {
   agent: string;
   requestId: string;
   installId: string;
-  contextId: string;
   campaignId: string;
   sourceRevision: number;
 }
@@ -367,7 +366,6 @@ export function parseAssistantReceipt(value: unknown): AssistantReceipt | null {
     typeof row.agent !== "string" ||
     typeof row.request_id !== "string" ||
     typeof row.install_id !== "string" ||
-    typeof row.context_id !== "string" ||
     typeof row.campaign_id !== "string" ||
     typeof row.source_revision !== "number"
   ) {
@@ -378,7 +376,6 @@ export function parseAssistantReceipt(value: unknown): AssistantReceipt | null {
     agent: row.agent,
     requestId: row.request_id,
     installId: row.install_id,
-    contextId: row.context_id,
     campaignId: row.campaign_id,
     sourceRevision: row.source_revision,
   };

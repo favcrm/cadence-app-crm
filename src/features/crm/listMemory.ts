@@ -24,8 +24,8 @@ const clear = () => { memory = null; generation++; retireHandlers.forEach(stop =
 // tickets, so a cleanup from before access loss cannot repopulate the memory.
 function reconcile(): string | null {
   const snapshot = getScope();
-  const identity = snapshot && snapshot.scope.contextId !== "" && snapshot.digest
-    ? JSON.stringify([snapshot.scope.installId, snapshot.scope.contextId, snapshot.digest,
+  const identity = snapshot && snapshot.digest
+    ? JSON.stringify([snapshot.scope.installId, snapshot.digest,
         [...new Set(snapshot.actions)].sort()])
     : null;
   if (memory && memory.identity !== identity) clear();
@@ -38,7 +38,7 @@ function open(scope: DisplayScope, key: ListKey): Ticket | null {
   const identity = reconcile();
   const snapshot = getScope();
   if (!identity || !snapshot || snapshot.scope.installId !== scope.installId ||
-      snapshot.scope.contextId !== scope.contextId || !snapshot.actions.includes(operations[key])) return null;
+      !snapshot.actions.includes(operations[key])) return null;
   memory ??= { identity, lists: {} };
   return { identity, generation, key };
 }

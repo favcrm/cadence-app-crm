@@ -6,8 +6,8 @@ import { assertRecordId,assertScope,type HostScope } from "./hostActions";
  * Typed host action client for saved segments, exclusion lists,
  * suppressions and frozen audiences (CAD-780 backend, CAD-784 UI).
  *
- * Mirrors the record/content clients: installation and context IDs
- * always come from the trusted route/scope — never from a form field,
+ * Mirrors the record/content clients: the installation identity always
+ * comes from the trusted route/scope (install + digest) — never from a form field,
  * a chat message or a stored draft. Request bodies carry only the
  * operator-checked grammar the HTTP peer accepts; anything else
  * throws client-side before a byte is sent, and the server's
@@ -131,7 +131,7 @@ export const audienceClient = {
     assertClean(body, SEGMENT_SAVE_KEYS, "segment save");
     return serviceCall(scope, "segments.save", body);
   },
-  /** `GET …/segments/list` — every saved rule in this context. */
+  /** `GET …/segments/list` — every saved rule in this installation. */
   async segmentList(scope: AudienceScope): Promise<unknown> {
     return serviceCall(scope, "segments.list", {});
   },
