@@ -119,7 +119,7 @@ export default function EmailPane({
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.installId, scope.contextId, draftId]);
+  }, [scope.installId, draftId]);
 
   const shown = draft !== null ? draftRender : render;
   const subject = draft !== null ? draft.subject : (doc?.subject ?? "");

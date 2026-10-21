@@ -31,7 +31,7 @@ export default function CrmCampaigns({
     <div className="crm-list" data-section="campaigns">
       {recordId !== null ? (
         <CampaignDetail
-          key={`${scope.installId}:${scope.contextId}:${recordId}`}
+          key={`${scope.installId}:${recordId}`}
           scope={scope}
           viewer={viewer}
           campaignId={recordId}
@@ -46,7 +46,7 @@ export default function CrmCampaigns({
             onSelect={onSelect}
             onNew={() => onView("new")}
           />
-          {view === "new" && viewer.operator && !viewer.readOnly && scope.contextId !== "" && (
+          {view === "new" && viewer.operator && !viewer.readOnly && (
             <NewCampaignDialog
               scope={scope}
               initialSegmentId={currentRoute().segment_id}

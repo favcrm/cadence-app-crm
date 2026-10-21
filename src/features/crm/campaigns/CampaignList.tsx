@@ -39,17 +39,17 @@ export default function CampaignList({
   const campaigns = queryState.data ?? [];
   const pendingDrafts = proposalState.data?.filter(row => row.state === "pending") ?? [];
   const { loading, error } = queryState;
-  const listRef = useListMemory(scope, "campaigns", scope.contextId !== "" && viewer.operator === true && queryState.data !== null, queryState.failure);
+  const listRef = useListMemory(scope, "campaigns", viewer.operator === true && queryState.data !== null, queryState.failure);
   const [sends, setSends] = useState<SendListEntry[]>([]);
 
-  const reloadToken = `${scope.installId}:${scope.contextId}`;
+  const reloadToken = scope.installId;
   // Pending-only assistant drafts share the same real proposal resource as
   // the workspace; send summaries stay fresh and are never display-cached.
 
   // Latest send per campaign — the same operator read the detail
   // page polls; its failure never blocks the content list.
   useEffect(() => {
-    if (scope.contextId === "" || !viewer.operator) return;
+    if (!viewer.operator) return;
     const controller = new AbortController();
     sendClient
       .sendList(scope)
@@ -114,20 +114,15 @@ export default function CampaignList({
           {t("Read-only view. Campaign creation and edits are unavailable.")}
         </p>
       )}
-      {scope.contextId === "" && viewer.operator && (
-        <p className="card px-4 py-3 text-label text-ink-400">
-          {t("Administrator CRM setup is required before campaigns open.")}
-        </p>
-      )}
-      {scope.contextId !== "" && viewer.operator && loading && (
+      {viewer.operator && loading && (
         <p className="text-secondary text-ink-400" role="status">
           {t("Reading campaigns…")}
         </p>
       )}
-      {scope.contextId !== "" && viewer.operator && error !== null && !loading && (
+      {viewer.operator && error !== null && !loading && (
         <ErrorNotice onRetry={() => { void queryState.store.refresh(); void proposalState.store.refresh(); }} retryLabel={t("Retry")}>{t(error)}</ErrorNotice>
       )}
-      {scope.contextId !== "" && viewer.operator && error === null && !loading && campaigns.length === 0 && (
+      {viewer.operator && error === null && !loading && campaigns.length === 0 && (
         <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="campaigns" role="status">
           <p className="font-medium text-ink-200">{t("No campaigns yet")}</p>
           <p className="mt-1">
@@ -136,7 +131,7 @@ export default function CampaignList({
         </div>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {scope.contextId !== "" && viewer.operator && campaigns.length > 0 && (
+      {viewer.operator && campaigns.length > 0 && (
         <div
           className="crm-table-wrap"
           tabIndex={0}
@@ -236,7 +231,7 @@ export default function CampaignList({
         // expected pending-only state, not an error.
         const savedIds = new Set(campaigns.map((row) => row.campaignId));
         const draftOnly = pendingDrafts.filter((row) => !savedIds.has(row.campaignId));
-        if (scope.contextId === "" || !viewer.operator || error !== null || draftOnly.length === 0) {
+        if (!viewer.operator || error !== null || draftOnly.length === 0) {
           return null;
         }
         return (

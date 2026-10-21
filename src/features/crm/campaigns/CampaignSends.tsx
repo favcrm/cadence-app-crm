@@ -29,7 +29,7 @@ export default function CampaignSends({
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const token = `${scope.installId}:${scope.contextId}:${campaignId}`;
+  const token = `${scope.installId}:${campaignId}`;
   useEffect(() => {
     const controller = new AbortController();
     sendClient

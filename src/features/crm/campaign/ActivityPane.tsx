@@ -12,7 +12,6 @@ import type { SmtpBinding } from "../sendClient";
  */
 export default function ActivityPane({
   campaignId,
-  contextId,
   doc,
   proposals,
   render,
@@ -20,7 +19,6 @@ export default function ActivityPane({
   sends,
 }: {
   campaignId: string;
-  contextId: string;
   doc: ContentDoc | null;
   proposals: ProposalDoc[];
   render: ContentRender | null;
@@ -82,10 +80,6 @@ export default function ActivityPane({
             <div>
               <dt>{t("Campaign id")}</dt>
               <dd className="num">{campaignId}</dd>
-            </div>
-            <div>
-              <dt>{t("Workspace")}</dt>
-              <dd className="num">{contextId || "none"}</dd>
             </div>
             {doc !== null && (
               <>

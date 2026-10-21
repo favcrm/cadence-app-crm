@@ -257,7 +257,7 @@ function SegmentList({
   const queryState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
   const segments = queryState.data ?? NO_SEGMENTS;
   const { loading, error } = queryState;
-  const listRef = useListMemory(scope, "segments", scope.contextId !== "" && viewer.operator === true && queryState.data !== null, queryState.failure);
+  const listRef = useListMemory(scope, "segments", viewer.operator === true && queryState.data !== null, queryState.failure);
   const [counts, setCounts] = useState<Record<string, AudiencePreview | null>>({});
 
   // Per-row exact host counts (bounded); a failed row shows an em dash.
@@ -323,20 +323,15 @@ function SegmentList({
           {t("Read-only view. Segment creation and edits are unavailable.")}
         </p>
       )}
-      {scope.contextId === "" && viewer.operator && (
-        <p className="card px-4 py-3 text-label text-ink-400">
-          {t("Administrator CRM setup is required before segments open.")}
-        </p>
-      )}
-      {scope.contextId !== "" && viewer.operator && loading && (
+      {viewer.operator && loading && (
         <p className="text-secondary text-ink-400" role="status">
           {t("Reading segments…")}
         </p>
       )}
-      {scope.contextId !== "" && viewer.operator && error !== null && !loading && (
+      {viewer.operator && error !== null && !loading && (
         <ErrorNotice onRetry={() => void queryState.store.refresh()}>{error}</ErrorNotice>
       )}
-      {scope.contextId !== "" && viewer.operator && error === null && !loading && segments.length === 0 && (
+      {viewer.operator && error === null && !loading && segments.length === 0 && (
         <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="segments" role="status">
           <p className="font-medium text-ink-200">{t("No segments yet")}</p>
           <p className="mt-1">
@@ -345,7 +340,7 @@ function SegmentList({
         </div>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {scope.contextId !== "" && viewer.operator && segments.length > 0 && (
+      {viewer.operator && segments.length > 0 && (
         <div
           className="crm-table-wrap"
           tabIndex={0}
@@ -537,10 +532,6 @@ function SegmentNew({
       {!canWrite ? (
         <p className="card px-4 py-3 mt-2 text-label text-ink-400" data-state="read-only">
           {t("Read-only view. A verified operator creates saved segments.")}
-        </p>
-      ) : scope.contextId === "" ? (
-        <p className="card px-4 py-3 mt-2 text-label text-ink-400">
-          {t("Administrator CRM setup is required before creating a segment.")}
         </p>
       ) : (
         <form
@@ -838,8 +829,7 @@ function SegmentDrawer({
             panel: (
               <section aria-label={t("Record diagnostics")}>
                 <p className="num text-micro text-ink-500">
-                  {t("Segment")} <span className="num">{segmentId}</span> · {t("scope")}{" "}
-                  <span className="num">{scope.contextId || "none"}</span> · {t("revision")} r{segment.revision} · {t("digest")}{" "}
+                  {t("Segment")} <span className="num">{segmentId}</span> · {t("revision")} r{segment.revision} · {t("digest")}{" "}
                   {segment.digest.slice(0, 18)}…
                 </p>
                 <div className="mt-3">

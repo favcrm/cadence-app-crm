@@ -57,7 +57,7 @@ export default function CampaignDetail({
   // Keep callbacks and cleanup bound to this editor, even if a later editor
   // on the same port has already acquired its own warning publisher.
   const leaveState = useMemo(() => ({ active: false, publisher: null as ReturnType<typeof channel.ownCampaignLeaveState> }),
-    [scope.installId, scope.contextId, campaignId]);
+    [scope.installId, campaignId]);
   useLayoutEffect(() => {
     leaveState.active = true;
     leaveState.publisher = channel.ownCampaignLeaveState();

@@ -217,12 +217,12 @@ export default function CampaignWorkspace({
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.installId, scope.contextId, campaignId, docIdentity, contentBindingId, renderToken]);
+  }, [scope.installId, campaignId, docIdentity, contentBindingId, renderToken]);
 
   // These app-content sender rows are render metadata, not live SMTP
   // authority. Keep their binding IDs distinct from SmtpBinding.connectionId.
   useEffect(() => {
-    if (!viewer.operator || scope.contextId === "") return;
+    if (!viewer.operator) return;
     const controller = new AbortController();
     contentClient.bindingList(scope).then((value) => {
       if (controller.signal.aborted) return;
@@ -240,12 +240,12 @@ export default function CampaignWorkspace({
       if (!controller.signal.aborted) setContentBindingError(friendlyCampaignError(error));
     });
     return () => controller.abort();
-  }, [scope.installId, scope.contextId, viewer.operator]);
+  }, [scope.installId, viewer.operator]);
 
   // The SMTP connection is context-global send authority. Keep it
   // separate from the preview-only app-content sender selection above.
   useEffect(() => {
-    if (scope.contextId === "" || !viewer.operator) return;
+    if (!viewer.operator) return;
     const controller = new AbortController();
     readSmtpBinding(scope)
       .then((value) => {
@@ -260,7 +260,7 @@ export default function CampaignWorkspace({
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.installId, scope.contextId, viewer.operator, bindingToken]);
+  }, [scope.installId, viewer.operator, bindingToken]);
 
 
   // CAD-1016: refresh pending drafts on the agent's actual completion —
@@ -281,10 +281,10 @@ export default function CampaignWorkspace({
   // The campaign page opens on its own conversation; the picker still
   // switches to General. Runs per campaign, never on every render.
   useEffect(() => {
-    if (scope.contextId === "" || !viewer.operator) return;
+    if (!viewer.operator) return;
     void campaignChat.open(scope, campaignId).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.installId, scope.contextId, campaignId]);
+  }, [scope.installId, campaignId]);
 
   useEffect(() => {
     if (proposalToken > 0) void proposalState.store.refresh();
@@ -900,7 +900,6 @@ export default function CampaignWorkspace({
       {activeTab === "activity" && (
         <ActivityPane
           campaignId={campaignId}
-          contextId={scope.contextId}
           doc={doc}
           proposals={proposals}
           render={render}

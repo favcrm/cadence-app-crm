@@ -160,7 +160,7 @@ export function useEmailDraft(
   // A proposal can seed the revision-0 draft before any saved document
   // exists. Changes there are still dirty and must be explicitly saved.
   const dirty = !sameDraft(draft, baseline);
-  const sessionKey = `${scope.installId}:${scope.contextId}:${campaignId}`;
+  const sessionKey = `${scope.installId}:${campaignId}`;
   const live = useRef({ dirty, doc, sessionKey });
   live.current = { dirty, doc, sessionKey };
   const requestEpoch = useRef(0);

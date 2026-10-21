@@ -167,7 +167,7 @@ function CustomerList({
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
   const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
   const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
-  const listRef = useListMemory(scope, "customers", scope.contextId !== "" && viewer.operator === true && queryState.data !== null,
+  const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
     queryState.failure, { query, committed, cursors, consentFilter, sourceFilter, tagFilter },
     JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -260,16 +260,13 @@ function CustomerList({
       {viewer.operator && viewer.readOnly && (
         <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>
       )}
-      {scope.contextId === "" && viewer.operator && (
-        <Notice>{t("Administrator CRM setup is required before customers open.")}</Notice>
-      )}
-      {scope.contextId !== "" && viewer.operator && loading && (
+      {viewer.operator && loading && (
         <Loading>{t("Reading customers…")}</Loading>
       )}
-      {scope.contextId !== "" && viewer.operator && error !== null && !loading && (
+      {viewer.operator && error !== null && !loading && (
         <ErrorNotice onRetry={() => void queryState.store.refresh()}>{error}</ErrorNotice>
       )}
-      {scope.contextId !== "" && viewer.operator && error === null && !loading && records.length === 0 && (
+      {viewer.operator && error === null && !loading && records.length === 0 && (
         <EmptyState
           name="customers"
           title={t(committed === "" ? "No customers yet" : "No customers match this search")}
@@ -280,7 +277,7 @@ function CustomerList({
         </EmptyState>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {scope.contextId !== "" && viewer.operator && records.length > 0 && (
+      {viewer.operator && records.length > 0 && (
         <>
           <div className="crm-filters" role="group" aria-label={t("Filter customers on this page")}>
             <Select
@@ -780,8 +777,6 @@ function CustomerNew({
         <Notice className="mt-2" state="read-only">
           {t("Read-only view. A verified operator creates customer records.")}
         </Notice>
-      ) : scope.contextId === "" ? (
-        <Notice className="mt-2">{t("Administrator CRM setup is required before creating a customer.")}</Notice>
       ) : (
         <div className="mt-2">
           <CustomerForm
@@ -924,7 +919,7 @@ function CustomerDrawer({
                 </p>
                 <p className="num text-micro text-ink-500">
                   {t("Record")} <span className="num">{recordId}</span> · {t("revision")} r{record.revision} · {t("digest")}{" "}
-                  {record.digest.slice(0, 18)}… · {t("scope")} <span className="num">{scope.contextId || "none"}</span>
+                  {record.digest.slice(0, 18)}…
                 </p>
               </section>
             ),

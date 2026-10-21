@@ -80,7 +80,7 @@ export default function CustomerCsvImport({
   // mount no longer matches is discarded, never applied — a cancelled
   // page and a remounted scope can never see a stale write land.
   const live = useRef<{ mounted: boolean; scope: string }>({ mounted: true, scope: "" });
-  live.current.scope = `${scope.installId}:${scope.contextId}`;
+  live.current.scope = scope.installId;
   useEffect(() => {
     headRef.current?.focus();
     const entry = live.current;
@@ -221,16 +221,6 @@ export default function CustomerCsvImport({
       </section>
     );
   }
-  if (scope.contextId === "") {
-    return (
-      <section aria-label={t("Import customers")}>
-        <h3 ref={headRef} className="text-cardtitle font-medium text-ink-100" tabIndex={-1} data-outlet-heading>
-          {t("Import customers")}</h3>
-        <Notice className="mt-2">{t("Administrator CRM setup is required before importing customers.")}</Notice>
-      </section>
-    );
-  }
-
   const applyCount = preview === null ? 0 : csvApplyCount(preview.rows, choices);
 
   return (
