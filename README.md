@@ -1,64 +1,58 @@
 # Cadence CRM App
 
-Public repository: https://github.com/favcrm/cadence-app-crm. Local checkout: `/home/ubuntu/Project/cadence-app-crm`.
-App identity stays `crm`; the repository name does not change installation or data identities.
+Public repository: https://github.com/favcrm/cadence-app-crm.
+App identity stays `crm`; repository names do not change installation or data identities.
 
-## Status
+## Local development
 
-This is a draft extraction scaffold for CAD-811, not an independently functional CRM release.
-`app/` is a copy of the existing metadata/email-brief bundle from Cadence source
-`a692ba9080d453bd22b864f5fb5af7d13c67286e`. It does not contain the host-compiled CRM screens,
-customer/segment/campaign implementation, or sending logic. The original source remains in place.
-The remote repository holds the extraction scaffold. No release, production CRM installation or migration has been performed.
+Use the Node version in `screen-ui.lock.json` and pnpm version in `package.json`.
+The shared screen SDK archive is committed; no Cadence checkout or SDK rebuild is needed.
 
-CAD-962 added deterministic packaging for the unchanged `app/` bundle
-(`scripts/package_app.py`: check/build/verify, byte-identical rebuilds,
-SHA256 sidecar that is integrity evidence only — never the Cadence bundle
-digest or an approval), its unit tests, an install-path note
-(`docs/packaging.md`) and a read-only CI definition
-(`.github/workflows/package.yml`, hosted execution pending).
-Still pending: the action/domain/migration contract, descriptor/binding
-validation against pinned host contracts, and the two-version
-install/update/isolation/rollback rehearsal.
-
-The current manifest version `0.1.0` is preserved from that metadata bundle; it does not certify
-full-plugin compatibility or delivery. No app runtime/language/SDK is selected by this scaffold.
-
-## Repository convention
-
-```text
-cadence-app-crm/
-  app/                     # installable bundle root (current metadata only)
-    app.md                 # actual Cadence manifest format
-    workflows/
-    rubrics/
-    views/                 # planned app-views/v1 descriptors
-    bindings/              # planned app-bindings/v1 companions
-  src/
-    domain/                # app-specific definitions/logic: contract work pending
-    actions/               # typed app operations: execution contract pending
-    migrations/            # installation data migrations: contract pending
-  tests/
-    unit/
-    contract/              # compatibility with pinned Cadence host contracts
-    e2e/                   # install/update/isolation/rollback rehearsal
-  scripts/                 # package_app.py: check/build/verify the bundle (done); release pipeline pending
-  docs/
-  .github/workflows/       # package.yml: read-only packaging CI (defined; hosted validation pending); release pending
-  dist/                    # generated artifacts, ignored by Git
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-Only directories with current content are committed. `app/views/`, `app/bindings/` and `dist/`
-are planned; no unsupported declarations or preview forms are shipped as working features.
+Open the printed `/dev/preview/` URL. For Cadence versions supporting package development:
 
-Cadence owns the shared shell/navigation/chat, Field/table/detail/drawer components, scoped
-storage and authorization, credential custody, approvals and effect execution. CRM owns
-its app views, domain definitions, workflows, typed action declarations, migrations and tests.
-App-specific behavior needs an explicit verified execution contract; copying host Rust/React
-into this repository alone would not make it loadable by Cadence.
+```sh
+cadence app dev --package . --port 3186
+```
 
-See [repository-layout.md](docs/repository-layout.md) for boundaries and release acceptance.
+This runs the actual Customers, Segments and Campaigns source with the committed
+`@cadence/screen-ui` SDK, surrounded by a local workspace header, sidebar and assistant
+panel. Create/edit customers and segments, create Blank or Paste HTML campaigns,
+edit/save campaign revisions and clone drafts against browser-memory fixtures.
+Reload or **Reset local data** discards changes. Source edits hot reload.
 
-See [development-loop.md](docs/development-loop.md) for the shared CRM/Social Content development modes.
+The outer chrome approximates the Cadence workspace layout; it is not an authenticated
+host session. Chat is an offline panel with a draft field, not a simulated AI.
+Imports, sender setup, chat, approvals and sends remain unavailable. No daemon,
+installation, credentials or live data is involved.
+If a port is occupied, choose another in 3110–3199:
 
-The intended distribution model is installation from a public Git repository at an explicit release/reference. The current installer scans the clone root; this repository keeps the bundle in `app/`, so direct Git URL installation still needs a supported bundle-subdirectory contract. Until that exists, use the local/extracted bundle path in [packaging.md](docs/packaging.md). Public availability does not grant installation approval or app permissions.
+```sh
+CADENCE_APP_PORT=3193 pnpm dev
+```
+
+See [development-loop.md](docs/development-loop.md) for behavior and limits.
+
+## Ownership and shipping
+
+- `src/` owns CRM screens and typed bridge clients; shared controls come from the versioned SDK.
+- `app/` is the installable package, including generated screen assets and app declarations.
+- `dev/preview/` is local-only tooling; it is not a production host or part of the screen build.
+- `scripts/build_screen.mjs` and `scripts/verify_screen.mjs` retain the existing SDK/provenance and authority checks.
+- Cadence retains shell/chat, authenticated scope, persistence, credential custody, approvals and effects.
+
+```sh
+pnpm typecheck
+pnpm build
+pnpm verify
+python3 scripts/package_app.py check --source app
+```
+
+Local fixture success is not installation, live API, domain/migration independence,
+update/isolation/rollback or production evidence. Native host guards and sandbox contracts
+are unchanged. Use [packaging.md](docs/packaging.md) for packaging and
+[crm-ui-extraction.md](docs/crm-ui-extraction.md) for the shipped screen contract.

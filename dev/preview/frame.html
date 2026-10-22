@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM fixture frame</title>
+  <style>body { margin: 0; padding: 18px; } @media (max-width: 600px) { body { padding: 12px; } }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script id="cadence-screen-boot" type="application/json"></script>
+  <script type="module">
+    const boot = document.getElementById("cadence-screen-boot");
+    boot.textContent = JSON.stringify({ tag: "crm", bridge_nonce: new URLSearchParams(location.search).get("nonce"), generation: 1, parent_origin: location.origin });
+    await import("/src/main.tsx");
+  </script>
+</body>
+</html>

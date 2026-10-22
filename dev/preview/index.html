@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM · Local workspace</title>
+</head>
+<body>
+  <div class="preview-board" id="preview-board" data-panel="work">
+    <button class="sidebar-scrim" id="sidebar-scrim" aria-label="Close navigation" hidden></button>
+    <aside class="preview-sidebar" id="preview-sidebar" aria-label="Workspace navigation">
+      <a class="preview-brand" href="./">cadence <span>local</span></a>
+      <div class="workspace-identity"><span class="workspace-avatar" aria-hidden="true">L</span><div><strong>Local workspace</strong><span>Development environment</span></div></div>
+      <p class="sidebar-label">APPS</p>
+      <div class="sidebar-app"><span aria-hidden="true">C</span><strong>CRM</strong><span class="local-dot" aria-label="Local fixture data"></span></div>
+      <nav class="sidebar-sections" aria-label="CRM sections">
+        <button type="button" data-section="customers">Customers</button>
+        <button type="button" data-section="segments">Segments</button>
+        <button type="button" data-section="campaigns">Campaigns</button>
+      </nav>
+      <div class="sidebar-footer"><strong>Local developer</strong><span>No signed-in host session</span></div>
+    </aside>
+    <div class="preview-main">
+      <header class="workspace-header">
+        <div class="header-context"><button id="sidebar-toggle" class="chrome-button menu-toggle" type="button" aria-label="Open navigation" aria-controls="preview-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button><span>Workspace</span><span aria-hidden="true">/</span><strong>CRM</strong></div>
+        <div class="header-actions"><span class="local-badge">Local preview</span><button id="reset-fixtures" class="chrome-button" type="button">Reset local data</button></div>
+      </header>
+      <div class="preview-notice" role="note"><span class="local-dot" aria-hidden="true"></span><span><strong>Browser-memory fixtures.</strong> Create and edit locally; reload resets data. AI, imports, approvals and sends are offline.</span></div>
+      <div class="workspace-title"><div><p>APPS / CRM</p><h1 id="workspace-title">Customers</h1></div><button id="assistant-toggle" class="chrome-button" type="button" aria-controls="preview-assistant" aria-expanded="true">Hide assistant</button></div>
+      <div class="mobile-panels" role="group" aria-label="Workspace panel"><button type="button" data-panel="chat" aria-controls="preview-assistant" aria-pressed="false">Assistant</button><button type="button" data-panel="work" aria-controls="preview-workspace" aria-pressed="true">Workspace</button></div>
+      <div class="preview-panels">
+        <section id="preview-assistant" class="preview-assistant" aria-label="Assistant chat">
+          <header class="assistant-header"><div><strong>Assistant</strong><span>CRM workspace</span></div><span class="offline-badge">Offline</span></header>
+          <div class="assistant-messages"><div class="assistant-empty"><span class="assistant-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 5h14v11H9l-4 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></span><h2>Your CRM assistant</h2><p>A place to work with your customers, segments and campaigns.</p><p>Chat is offline in this local preview. Connect an authenticated Cadence host for real conversations; no AI responses are simulated here.</p></div><div class="local-activity"><span class="sidebar-label">LOCAL ACTIVITY</span><p id="preview-activity" role="status">Try creating a customer, segment or blank campaign in the workspace.</p></div></div>
+          <form class="assistant-composer"><label for="chat-draft">Draft a message</label><textarea id="chat-draft" rows="3" placeholder="Write a draft — sending is unavailable offline"></textarea><div><span>Draft only · not sent or stored</span><button type="submit" disabled title="An authenticated Cadence host is required">Send</button></div></form>
+        </section>
+        <section id="preview-workspace" class="preview-workspace" aria-label="CRM workspace"><div class="frame-status"><span id="preview-status" role="status">Connecting local fixtures…</span><span>Changes stay in this browser tab</span></div><iframe id="crm-frame" title="CRM app — local fixtures"></iframe></section>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./host.ts"></script>
+</body>
+</html>
