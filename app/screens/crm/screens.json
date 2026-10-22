@@ -10,8 +10,8 @@
     {
       "name": "runtime.js",
       "media_type": "text/javascript",
-      "size": 191026,
-      "sha256": "sha256:fe9839b093e82c87831a0edaa3de83725cc73a49716fdab8efb1eb515c7c4754"
+      "size": 191016,
+      "sha256": "sha256:164b609dc5903a19eb49c904fd975abbfc85f8524e1ac8d0a4a8cdeaa1d1a15e"
     },
     {
       "name": "client.js",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:353a04225cf1e5ad1b3abdef8b662c07db00911234e31c4a65a44e6a190a536f",
+    "source_digest": "sha256:da0c76369a4ea146d5554902b4301f651086797eda632ba6ab65dadc897f5cce",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },

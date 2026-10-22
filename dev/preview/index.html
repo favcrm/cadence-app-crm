@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM local development</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; }
+    header { padding: 16px 24px; border-bottom: 1px solid GrayText; }
+    h1 { margin: 0; font-size: 20px; }
+    p { margin: 8px 0; max-width: 85ch; font-size: 14px; }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    button { font: inherit; min-height: 44px; padding: 8px 16px; cursor: pointer; }
+    button[aria-pressed="true"] { font-weight: bold; text-decoration: underline; }
+    iframe { display: block; width: 100%; height: calc(100dvh - 210px); min-height: 500px; border: 0; }
+    @media (max-width: 600px) { header { padding: 12px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CRM local development</h1>
+    <p role="note"><strong>Synthetic, read-only fixture preview.</strong> Real CRM screens and shared SDK; no daemon, saved changes, approvals, chat or sends.</p>
+    <p id="preview-status" role="status">Connecting to the local fixture frame…</p>
+    <nav aria-label="CRM sections">
+      <button type="button" data-section="customers">Customers</button>
+      <button type="button" data-section="segments">Segments</button>
+      <button type="button" data-section="campaigns">Campaigns</button>
+    </nav>
+  </header>
+  <iframe id="crm-frame" title="CRM app — synthetic fixtures"></iframe>
+  <script type="module" src="./host.ts"></script>
+</body>
+</html>

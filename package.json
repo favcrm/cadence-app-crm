@@ -5,9 +5,14 @@
   "type": "module",
   "packageManager": "pnpm@12.2.1",
   "scripts": {
+    "dev": "node scripts/dev-preview.mjs",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build_screen.mjs",
     "verify": "node scripts/verify_screen.mjs"
+  },
+  "cadence": {
+    "app": "crm",
+    "dev": "node scripts/dev-preview.mjs"
   },
   "dependencies": {
     "@cadence/screen-ui": "file:.cadence-ui/cadence-screen-ui-1.0.0.tgz",

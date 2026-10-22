@@ -4,9 +4,27 @@ CRM and Social Content use the same development approach: edit the app repositor
 
 ## Fixture preview
 
-Use the Cadence-owned, versioned renderer, shell and shared components. App-specific definitions stay here; do not copy Field/DataTable/chat/navigation into the app. Synthetic scenarios and simulated or refused actions must be visibly labeled. Preview success proves visuals only.
+Install the pinned dependencies with `pnpm install --frozen-lockfile`, then run
+`pnpm dev` or `cadence app dev --package .`. The latter requires a Cadence CLI
+with package-dev support; older CLIs can use `pnpm dev` without a host upgrade.
+Open the printed `/dev/preview/` URL. The default loopback port is 3186;
+`CADENCE_APP_PORT=3193 pnpm dev` or `cadence app dev --package . --port 3193`
+selects another port in 3110–3199. Both paths reject non-loopback hosts.
 
-The current Cadence app-dev harness accepts trusted sources inside a Cadence checkout and refuses backend/proxy/token options. An external app-repo entrypoint and common renderer integration are still planned. No working preview command or SDK is supplied by this scaffold.
+The runner uses the existing Vite/React toolchain and committed screen-ui SDK.
+It imports the real `src/main.tsx` in a development frame and speaks the existing
+MessageChannel bridge; production screen, authorization and sandbox code are
+unchanged. There is no copied Field/DataTable/chat renderer, daemon or API proxy.
+Edits to screens, fixture data and styles hot reload; stop with Ctrl-C.
+
+Customers (including search/details), Segments (including fixture membership counts)
+and Campaigns (including draft/email browsing) use synthetic `.invalid` records.
+Section/detail links and browser back/forward retain the selected view.
+The email surface is an inert sandboxed frame with external resources disabled.
+All writes, imports, chat, sender setup, approvals and sends remain unavailable.
+No synthetic approval or delivery receipt is created; the UI stays read-only.
+No host state, PM path, provider key or installation is needed. No live API request
+is forwarded. Preview success proves local rendering and navigation only.
 
 ## Isolated integration
 
