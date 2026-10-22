@@ -19,9 +19,16 @@ Open the printed `/dev/preview/` URL. For Cadence versions supporting package de
 cadence app dev --package . --port 3186
 ```
 
-This runs the actual Customers, Segments and Campaigns source against clearly labelled,
-read-only synthetic fixtures, using the committed `@cadence/screen-ui` SDK. Source edits
-hot reload. No daemon, installation, credentials, chat, approval or send is involved.
+This runs the actual Customers, Segments and Campaigns source with the committed
+`@cadence/screen-ui` SDK, surrounded by a local workspace header, sidebar and assistant
+panel. Create/edit customers and segments, create Blank or Paste HTML campaigns,
+edit/save campaign revisions and clone drafts against browser-memory fixtures.
+Reload or **Reset local data** discards changes. Source edits hot reload.
+
+The outer chrome approximates the Cadence workspace layout; it is not an authenticated
+host session. Chat is an offline panel with a draft field, not a simulated AI.
+Imports, sender setup, chat, approvals and sends remain unavailable. No daemon,
+installation, credentials or live data is involved.
 If a port is occupied, choose another in 3110–3199:
 
 ```sh

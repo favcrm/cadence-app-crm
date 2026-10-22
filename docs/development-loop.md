@@ -17,14 +17,33 @@ MessageChannel bridge; production screen, authorization and sandbox code are
 unchanged. There is no copied Field/DataTable/chat renderer, daemon or API proxy.
 Edits to screens, fixture data and styles hot reload; stop with Ctrl-C.
 
-Customers (including search/details), Segments (including fixture membership counts)
-and Campaigns (including draft/email browsing) use synthetic `.invalid` records.
-Section/detail links and browser back/forward retain the selected view.
-The email surface is an inert sandboxed frame with external resources disabled.
-All writes, imports, chat, sender setup, approvals and sends remain unavailable.
-No synthetic approval or delivery receipt is created; the UI stays read-only.
+The development chrome reserves the same major areas as the real workspace:
+sidebar and header, assistant on the left, CRM workspace on the right. It uses
+the committed SDK's theme tokens without importing the authenticated host shell.
+At narrow widths, navigation opens as a drawer and Assistant/Workspace switches
+between the same mounted panes, preserving the local chat draft.
+
+The real app action buttons operate on browser-memory fixtures:
+- Customers: create, edit and record local consent; search and detail views.
+- Segments: create, edit and duplicate rules; counts use the current local customers.
+- Campaigns: choose **Blank** or **Paste HTML**, edit/save revisions and clone
+  drafts without copying live sender/audience state. Saving never creates an approval.
+- **Reset local data** asks before discarding all local changes and the chat draft.
+  Reload also resets the data; nothing is stored in localStorage or on a server.
+
+Imports, sender setup, AI chat, assistant proposals, approvals and sends are not
+implemented by the local adapter and remain refused. The chat panel is an honest
+offline state, not fake conversation history. Choosing Assistant draft in the real
+campaign form can create a local draft but cannot send its brief to an assistant;
+use Blank/Paste HTML for a complete offline creation flow.
+
+Section/detail/new-view links and browser back/forward retain the selected view.
+Local update requests reject stale revisions. The local email renderer is a
+bounded approximation, not the production email pipeline: it uses an empty
+sandbox and restrictive resource CSP, strips active HTML and links, and creates
+no delivery receipt. All synthetic digests/observations are fixture data only.
 No host state, PM path, provider key or installation is needed. No live API request
-is forwarded. Preview success proves local rendering and navigation only.
+is forwarded. This proves local layout and action flows, not backend authority.
 
 ## Isolated integration
 
