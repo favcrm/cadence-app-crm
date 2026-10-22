@@ -4,6 +4,7 @@ import type { AudienceScope } from "../audienceClient";
 import {
 checkCampaignId,
 checkContent,
+checkContentFields,
 friendlyCampaignError,
 parseContentDoc,
 type CampaignBlock,
@@ -274,7 +275,7 @@ export function useEmailDraft(
     try {
       checkCampaignId(campaignId);
       if (draft.html !== null) {
-        checkContent(draft.subject, draft.preheader, [{ type: "paragraph", text: "x" }]);
+        checkContentFields(draft.subject, draft.preheader);
         if (draft.html.trim() === "") {
           throw new ApiError("paste the HTML body, or discard to keep the blocks", 400);
         }

@@ -137,8 +137,8 @@ function checkUrl(url: string): void {
   }
 }
 
-/** Client mirror of the host draft grammar. */
-export function checkContent(subject: string, preheader: string, blocks: CampaignBlock[]): void {
+/** Client mirror of the host subject and preheader rules. */
+export function checkContentFields(subject: string, preheader: string): void {
   if (subject.length === 0 || subject.length > 150 || subject.trim() !== subject) {
     throw new ApiError("subject is required (150 characters, no padding)", 400);
   }
@@ -147,6 +147,11 @@ export function checkContent(subject: string, preheader: string, blocks: Campaig
     throw new ApiError("preheader exceeds its supported shape or bounds", 400);
   }
   if (preheader.length > 0) checkText(preheader, 200, false, "preheader");
+}
+
+/** Client mirror of the host draft grammar. */
+export function checkContent(subject: string, preheader: string, blocks: CampaignBlock[]): void {
+  checkContentFields(subject, preheader);
   if (blocks.length === 0 || blocks.length > 12) {
     throw new ApiError("content needs 1 to 12 blocks", 400);
   }

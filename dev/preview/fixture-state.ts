@@ -1,7 +1,7 @@
 import { ApiError } from "@cadence/screen-ui";
 import { buildCustomerProfile, formFromProfile } from "../../src/features/crm/customerProfile";
 import { checkPredicate, checkSegmentName } from "../../src/features/crm/segmentGrammar";
-import { checkCampaignId, checkCampaignName, checkContent, type CampaignBlock } from "../../src/features/crm/campaignGrammar";
+import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, type CampaignBlock } from "../../src/features/crm/campaignGrammar";
 
 export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
@@ -129,7 +129,10 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const blocks = args.blocks as CampaignBlock[] | undefined;
       if ((blocks === undefined) === (args.html === undefined)) throw new ApiError("Choose blocks or HTML, not both.", 400);
       if (blocks) checkContent(args.subject, preheader, blocks);
-      else if (typeof args.html !== "string" || !args.html.trim() || !args.subject.trim() || args.subject.length > 150) throw new ApiError("Valid email HTML and subject are required.", 400);
+      else {
+        checkContentFields(args.subject, preheader);
+        if (typeof args.html !== "string" || !args.html.trim()) throw new ApiError("Valid email HTML is required.", 400);
+      }
       const content: Content = { campaign_id: args.campaign_id, name, revision: (existing?.revision ?? 0) + 1, subject: args.subject, preheader, blocks: blocks ?? [], mode: blocks ? "blocks" : "html", html: typeof args.html === "string" ? inertHtml(args.html) : null, text_override: typeof args.text === "string" ? args.text : null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } };
       if (existing) contents.splice(contents.indexOf(existing), 1, content); else contents.push(content);
       changed(existing ? "Campaign draft updated locally." : "Campaign draft created locally.");
