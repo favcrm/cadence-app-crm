@@ -28,6 +28,8 @@ The real app action buttons operate on browser-memory fixtures:
 - Segments: create, edit and duplicate rules; counts use the current local customers.
 - Campaigns: choose **Blank** or **Paste HTML**, edit/save revisions and clone
   drafts without copying live sender/audience state. Saving never creates an approval.
+  Subject/preheader validation is shared with the real editor in both modes,
+  including direct local saves; it is not host authorization.
 - **Reset local data** asks before discarding all local changes and the chat draft.
   Reload also resets the data; nothing is stored in localStorage or on a server.
 
