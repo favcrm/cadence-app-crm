@@ -45,7 +45,7 @@ function matches(record: LocalRecord, predicates: Predicate[]) {
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 }
-function inertHtml(raw: string) {
+export function inertHtml(raw: string) {
   const template = document.createElement("template");
   template.innerHTML = raw;
   const allowed: Record<string, true> = { H1: true, H2: true, H3: true, H4: true, P: true, BR: true, STRONG: true, EM: true, B: true, I: true, U: true, S: true, A: true, DIV: true, SPAN: true, TABLE: true, TBODY: true, THEAD: true, TFOOT: true, TR: true, TD: true, TH: true, UL: true, OL: true, LI: true, BLOCKQUOTE: true, HR: true };

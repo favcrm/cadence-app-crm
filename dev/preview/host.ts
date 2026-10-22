@@ -1,5 +1,5 @@
 import { ApiError } from "@cadence/screen-ui";
-import { fixtureCall, fixtureDigest as digest, fixtureInstallId as installId, fixtureActions as actions } from "./fixture-state";
+import { fixtureCall, inertHtml, fixtureDigest as digest, fixtureInstallId as installId, fixtureActions as actions } from "./fixture-state";
 import "./shell";
 import type { Route } from "../../src/bridge/scope";
 
@@ -35,7 +35,7 @@ function showPreview(args: Record<string, unknown>) {
     previews.set(args.preview_id, preview);
   }
   // No scripts, forms, external resources or live links gain authority here.
-  const documentText = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width, initial-scale=1">${args.document}`;
+  const documentText = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width, initial-scale=1">${inertHtml(args.document)}`;
   if (preview.node.srcdoc !== documentText) preview.node.srcdoc = documentText;
   preview.anchor = anchor;
   positionPreviews();
