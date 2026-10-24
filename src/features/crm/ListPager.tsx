@@ -5,29 +5,28 @@ export const LIST_PAGE_SIZE = 20;
 
 /** Presentation only: callers own cursor discovery or local array paging. */
 export default function ListPager({
-  page, pageCount, totalPages, summary, onPage, onNext, hasNext, busy, label, visitedOnly = false,
+  page, pageCount, pendingPage, summary, onPage, onNext, hasNext, busy, label,
 }: {
   page: number;
+  /** Total pages for the current result set: the host total when known,
+   *  otherwise the pages discovered so far. */
   pageCount: number;
-  /** True count of pages for the current result set, when the host reports one.
-   *  The select still lists visited cursor pages; this names the total. */
-  totalPages?: number;
+  /** A page being fetched by the caller; shown while the controls are busy. */
+  pendingPage?: number;
   summary: string;
   onPage: (page: number) => void;
   onNext?: () => void;
   hasNext: boolean;
   busy: boolean;
   label: string;
-  visitedOnly?: boolean;
 }) {
   const { t, formatNumber } = useLocale();
-  // The host total can lag a just-trimmed cursor list; never print a page
-  // beyond the total or fewer pages than have already been visited.
-  const totalCount = Math.max(pageCount, page + 1, totalPages ?? 0);
+  const pages = Math.max(1, pageCount);
+  const selected = Math.min(Math.max(pendingPage ?? page, 0), pages - 1);
   const pageLabel = (index: number) => {
     const number = formatNumber(index + 1);
-    if (index === page && totalPages !== undefined) {
-      return t("Page {page} of {total}").replace("{page}", number).replace("{total}", formatNumber(totalCount));
+    if (index === selected) {
+      return t("Page {page} of {total}").replace("{page}", number).replace("{total}", formatNumber(pages));
     }
     return t("Page {page}").replace("{page}", number);
   };
@@ -39,15 +38,15 @@ export default function ListPager({
           ← {t("Previous")}
         </Button>
         <Select
-          value={String(page)}
+          value={String(selected)}
           onChange={(value) => onPage(Number(value))}
-          options={Array.from({ length: pageCount }, (_, index) => ({
+          options={Array.from({ length: pages }, (_, index) => ({
             value: String(index),
             label: pageLabel(index),
           }))}
-          disabled={busy || pageCount <= 1}
+          disabled={busy || pages <= 1}
           aria-label={label}
-          title={t(visitedOnly ? "Choose a visited page" : "Choose a page")}
+          title={t("Choose a page")}
         />
         <Button disabled={!hasNext || busy} onClick={onNext ?? (() => onPage(page + 1))}>
           {t("Next")} →
