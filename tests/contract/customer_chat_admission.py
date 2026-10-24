@@ -44,7 +44,8 @@ def main():
 
     # Positive controls: real versioned package bytes and the real host validator.
     verified = package.verify_archive(args.archive.resolve())
-    assert verified["app"] == "crm" and verified["version"] == "0.1.2"
+    bundle_version = package.read_manifest(args.bundle.resolve()).version
+    assert verified["app"] == "crm" and verified["version"] == bundle_version
     assert verified["files"] == 10
     package.bundle_files(args.bundle.resolve())
     host_check(args.bundle.resolve(), 0)
