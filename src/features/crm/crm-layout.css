@@ -178,13 +178,58 @@
 
 /* Diagnostic record metadata (ids, revisions, digests, workspace)
    collapses behind this details block instead of leading the page. */
-.crm-diag summary {
-  cursor: pointer;
-  list-style: disclosure-closed;
+/* An "Advanced" disclosure sits under a preview: a quiet, compact row with a
+   chevron and a comfortable target, not a bare list marker on the text. */
+.crm-diag {
+  margin-top: 0.5rem;
 }
 
-.crm-diag[open] summary {
-  list-style: disclosure-open;
+.crm-diag > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  margin-left: -0.25rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  list-style: none;
+  transition: color 120ms ease;
+}
+
+.crm-diag > summary::-webkit-details-marker {
+  display: none;
+}
+
+.crm-diag > summary::after {
+  content: "";
+  width: 0.375rem;
+  height: 0.375rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.crm-diag[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.crm-diag > summary:hover {
+  color: var(--color-ink-100);
+}
+
+.crm-diag > summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-diag > summary,
+  .crm-diag > summary::after {
+    transition: none;
+  }
 }
 
 .crm-field-row {

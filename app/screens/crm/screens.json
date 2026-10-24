@@ -22,12 +22,12 @@
     {
       "name": "crm.css",
       "media_type": "text/css",
-      "size": 39609,
-      "sha256": "sha256:fb5b77e7d7fd8b816c088b548c5b2a3876bd7ea6f6074543a6cbe6ce1feb7c24"
+      "size": 40265,
+      "sha256": "sha256:0e6b547096500d65a40cbf1e96e4477c6249b65aaf4c84c89c508f3de60d2cf1"
     }
   ],
   "provenance": {
-    "source_digest": "sha256:9b092ff4974143a414243ddcba86b9cfe6c0219d1e6e2aca19764373b53052e6",
+    "source_digest": "sha256:b886710e2d670eb3925eb74689f300f82ab1f079a5ed82b52ff7605bb9e2affa",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
