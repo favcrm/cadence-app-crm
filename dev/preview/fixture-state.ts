@@ -14,14 +14,14 @@ export const fixtureActions = [
 type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string; consent: { email: string; sms: string } };
 type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
-type Segment = { id: string; revision: number; name: string; predicates: Predicate[]; digest: string };
+type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
 type Content = { campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
 const records: LocalRecord[] = [
   { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
 ].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
-const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }];
+const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
 const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };
 const fixtureSenderBindings = [{ binding_id: "fixture-sender", revision: 1, digest: fixtureDigest, sender: fixtureSender, unsubscribe_base: "https://example.invalid/unsubscribe" }];
@@ -111,7 +111,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     case "audience.preview": {
       const base = args.base as { mode?: string; segment_id?: string; customer_ids?: string[] };
       let members = records;
-      if (base?.mode === "segment") members = records.filter(r => matches(r, (segments.find(s => s.id === base.segment_id) ?? missing()).predicates));
+      if (base?.mode === "segment") { const segment = segments.find(s => s.id === base.segment_id) ?? missing(); members = segment.segment_type === "static" ? records.filter(r => (segment.member_ids ?? []).includes(r.id)) : records.filter(r => matches(r, segment.predicates)); }
       else if (base?.mode === "custom") members = records.filter(r => base.customer_ids?.includes(r.id));
       else if (base?.mode !== "all") throw new ApiError("Select a local audience.", 400);
       const invalid = members.filter(r => !r.profile.email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.profile.email));

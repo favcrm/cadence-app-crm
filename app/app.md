@@ -1,8 +1,8 @@
 ---
 app: crm
 title: CRM
-version: '0.1.6'
-summary: Draft one independently reviewed email brief from pasted facts; customer records, campaign content, SMTP custody and sending stay operator-run host actions.
+version: '0.2.0'
+summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
 needs:
   connections: []
   requires:
@@ -91,17 +91,18 @@ a new run.
 ## Customer chat (app-assistant and app-actions)
 
 The bundle declares its assistant actions in `app-assistant.json` (the
-read tools `customers.search`, `customers.show`, and the existing legacy
-segment, campaign, draft and tag declarations, retained unchanged for
-installed compatibility) and two customer actions in `app-actions.json`:
-`crm.customer.create` (create, requires `display_name`; fields `email`,
-`phone`, `tags`, `source`) and `crm.customer.update` (partial update of
-`phone`/`tags`). The chat context declarations in `app-chat.json` are
-unchanged from the installed 0.1.0 contract. Both action files are checked
-by the host at install; the host owns storage, guards, approvals and every
-write. The legacy assistant declarations are host-compatibility metadata
-retained from the installed contract; this bundle adds no handler for them,
-and any write-effect entry among them is subject to host authorization only.
+read tools `customers.search`, `customers.show`, segment list/show/preview/
+save, `segments.save_static`, `segments.delete`, campaign list/show/
+create_draft, `campaigns.apply`, `campaigns.discard`, `campaigns.approve`,
+`audiences.prepare`, `audiences.show`, `sends.list`, `sends.show`,
+`email.draft` and `customer.tags.update`) and two customer actions in
+`app-actions.json`: `crm.customer.create` (create, requires `display_name`;
+fields `email`, `phone`, `tags`, `source`) and `crm.customer.update` (partial
+update of `display_name`/`email`/`phone`/`tags`/`source`). The chat context
+declarations in `app-chat.json` are unchanged from the installed 0.1.0
+contract. Both action files are checked by the host at install; the host owns
+storage, guards, approvals and every write. The host registry is authoritative:
+the bundle only declares IDs and schemas, and an undeclared action is refused.
 
 Agent procedure:
 
@@ -109,13 +110,21 @@ Agent procedure:
 2. If a search is ambiguous, ask the operator to select one customer. Never guess.
 3. Propose exactly one reviewed change with the exact field values. Only the
    listed fields are writable; no consent, identity or revision fields exist.
-4. Only the operator's native approval (allow once) writes. Show the
-   authoritative before/after preview from the host. Create leaves consent
-   unknown; update preserves existing consent.
-5. After approval, verify the durable receipt before reporting success.
+   The host applies the change through its action policy; consent stays unknown
+   on create and is preserved on update.
+4. After the operation, verify the durable receipt before reporting success.
+5. A static segment is an explicit member list (`segments.save_static`); a
+   rule segment keeps the existing predicate grammar. `segments.delete` keeps
+   the revision log.
+6. `campaigns.apply` applies a pending assistant proposal to the draft;
+   `campaigns.approve` pins the exact content revision and `audiences.prepare`
+   freezes the audience. These are host-authorized internal actions; the
+   host decides whether the current autonomy policy runs them directly.
+7. `sends.list` and `sends.show` are read-only. This bundle declares no send
+   or SMTP action; the final send remains the host operator's guarded action.
 
-Upload is not import or consent. There is no standing allow, no custom
-attributes, no bulk operation and no sending from this app.
+Upload is not import or consent. There is no consent inference, no custom
+attributes and no sending from this app.
 
 ## What a brief is, and is not
 

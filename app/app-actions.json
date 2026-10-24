@@ -26,8 +26,11 @@
       "record": "customer",
       "input": {
         "fields": [
+          {"id": "display_name", "label": "Name", "type": "text", "maxLength": 120},
+          {"id": "email", "label": "Email", "type": "text", "maxLength": 254},
           {"id": "phone", "label": "Phone", "type": "text", "maxLength": 24},
-          {"id": "tags", "label": "Tags", "type": "tags", "maxItems": 16}
+          {"id": "tags", "label": "Tags", "type": "tags", "maxItems": 16},
+          {"id": "source", "label": "Source", "type": "text", "maxLength": 40}
         ]
       }
     }
