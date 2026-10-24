@@ -125,6 +125,7 @@ export const zhTW: Record<string, string> = {
   "Segments table — scroll horizontally to reach every column": "客群表格 — 水平捲動以查看所有欄位",
   "Rule": "規則",
   "Matches": "符合數量",
+  "No customer matches this rule yet": "目前沒有客戶符合此規則",
   "Can be emailed": "可寄送電子郵件",
   "more": "更多",
   "— exact recipient counts render on the detail after Create.": "— 建立後會在詳細資料中顯示精確收件人數。",

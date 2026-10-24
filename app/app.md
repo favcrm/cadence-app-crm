@@ -1,7 +1,7 @@
 ---
 app: crm
 title: CRM
-version: '0.1.4'
+version: '0.1.5'
 summary: Draft one independently reviewed email brief from pasted facts; customer records, campaign content, SMTP custody and sending stay operator-run host actions.
 needs:
   connections: []
