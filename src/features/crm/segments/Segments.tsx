@@ -397,7 +397,16 @@ function SegmentList({
                       <span className="num text-micro text-ink-500"> +{formatNumber(segment.predicates.length - 1)} {t("more")}</span>
                     )}
                   </td>
-                  <td className="num text-ink-300">{counts[segment.id]?.baseCount ?? "—"}</td>
+                  <td className="num text-ink-300">
+                    {counts[segment.id]?.baseCount ?? "—"}
+                    {counts[segment.id]?.baseCount === 0 && (
+                      // A saved rule that matches nothing is a fact about the
+                      // customers, not a broken count: say so where the zero is.
+                      <span className="text-micro text-ink-500" style={{ display: "block" }}>
+                        {t("No customer matches this rule yet")}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     {counts[segment.id] ? (
                       <span className="chip" data-tone={counts[segment.id]!.finalCount === 0 ? "warn" : "ok"}>
