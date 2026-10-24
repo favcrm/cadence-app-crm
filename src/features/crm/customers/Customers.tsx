@@ -138,6 +138,54 @@ function CustomerList({
   const totalPages = total === null ? undefined : Math.max(1, Math.ceil(total / LIST_PAGE_SIZE));
   const { loading, error } = queryState;
   const pagingBusy = loading || queryState.updating || query.trim() !== committed;
+  const [jumping, setJumping] = useState<number | null>(null);
+  const [jumpError, setJumpError] = useState<string | null>(null);
+  const jumpRef = useRef(0);
+  useEffect(() => () => { jumpRef.current += 1; }, []);
+  // A cursor list can only move forward in one-page reads. Selecting a page
+  // whose cursor is unknown walks the chain from the furthest known page,
+  // keeping every cursor it learns so a later jump is instant. The current
+  // query and cursor list stay untouched until the walk succeeds.
+  const jumpTo = async (target: number) => {
+    if (target === page || target < 0 || (totalPages !== undefined && target >= totalPages) || pagingBusy || jumping !== null) return;
+    if (target <= cursors.length) { setPage(target); return; }
+    const id = ++jumpRef.current;
+    setJumpError(null);
+    setJumping(target);
+    try {
+      const known = cursors.slice();
+      let cursor: string | null = null;
+      let have = 0;
+      if (known.length === page) {
+        cursor = nextCursor;
+        have = page + 1;
+      } else {
+        const last = known.length;
+        const lastInput = known[last - 1];
+        if (lastInput === undefined) throw new Error(t("Could not load that page."));
+        const receipt = await hostActions.list(scope, { query: committed || undefined, limit: LIST_PAGE_SIZE, cursor: lastInput });
+        if (jumpRef.current !== id) return;
+        cursor = receipt.nextCursor;
+        have = last + 1;
+      }
+      while (have <= target) {
+        if (cursor === null) throw new Error(t("Could not load that page."));
+        known[have - 1] = cursor;
+        if (have === target) break;
+        const receipt = await hostActions.list(scope, { query: committed || undefined, limit: LIST_PAGE_SIZE, cursor });
+        if (jumpRef.current !== id) return;
+        cursor = receipt.nextCursor;
+        have += 1;
+      }
+      setCursors(known);
+      setPage(target);
+    } catch (e) {
+      if (jumpRef.current !== id) return;
+      setJumpError(e instanceof Error ? e.message : t("Could not load that page."));
+    } finally {
+      if (jumpRef.current === id) setJumping(null);
+    }
+  };
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
@@ -180,6 +228,8 @@ function CustomerList({
       // Mounting a restored search must not erase its restored page. A pending
       // query/committed difference still finishes its ordinary debounce.
       if (next !== committed) {
+        jumpRef.current += 1;
+        setJumping(null);
         setCursors([]);
         setPage(0);
         setCommitted(next);
@@ -191,6 +241,8 @@ function CustomerList({
 
   useEffect(() => {
     if (viewer.operator !== true || (queryState.failure instanceof ApiError && [401, 403].includes(queryState.failure.status))) {
+      jumpRef.current += 1;
+      setJumping(null);
       setQuery(""); setCommitted(""); setCursors([]); setPage(0);
       setConsentFilter(""); setSourceFilter(""); setTagFilter("");
       setSelected(new Set());
@@ -402,26 +454,21 @@ function CustomerList({
           )}
           <ListPager
             page={page}
-            pageCount={cursors.length + 1}
-            totalPages={totalPages}
-            summary={(shown.length === records.length
-              ? t(records.length === 1 ? "{count} customer on this page" : "{count} customers on this page")
-              : t("{shown} of {count} customers on this page"))
-              .replace("{shown}", formatNumber(shown.length))
-              .replace("{count}", formatNumber(records.length))}
-            onPage={setPage}
-            onNext={() => {
-              if (nextCursor === null) return;
-              if (cursors[page] !== nextCursor) {
-                setCursors((known) => [...known.slice(0, page), nextCursor]);
-              }
-              setPage((current) => current + 1);
-            }}
-            hasNext={truncated && nextCursor !== null}
-            busy={pagingBusy}
+            pageCount={totalPages ?? cursors.length + 1}
+            pendingPage={jumping ?? undefined}
+            summary={jumping !== null
+              ? t("Loading page {page}…").replace("{page}", formatNumber(jumping + 1))
+              : (shown.length === records.length
+                ? t(records.length === 1 ? "{count} customer on this page" : "{count} customers on this page")
+                : t("{shown} of {count} customers on this page"))
+                .replace("{shown}", formatNumber(shown.length))
+                .replace("{count}", formatNumber(records.length))}
+            onPage={jumpTo}
+            hasNext={totalPages !== undefined ? page + 1 < totalPages : truncated && nextCursor !== null}
+            busy={pagingBusy || jumping !== null}
             label={t("Customer page")}
-            visitedOnly
           />
+          {jumpError && <p className="text-micro text-ink-500" role="alert">{jumpError}</p>}
         </>
       )}
     </section>
