@@ -6,11 +6,17 @@ type AudienceScope
 } from "../audienceClient";
 import {
 missingReasons,
-sendReadiness
+sendReadiness,
+TEST_ANCHOR,
+type CampaignTab
 } from "../campaign/readiness";
+import { focusAnchor } from "../campaign/OverviewPane";
 import {
+friendlyCampaignError,
+parseContentDoc,
 type ContentDoc
 } from "../campaignGrammar";
+import { contentClient } from "../contentClient";
 import "../crm-campaign.css";
 import { newAudienceId } from "../segmentGrammar";
 import {
@@ -36,6 +42,9 @@ export default function FinalSendPanel({
   freeze,
   binding,
   testEvidence,
+  audienceLabel,
+  onTab,
+  onDoc,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
@@ -45,6 +54,9 @@ export default function FinalSendPanel({
   freeze: { valid: boolean | null } | null;
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
+  audienceLabel?: string;
+  onTab?: (tab: CampaignTab) => void;
+  onDoc: (doc: ContentDoc) => void;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
@@ -54,7 +66,10 @@ export default function FinalSendPanel({
   const [approvePending, setApprovePending] = useState(false);
   const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
 
-  const missing = missingReasons(sendReadiness({ doc, freezeId, freeze, binding, testEvidence }));
+  const readiness = sendReadiness({ doc, freezeId, freeze, binding, testEvidence });
+  const missing = missingReasons(readiness);
+  const check = (key: "freeze" | "sender" | "test") =>
+    readiness.find((row) => row.key === key)!;
   const canPrepare = canWrite && missing.length === 0;
 
   const prepare = () => {
@@ -62,35 +77,84 @@ export default function FinalSendPanel({
     setError(null);
     setPrepared(null);
     setApprovedSendId(null);
-    void sendClient
-      .sendPrepare(scope, campaignId, freezeId.trim(), newAudienceId("send"))
-      .then((value) => setPrepared(parsePreparedSend(value)))
-      .catch((err: unknown) => setError(friendlySendError(err)))
-      .finally(() => setPreparePending(false));
+    const commit = () => {
+      void sendClient
+        .sendPrepare(scope, campaignId, freezeId.trim(), newAudienceId("send"))
+        .then((value) => setPrepared(parsePreparedSend(value)))
+        .catch((err: unknown) => setError(friendlySendError(err)))
+        .finally(() => setPreparePending(false));
+    };
+    // The daemon requires the current revision to be approved before it
+    // prepares; this confirmation is that approval, so the campaign has no
+    // separate content-approval step.
+    if (doc.approval.valid && doc.approval.revision === doc.revision) {
+      commit();
+      return;
+    }
+    void contentClient
+      .approve(scope, campaignId, doc.revision)
+      .then((value) => {
+        onDoc(parseContentDoc(value));
+        commit();
+      })
+      .catch((err: unknown) => {
+        setError(friendlyCampaignError(err));
+        setPreparePending(false);
+      });
   };
 
   return (
-    <section id="cmp-final-send" tabIndex={-1} aria-label={t("Final send")} className="card px-4 py-4 grid gap-3 crm-send">
+    <section id="cmp-final-send" tabIndex={-1} aria-label={t("Final send")} className="card px-4 py-4 grid gap-3">
       <h4 className="text-cardtitle font-medium text-ink-100">
         {t("Final send — approved, bounded, no resend")}
       </h4>
       <p className="text-label text-ink-400">
-        {t("Prepare commits content revision + digest, the audience freeze, the sender link and the unsubscribe origin into one send digest the operator then approves. Any material change between prepare and approve refuses the send. SMTP acceptance is recorded — never inbox delivery, never reads.")}
+        {t("Prepare approves the current content revision and commits it with the audience freeze, the sender link and the unsubscribe origin into one send digest the operator then approves. Any material change between prepare and approve refuses the send. SMTP acceptance is recorded — never inbox delivery, never reads.")}
       </p>
-      {missing.length > 0 ? (
-        <div className="card px-3 py-3" data-prerequisites="missing">
-          <p className="text-label text-ink-300">{t("Prepare stays unavailable — missing:")}</p>
-          <ul className="crm-history">
-            {missing.map((item) => (
-              <li key={item} className="text-label text-warn">
-                · {item}
-              </li>
-            ))}
-          </ul>
+      <dl className="sdetail" aria-label={t("Send confirmation")} data-send-confirmation data-prerequisites={missing.length > 0 ? "missing" : "met"}>
+        <div>
+          <dt>{t("Audience")}</dt>
+          <dd>
+            {audienceLabel ?? "—"} ·{" "}
+            {check("freeze").done
+              ? t("frozen and valid")
+              : freeze === null
+                ? t("not frozen yet")
+                : t("needs a recheck")}
+            {!check("freeze").done && onTab !== undefined && (
+              <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={() => onTab("audience")}>{t("Open audience")}</button></>
+            )}
+          </dd>
         </div>
-      ) : (
-        <p className="text-label text-ok" data-prerequisites="met">
-          {t("Every prerequisite is in place — approved revision")} {formatNumber(doc.revision)}, {t("the frozen audience (checked just now), sender")} {binding?.sender.address}, {t("accepted test send of this content.")}
+        <div>
+          <dt>{t("Content")}</dt>
+          <dd>
+            r{formatNumber(doc.revision)} · {doc.subject}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Sender")}</dt>
+          <dd>
+            {check("sender").done && binding
+              ? `${binding.sender.name} <${binding.sender.address}>`
+              : t("no live sender")}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Test")}</dt>
+          <dd>
+            {check("test").done
+              ? t("accepted for this revision")
+              : t("not accepted for this revision")}
+            {!check("test").done && (
+              <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={() => focusAnchor(TEST_ANCHOR)}>{t("Send a test")}</button></>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {missing.length > 0 && (
+        <p className="text-label text-ink-400">
+          {t("Prepare is unavailable until every check above is met.")}
         </p>
       )}
       {error && (
@@ -108,7 +172,7 @@ export default function FinalSendPanel({
             disabled={!canPrepare || preparePending}
             title={
               canPrepare
-                ? t("Freeze the send's material and show what approval commits")
+                ? t("Approve the current revision and commit the send's material")
                 : `${t("Missing:")} ${missing.map((item) => t(item)).join("; ")}`
             }
             onClick={prepare}

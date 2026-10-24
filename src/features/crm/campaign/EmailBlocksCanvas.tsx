@@ -141,9 +141,6 @@ export default function EmailBlocksCanvas({
             {t("Undo last block change")}
           </button>
         )}
-        <span className="crm-vhint" data-canvas-hint>
-          {t("Click to edit · ⋯ for block actions · The unsubscribe footer is always included.")}
-        </span>
       </div>
     </div>
   );

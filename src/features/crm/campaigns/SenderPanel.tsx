@@ -31,7 +31,7 @@ export default function SenderPanel({ render }: { render: ContentRender }) {
         </div>
       </dl>
       <p className="text-micro text-ink-500">
-        {t("The render names the host's preview sender; the real sender is the bound SMTP connection above, and every send's unsubscribe links build on the configured origin. A preview proves the bytes only — sending is the operator's separate decision below.")}
+        {t("The render names the host's preview sender; the real sender is the bound SMTP connection, and unsubscribe links use the configured origin. A preview proves the bytes only — sending is a separate operator decision.")}
       </p>
     </section>
   );

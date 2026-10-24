@@ -1,9 +1,10 @@
 import { ApiError } from "@cadence/screen-ui";
+import { acceptSurface, resetSurface, SCREEN_SURFACES_V1 } from "./presentation";
 import { acceptPush,clearScope,getScope } from "./scope";
 import { OPERATIONS } from "./services";
 
 type CampaignLeaveState = { publish: (unsaved: boolean) => void; release: () => void };
-type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout>; kind: "call" | "slot"; large: boolean };
+type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout>; kind: "call" | "slot"; large: boolean; soft: boolean };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function exact(v: Record<string, unknown>, keys: readonly string[]): boolean { return Object.keys(v).every(k => keys.includes(k)); }
 const bytes = (v: unknown) => new TextEncoder().encode(JSON.stringify(v)).length;
@@ -36,7 +37,7 @@ class Channel {
     pair.port1.onmessageerror = () => this.retire(invalid());
     pair.port1.start();
     window.parent.postMessage({ v: 1, op: "init", tag: boot.tag, bridge_nonce: boot.bridge_nonce, generation: boot.generation }, boot.parent_origin, [pair.port2]);
-    pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1", "crm-locale.v1"] });
+    pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1", "crm-locale.v1", SCREEN_SURFACES_V1] });
     window.addEventListener("pagehide", () => this.retire(new ApiError("CRM mount retired", 403)), { once: true });
   }
   /** A live editor owns only a boolean warning hint, not a navigation request. */
@@ -60,7 +61,7 @@ class Channel {
     };
     return { publish, release: () => { if (live()) { publish(false); this.leaveOwner = null; } } };
   }
-  request(kind: "call" | "slot", verb: string, args: Record<string, unknown>): Promise<unknown> {
+  request(kind: "call" | "slot", verb: string, args: Record<string, unknown>, soft = false): Promise<unknown> {
     if (!this.port || this.retired) return Promise.reject(new ApiError("CRM bridge is unavailable", 503));
     if (this.pending.size >= 8) return Promise.reject(new ApiError("CRM bridge is busy; wait for the current request", 429));
     const large = verb.startsWith("records.csv.");
@@ -68,13 +69,24 @@ class Channel {
     const id = `crm-${++this.serial}`;
     return new Promise((resolve, reject) => {
       // No automatic retries: a timed-out protected operation may have executed.
-      const timer = setTimeout(() => this.retire(new ApiError("CRM request did not answer. Inspect fresh status before retrying an effect.", 504)), 65000);
-      this.pending.set(id, { resolve, reject, timer, kind, large });
+      // A `soft` host-local UI request never retires the records bridge.
+      const timer = setTimeout(() => {
+        if (soft) this.fail(id, new ApiError("CRM presentation request did not answer", 504));
+        else this.retire(new ApiError("CRM request did not answer. Inspect fresh status before retrying an effect.", 504));
+      }, 65000);
+      this.pending.set(id, { resolve, reject, timer, kind, large, soft });
       this.port!.postMessage({ v: 2, op: kind, id, verb, args, ...(kind === "slot" ? { anchor: "footer" } : {}) });
     });
   }
   private receive(data: unknown): void {
-    if (this.retired || !object(data) || data.v !== 2) throw invalid();
+    if (this.retired || !object(data)) throw invalid();
+    // The host's surface push is opt-in UI state; it is parsed strictly and
+    // never becomes a records reply, operation or authority claim.
+    if (data.v === 1 && data.op === "surface") {
+      acceptSurface(data);
+      return;
+    }
+    if (data.v !== 2) throw invalid();
     if (data.op === "screen") {
       if (bytes(data) > 131072) throw invalid();
       acceptPush(data);
@@ -107,7 +119,8 @@ class Channel {
   }
   private fail(id: string, error: ApiError): void {
     const p = this.pending.get(id)!; clearTimeout(p.timer); this.pending.delete(id);
-    if ([401, 403].includes(error.status)) { p.reject(error); this.retire(error); }
+    // A refused host-local UI request is not lost authority over records.
+    if (!p.soft && [401, 403].includes(error.status)) { p.reject(error); this.retire(error); }
     else p.reject(error);
   }
   retire(error: ApiError): void {
@@ -115,7 +128,7 @@ class Channel {
     this.retired = true; this.leaveOwner = null;
     this.port?.close(); this.port = null;
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
-    this.pending.clear(); clearScope(error.message);
+    this.pending.clear(); resetSurface(); clearScope(error.message);
   }
 }
 export const channel = new Channel();

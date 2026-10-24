@@ -25,18 +25,35 @@
         <div class="header-context"><button id="sidebar-toggle" class="chrome-button menu-toggle" type="button" aria-label="Open navigation" aria-controls="preview-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button><span>Workspace</span><span aria-hidden="true">/</span><strong>CRM</strong></div>
         <div class="header-actions"><span class="local-badge">Local preview</span><button id="reset-fixtures" class="chrome-button" type="button">Reset local data</button></div>
       </header>
-      <div class="preview-notice" role="note"><span class="local-dot" aria-hidden="true"></span><span><strong>Browser-memory fixtures.</strong> Create and edit locally; reload resets data. AI, imports, approvals and sends are offline.</span></div>
-      <div class="workspace-title"><div><p>APPS / CRM</p><h1 id="workspace-title">Customers</h1></div><button id="assistant-toggle" class="chrome-button" type="button" aria-controls="preview-assistant" aria-expanded="true">Hide assistant</button></div>
+      <div class="preview-notice" role="note"><span class="local-dot" aria-hidden="true"></span><span><strong>Browser-memory fixtures</strong> · reload resets data · AI, imports, approvals and sends offline</span></div>
+      <div class="workspace-title"><h1 id="workspace-title">Customers</h1></div>
       <div class="mobile-panels" role="group" aria-label="Workspace panel"><button type="button" data-panel="chat" aria-controls="preview-assistant" aria-pressed="false">Assistant</button><button type="button" data-panel="work" aria-controls="preview-workspace" aria-pressed="true">Workspace</button></div>
       <div class="preview-panels">
         <section id="preview-assistant" class="preview-assistant" aria-label="Assistant chat">
-          <header class="assistant-header"><div><strong>Assistant</strong><span>CRM workspace</span></div><span class="offline-badge">Offline</span></header>
-          <div class="assistant-messages"><div class="assistant-empty"><span class="assistant-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 5h14v11H9l-4 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></span><h2>Your CRM assistant</h2><p>A place to work with your customers, segments and campaigns.</p><p>Chat is offline in this local preview. Connect an authenticated Cadence host for real conversations; no AI responses are simulated here.</p></div><div class="local-activity"><span class="sidebar-label">LOCAL ACTIVITY</span><p id="preview-activity" role="status">Try creating a customer, segment or blank campaign in the workspace.</p></div></div>
-          <form class="assistant-composer"><label for="chat-draft">Draft a message</label><textarea id="chat-draft" rows="3" placeholder="Write a draft — sending is unavailable offline"></textarea><div><span>Draft only · not sent or stored</span><button type="submit" disabled title="An authenticated Cadence host is required">Send</button></div></form>
+          <button type="button" class="assistant-rail" id="assistant-expand" aria-label="Show assistant" aria-expanded="true" aria-controls="preview-assistant">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            <span class="assistant-rail-label" aria-hidden="true">Assistant</span>
+          </button>
+          <header class="assistant-header"><div><strong>Assistant</strong><span>CRM workspace</span></div><div class="assistant-header-tools"><span class="offline-badge">Offline</span><button type="button" class="assistant-icon-btn" id="assistant-collapse" aria-label="Hide assistant" aria-expanded="true" aria-controls="preview-assistant" data-hint="Hide assistant"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg></button></div></header>
+          <div class="assistant-messages"><div class="assistant-empty"><span class="assistant-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 5h14v11H9l-4 4V5Z"/><path d="M8 9h8M8 12h5"/></svg></span><h2>Chat is offline</h2><p>An authenticated Cadence host is required for real conversations. No AI responses are simulated in this preview.</p></div><div class="local-activity"><span class="sidebar-label">LOCAL ACTIVITY</span><p id="preview-activity" role="status">Try creating a customer, segment or blank campaign in the workspace.</p></div></div>
+          <form class="assistant-composer"><label for="chat-draft">Draft a message</label><textarea id="chat-draft" rows="3" placeholder="Draft — sending is unavailable offline"></textarea><div><span>Draft only · not sent or stored</span><button type="submit" disabled title="An authenticated Cadence host is required">Send</button></div></form>
         </section>
-        <section id="preview-workspace" class="preview-workspace" aria-label="CRM workspace"><div class="frame-status"><span id="preview-status" role="status">Connecting local fixtures…</span><span>Changes stay in this browser tab</span></div><iframe id="crm-frame" title="CRM app — local fixtures"></iframe></section>
+        <section id="preview-workspace" class="preview-workspace" aria-label="CRM workspace"><div class="frame-status"><span id="preview-status" role="status">Connecting local fixtures…</span><span>Changes stay in this browser tab</span></div><iframe id="crm-frame" name="crm-frame" title="CRM app — local fixtures"></iframe></section>
       </div>
     </div>
+  </div>
+  <!-- The synthetic host owns one independent fixed overlay. The primary
+       workspace frame above never leaves its normal layout box; only this
+       child frame is fixed, and the trusted close below survives its failure. -->
+  <div class="screen-drawer" id="screen-drawer" hidden>
+    <button class="screen-scrim" id="screen-scrim" type="button" aria-label="Close details"></button>
+    <section class="screen-drawer-panel" id="screen-drawer-panel" role="dialog" aria-modal="true" aria-label="CRM details">
+      <header class="screen-drawer-bar">
+        <span class="screen-drawer-bar-title">Details</span>
+        <button class="screen-drawer-close" id="screen-drawer-close" type="button" aria-label="Close details">✕</button>
+      </header>
+      <div class="screen-drawer-slot" id="screen-drawer-slot"></div>
+    </section>
   </div>
   <script type="module" src="./host.ts"></script>
 </body>

@@ -60,7 +60,7 @@ export default function CampaignSends({
         </p>
       ) : sends.length === 0 ? (
         <p className="text-label text-ink-400" data-empty="sends">
-          {t("No sends of this campaign yet — prepare and approve above.")}
+          {t("No sends of this campaign yet. Prepare and approve a send from the Overview tab.")}
         </p>
       ) : (
         <ol className="crm-history" aria-label={t("Sends")}>

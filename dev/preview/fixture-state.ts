@@ -22,6 +22,9 @@ const records: LocalRecord[] = [
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
 ].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }];
+const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
+const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };
+const fixtureSenderBindings = [{ binding_id: "fixture-sender", revision: 1, digest: fixtureDigest, sender: fixtureSender, unsubscribe_base: "https://example.invalid/unsubscribe" }];
 const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixture draft", revision: 1, subject: "Welcome to the community", preheader: "A synthetic local-development email.", blocks: [{ type: "heading", text: "Welcome" }, { type: "paragraph", text: "This is synthetic preview content. No email can be sent." }], mode: "blocks", html: null, text_override: null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } }];
 
 function requireId(value: unknown): asserts value is string {
@@ -151,17 +154,18 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     }
     case "content.render": {
       const content = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
+      if (args.binding_id !== undefined && !fixtureSenderBindings.some(binding => binding.binding_id === args.binding_id)) throw new ApiError("No matching local sender preview exists.", 404, { code: "not_found" });
       const html = content.mode === "html" ? content.html! : content.blocks.map(block => block.type === "button" ? `<p><strong>${escapeHtml(block.label)}</strong></p>` : `<${block.type === "heading" ? "h1" : "p"}>${escapeHtml(block.text)}</${block.type === "heading" ? "h1" : "p"}>`).join("");
       const rendered = html.replace(/\{\{first_name\|([^}]+)\}\}/g, (_match, fallback: string) => escapeHtml(typeof args.sample_first_name === "string" && args.sample_first_name ? args.sample_first_name : fallback));
       const template = document.createElement("template"); template.innerHTML = rendered;
-      return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: { name: "Fixture sender", address: "preview@example.invalid" }, unsubscribe_url: "https://example.invalid/unsubscribe" } };
+      return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
     }
     case "proposals.list": return { proposals: [] };
     case "sends.list": return { sends: [] };
-    case "sender-bindings.list": return { bindings: [] };
+    case "sender-bindings.list": return { bindings: fixtureSenderBindings };
     case "exclusions.list": return { exclusions: [] };
     case "suppressions.list": return { suppressions: [] };
-    case "smtp.show": throw new ApiError("No sender is connected in the local preview.", 400, { code: "smtp_sender_unbound" });
+    case "smtp.show": return { binding: fixtureSmtpBinding };
     case "audience.show": missing();
     default: throw new ApiError("This action needs a live Cadence host. Nothing was sent or approved.", 503, { code: "unavailable" });
   }

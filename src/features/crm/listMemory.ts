@@ -8,6 +8,7 @@ export interface CustomerListState {
   query: string;
   committed: string;
   cursors: string[];
+  page: number;
   consentFilter: string;
   sourceFilter: string;
   tagFilter: string;
@@ -60,6 +61,7 @@ function bounded(state: CustomerListState): boolean {
   // Retention limits only: never truncate a live selector/backstack or disable
   // ordinary Next/Previous. An oversized snapshot simply isn't retained.
   if (state.query.length > 120 || state.committed.length > 120 || state.cursors.length > 64 ||
+      !Number.isInteger(state.page) || state.page < 0 || state.page > state.cursors.length ||
       !["", "granted", "unknown", "denied"].includes(state.consentFilter) ||
       state.sourceFilter.length > 256 || state.tagFilter.length > 256) return false;
   const encoder = new TextEncoder();

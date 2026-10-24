@@ -11,6 +11,7 @@ parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { useListMemory } from "../listMemory";
+import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import "../crm-campaign.css";
 import {
 parseSendList,
@@ -41,6 +42,13 @@ export default function CampaignList({
   const { loading, error } = queryState;
   const listRef = useListMemory(scope, "campaigns", viewer.operator === true && queryState.data !== null, queryState.failure);
   const [sends, setSends] = useState<SendListEntry[]>([]);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const search = query.trim().toLocaleLowerCase();
+  const filtered = campaigns.filter(campaign => `${campaignTitle(campaign)} ${campaign.subject} ${campaign.campaignId}`.toLocaleLowerCase().includes(search));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const shown = filtered.slice(currentPage * LIST_PAGE_SIZE, (currentPage + 1) * LIST_PAGE_SIZE);
 
   const reloadToken = scope.installId;
   // Pending-only assistant drafts share the same real proposal resource as
@@ -72,16 +80,26 @@ export default function CampaignList({
   })();
 
   return (
-    <section ref={listRef} aria-label={t("Campaigns list")} className="crm-list">
+    <section ref={listRef} aria-label={t("Campaigns list")} className="crm-list crm-list-controls">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Campaigns")}
       </h3>
-      <div className="crm-toolbar mb-4">
-        <p className="crm-toolbar-lede text-secondary text-ink-300">
-          {t("Versioned email content with content-only approval. Audience freezes and test-send receipts live on each campaign's page.")}
-        </p>
+      <div className="crm-toolbar crm-list-toolbar">
+        <div className="crm-search">
+          <label className="sr-only" htmlFor="crm-campaign-search">{t("Search campaigns")}</label>
+          <input
+            id="crm-campaign-search"
+            className="field crm-search-input"
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setPage(0); }}
+            maxLength={120}
+            autoComplete="off"
+            placeholder={t("Search campaigns…")}
+            title={t("Search by campaign name, subject or ID")}
+          />
+        </div>
         {canWrite && (
-          <Button variant="primary" size="sm" onClick={onNew}>
+          <Button variant="primary" className="crm-list-create" onClick={onNew}>
             {t("New campaign")}
           </Button>
         )}
@@ -126,12 +144,12 @@ export default function CampaignList({
         <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="campaigns" role="status">
           <p className="font-medium text-ink-200">{t("No campaigns yet")}</p>
           <p className="mt-1">
-            {t("Create the first campaign with New campaign — audience, editor, preview and test-send all live there, never on this list. Only real server rows appear here.")}
+            {t("Create the first campaign with New campaign. Only real server rows appear here.")}
           </p>
         </div>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {viewer.operator && campaigns.length > 0 && (
+      {viewer.operator && shown.length > 0 && (
         <div
           className="crm-table-wrap"
           tabIndex={0}
@@ -150,7 +168,7 @@ export default function CampaignList({
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((campaign) => (
+              {shown.map((campaign) => (
                 <tr key={campaign.campaignId}>
                   <td className="text-ink-100">
                     <span title={campaign.campaignId}>{campaignTitle(campaign)}</span>
@@ -159,22 +177,7 @@ export default function CampaignList({
                     )}
                   </td>
                   <td>
-                    <span
-                      className="chip"
-                      title={
-                        t(
-                        campaign.approval.valid
-                          ? `The saved content is approved${campaign.approval.revision !== campaign.revision ? " on an earlier saved version" : ""}`
-                          : "The saved content is not approved yet",
-                      )
-                      }
-                    >
-                      {campaign.approval.valid
-                        ? campaign.approval.revision === campaign.revision
-                          ? t("Approved")
-                          : t("Needs review — edited since approval")
-                        : t("Draft")}
-                    </span>
+                    <span className="chip">{t("Draft")}</span>
                   </td>
                   <td className="num text-ink-300" data-send-state>
                     {(() => {
@@ -223,6 +226,20 @@ export default function CampaignList({
           </table>
         </div>
       )}
+      {viewer.operator && !loading && error === null && campaigns.length > 0 && (
+        <>
+          {filtered.length === 0 && <p role="status" className="text-label text-ink-400">{t("No saved campaigns match this search")}</p>}
+          <ListPager
+            page={currentPage}
+            pageCount={pageCount}
+            summary={t(pageCount > 1 ? "{shown} of {count} campaigns" : filtered.length === 1 ? "{count} campaign" : "{count} campaigns").replace("{shown}", formatNumber(shown.length)).replace("{count}", formatNumber(filtered.length))}
+            onPage={setPage}
+            hasNext={currentPage + 1 < pageCount}
+            busy={queryState.updating}
+            label={t("Campaign page")}
+          />
+        </>
+      )}
       {(() => {
         // Campaigns that exist only as a pending assistant draft — no
         // saved content yet. Opening one shows the proposal and its
@@ -230,7 +247,7 @@ export default function CampaignList({
         // creates revision 1); the missing saved-content 404 is the
         // expected pending-only state, not an error.
         const savedIds = new Set(campaigns.map((row) => row.campaignId));
-        const draftOnly = pendingDrafts.filter((row) => !savedIds.has(row.campaignId));
+        const draftOnly = pendingDrafts.filter((row) => !savedIds.has(row.campaignId) && `${row.subject} ${row.campaignId}`.toLocaleLowerCase().includes(search));
         if (!viewer.operator || error !== null || draftOnly.length === 0) {
           return null;
         }

@@ -199,26 +199,18 @@ export default function CampaignDetail({
 
   return (
     <section aria-label={t("Campaign details")} className="grid gap-3">
-      <div>
+      <div className="crm-chead">
+        <button type="button" className="lnk crm-chead-back" onClick={requestBack}>
+          ← {t("Campaigns")}
+        </button>
         <h3 ref={headRef} className="text-cardtitle font-medium text-ink-100" tabIndex={-1} data-outlet-heading>
           {loading ? t("Campaign details") : (doc !== null ? campaignTitle(doc) : t("Campaign details"))}{" "}
           {doc !== null && (
             <span className="chip align-middle" data-campaign-status>
-              {doc.approval.valid && doc.approval.revision === doc.revision ? t("Approved") : t("Draft")}
+              {t("Draft")}
             </span>
           )}
         </h3>
-        <p className="text-label text-ink-400 mt-1">
-          <button type="button" className="lnk" onClick={requestBack}>
-            ← {t("Campaigns")}
-          </button>
-        </p>
-        <details className="crm-diag">
-          <summary className="text-micro text-ink-500">{t("Details")}</summary>
-          <p className="num text-micro text-ink-500 mt-1" title={t("Campaign ID")}>
-            {t("Campaign ID")} {campaignId}
-          </p>
-        </details>
       </div>
       {loading && (
         <p className="text-secondary text-ink-400" role="status">
@@ -274,22 +266,17 @@ export default function CampaignDetail({
                   onPreview={recordAudiencePreview}
                   layout="detail"
                 />
-                <section aria-label={t("Frozen audience")} className="card px-4 py-4 grid gap-3">
+                <section aria-label={t("Frozen audience")} className="card px-4 py-4 grid gap-3 crm-freeze">
                   <h4 className="text-cardtitle font-medium text-ink-100">{t("Freeze")}</h4>
                   <p className="text-label text-ink-400">
-                    {t("A freeze snapshots exactly who receives this campaign, so later customer changes cannot alter it. The audience above is the freeze — no ids to handle: freeze it, and recheck whenever the audience changes.")}
+                    {t("A freeze snapshots the exact recipients; later customer changes cannot alter it.")}
                   </p>
-                  {freezeError && (
-                    <p className="text-label text-fail" role="alert">
-                      {t(freezeError)}
-                    </p>
-                  )}
                   <p className="text-label text-ink-100" data-freeze-state={
                     freeze === null ? "unfrozen" : freeze.valid === true ? "valid" : "drifted"
                   }>
                     {freeze === null
                       ? freezeMissing
-                        ? t("This audience is not frozen yet. Freezing snapshots exactly who receives the campaign, so later customer changes cannot alter it.")
+                        ? t("Not frozen yet.")
                         : t("Checking the freeze…")
                       : freeze.valid === true
                         ? `${t("Audience frozen")} · ${formatNumber(freeze.finalCount)} ${t("recipients")} · ${t("checked just now")}`
@@ -303,7 +290,7 @@ export default function CampaignDetail({
                       disabled={freezePending || !canWrite || audiencePreview === null || audiencePreview.finalCount === 0}
                       onClick={freezeAudience}
                     >
-                      {t(freeze !== null && freeze.valid === false ? "Use audience · refresh snapshot" : freeze === null ? "Use audience · create snapshot" : "Use audience · refresh snapshot")}
+                      {t(freeze === null ? "Create snapshot" : "Refresh snapshot")}
                     </Button>
                     {freeze !== null && (
                       <Button size="sm" loading={freezePending} disabled={freezePending} onClick={checkFreeze}>
@@ -311,6 +298,11 @@ export default function CampaignDetail({
                       </Button>
                     )}
                   </div>
+                  {freezeError && (
+                    <p className="text-label text-fail" role="alert">
+                      {t(freezeError)}
+                    </p>
+                  )}
                   {freeze && (
                     <>
                       <dl className="crm-detail" aria-label={t("Freeze validity")}>
