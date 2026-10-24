@@ -53,6 +53,7 @@ export const zhTW: Record<string, string> = {
   "Search customers…": "搜尋客戶…",
   "Search by name, email or tag": "依姓名、電子郵件或標籤搜尋",
   "Page {page}": "第 {page} 頁",
+  "Page {page} of {total}": "第 {page} 頁，共 {total} 頁",
   "Customer page": "客戶頁碼",
   "Choose a visited page": "選擇已瀏覽的頁面",
   "Choose a page": "選擇頁面",
