@@ -68,7 +68,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
       const page = rows.slice(start, start + limit);
       const truncated = start + page.length < rows.length;
-      return { records: page, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
+      return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
     }
     case "records.show": return { record: records.find(r => r.id === args.record_id) ?? missing() };
     case "records.create":

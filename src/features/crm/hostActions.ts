@@ -25,9 +25,12 @@ export interface ListOptions {
   cursor?: string;
 }
 
-/** One page of server rows with its continuation cursor. */
+/** One page of server rows with its continuation cursor and the host's
+ *  count of matching rows before paging (`total`). Older hosts omit the
+ *  count; then no page total is claimed. */
 export interface ListReceipt {
   records: HostRecord[];
+  total: number | null;
   truncated: boolean;
   nextCursor: string | null;
 }
@@ -129,10 +132,13 @@ export function parseRecord(value: unknown): HostRecord {
 }
 
 export function parseRecordList(value: unknown): ListReceipt {
-  const page = value as { records?: unknown; truncated?: unknown; next_cursor?: unknown } | null;
+  const page = value as { records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown } | null;
   if (!Array.isArray(page?.records)) throw new ApiError("The server returned an invalid app receipt", 502);
+  const total = typeof page.total === "number" && Number.isSafeInteger(page.total) && page.total >= page.records.length
+    ? page.total : null;
   return {
     records: page.records.map((row) => parseRecord({ record: row })),
+    total,
     truncated: page.truncated === true,
     nextCursor: typeof page.next_cursor === "string" ? page.next_cursor : null,
   };

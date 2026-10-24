@@ -134,6 +134,8 @@ function CustomerList({
   const records = queryState.data?.records ?? NO_RECORDS;
   const truncated = queryState.data?.truncated ?? false;
   const nextCursor = queryState.data?.nextCursor ?? null;
+  const total = queryState.data?.total ?? null;
+  const totalPages = total === null ? undefined : Math.max(1, Math.ceil(total / LIST_PAGE_SIZE));
   const { loading, error } = queryState;
   const pagingBusy = loading || queryState.updating || query.trim() !== committed;
   // Filters and selection act on the rows already read (this page);
@@ -401,6 +403,7 @@ function CustomerList({
           <ListPager
             page={page}
             pageCount={cursors.length + 1}
+            totalPages={totalPages}
             summary={(shown.length === records.length
               ? t(records.length === 1 ? "{count} customer on this page" : "{count} customers on this page")
               : t("{shown} of {count} customers on this page"))

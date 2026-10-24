@@ -5,10 +5,13 @@ export const LIST_PAGE_SIZE = 20;
 
 /** Presentation only: callers own cursor discovery or local array paging. */
 export default function ListPager({
-  page, pageCount, summary, onPage, onNext, hasNext, busy, label, visitedOnly = false,
+  page, pageCount, totalPages, summary, onPage, onNext, hasNext, busy, label, visitedOnly = false,
 }: {
   page: number;
   pageCount: number;
+  /** True count of pages for the current result set, when the host reports one.
+   *  The select still lists visited cursor pages; this names the total. */
+  totalPages?: number;
   summary: string;
   onPage: (page: number) => void;
   onNext?: () => void;
@@ -18,6 +21,16 @@ export default function ListPager({
   visitedOnly?: boolean;
 }) {
   const { t, formatNumber } = useLocale();
+  // The host total can lag a just-trimmed cursor list; never print a page
+  // beyond the total or fewer pages than have already been visited.
+  const totalCount = Math.max(pageCount, page + 1, totalPages ?? 0);
+  const pageLabel = (index: number) => {
+    const number = formatNumber(index + 1);
+    if (index === page && totalPages !== undefined) {
+      return t("Page {page} of {total}").replace("{page}", number).replace("{total}", formatNumber(totalCount));
+    }
+    return t("Page {page}").replace("{page}", number);
+  };
   return (
     <div className="crm-pager">
       <span className="text-label text-ink-400" aria-live="polite">{summary}</span>
@@ -30,7 +43,7 @@ export default function ListPager({
           onChange={(value) => onPage(Number(value))}
           options={Array.from({ length: pageCount }, (_, index) => ({
             value: String(index),
-            label: t("Page {page}").replace("{page}", formatNumber(index + 1)),
+            label: pageLabel(index),
           }))}
           disabled={busy || pageCount <= 1}
           aria-label={label}
