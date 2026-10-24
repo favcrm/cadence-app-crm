@@ -1,6 +1,7 @@
 import { ApiError,QueryCache,useQuery,type Resource } from "@cadence/screen-ui";
 import { useMemo } from "react";
-import { onScopeRetired,useScope } from "../../bridge/scope";
+import { getSurface,subscribeSurface } from "../../bridge/presentation";
+import { getScope,onScopeRetired,useScope } from "../../bridge/scope";
 import { onWrite,serviceCall,type CallArgs } from "../../bridge/services";
 import type { HostScope } from "./hostActions";
 let cache = new QueryCache({ maxIdle: 32 });
@@ -14,6 +15,18 @@ function ordered(value: unknown): unknown {
 export const canonicalArgs = (args: object) => JSON.stringify(ordered(args));
 onScopeRetired(() => { cache = new QueryCache({ maxIdle: 32 }); observationInvalid = false; });
 onWrite(() => { observationInvalid = true; cache.invalidate("crm"); });
+// A child surface's writes become visible here only through the host hint
+// that its modal overlay closed. That hint is a refresh hint — never
+// authority, scope or outcome evidence — so observed list stores refetch in
+// place while the frame, list component and scroll state stay mounted.
+let lastPrimaryModal = false;
+subscribeSurface(() => {
+  const surface = getSurface();
+  if (!surface.negotiated || surface.role !== "primary") { lastPrimaryModal = false; return; }
+  const closed = lastPrimaryModal && !surface.modal;
+  lastPrimaryModal = surface.modal;
+  if (closed && getScope()?.drawerOpen === true) cache.invalidate("crm");
+});
 export function useCrmQuery<T>(scope: HostScope, operation: keyof CallArgs, args: CallArgs[keyof CallArgs], parse: (data: unknown) => T): { data: T | null; error: string | null; failure: unknown; loading: boolean; updating: boolean; store: Resource<T> } {
   const pushed = useScope();
   const selectors = canonicalArgs(args);

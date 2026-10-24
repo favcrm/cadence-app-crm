@@ -29,7 +29,6 @@ export default function ActivityPane({
   const t = useTranslate();
   const pending = proposals.filter((row) => row.state === "pending");
   const decided = proposals.filter((row) => row.state !== "pending");
-  const approved = doc !== null && doc.approval.valid && doc.approval.revision === doc.revision;
   const who = (row: ProposalDoc) =>
     row.actor === "assistant" && row.assistantReceipt !== null ? t("Assistant") : t("An operator");
   return (
@@ -45,12 +44,6 @@ export default function ActivityPane({
               </span>
             </li>
           ))}
-          {doc !== null && (
-            <li data-event="approval">
-              <span className="crm-dot" aria-hidden="true" />
-              <span>{approved ? <>{t("Content approved at r")}{doc.revision}</> : <>r{doc.revision} {t("is not approved")}</>}</span>
-            </li>
-          )}
           {doc !== null && (
             <li data-event="revision">
               <span className="crm-dot" aria-hidden="true" />
@@ -87,14 +80,6 @@ export default function ActivityPane({
                   <dt>{t("Revision")}</dt>
                   <dd className="num">
                     r{doc.revision} · {doc.contentDigest}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t("Approval")}</dt>
-                  <dd className="num">
-                    {doc.approval.valid
-                      ? `r${doc.approval.revision} · ${doc.approval.digest ?? "—"} (${doc.approval.scope})`
-                      : t("none on this revision")}
                   </dd>
                 </div>
               </>

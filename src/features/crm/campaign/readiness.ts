@@ -7,7 +7,9 @@ import { EMAIL_SENDING_HREF } from "../sendingView";
  * Overview "Ready to send" checklist and the Final send panel's gate,
  * so the two can never disagree. `reason` is the long-standing
  * "Prepare stays unavailable — missing" sentence; the daemon still
- * re-verifies every input at prepare and approve.
+ * re-verifies every input at prepare and approve. Content approval is
+ * not a row: prepare approves the current revision as part of the send
+ * confirmation, so the campaign has no separate approval step.
  */
 
 export type CampaignTab = "overview" | "email" | "audience" | "activity";
@@ -19,13 +21,15 @@ export type FixTarget =
   | { kind: "href"; href: string; label: string };
 
 export interface ReadinessItem {
-  key: "draft" | "approval" | "freeze" | "sender" | "test";
+  key: "draft" | "freeze" | "sender" | "test";
   /** Plain-language checklist line. */
   label: string;
   done: boolean;
   /** Why it is unmet; null for the draft row (not a prepare gate). */
   reason: string | null;
   fix: FixTarget | null;
+  /** False for checks shown in the send confirmation instead of the checklist. */
+  checklist: boolean;
 }
 
 export interface ReadinessInput {
@@ -38,13 +42,10 @@ export interface ReadinessInput {
 }
 
 export const TEST_ANCHOR = "cmp-test-section";
-export const APPROVAL_ANCHOR = "cmp-approval-section";
 
 export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
   const { doc, freezeId, freeze, binding, testEvidence } = input;
   const frozen = freezeId.trim();
-
-  const approved = doc !== null && doc.approval.valid && doc.approval.revision === doc.revision;
 
   let freezeReason: string | null = null;
   // CAD-1178: the reasons name the state, never the freeze id — the id is an
@@ -77,13 +78,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       done: doc !== null,
       reason: null,
       fix: { kind: "tab", tab: "email", label: "Review" },
-    },
-    {
-      key: "approval",
-      label: "Content approved",
-      done: approved,
-      reason: approved ? null : "content approved at the current revision",
-      fix: doc === null ? null : { kind: "anchor", id: APPROVAL_ANCHOR, label: "Approve" },
+      checklist: true,
     },
     {
       key: "freeze",
@@ -91,6 +86,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       done: freezeReason === null,
       reason: freezeReason,
       fix: { kind: "tab", tab: "audience", label: "Fix" },
+      checklist: false,
     },
     {
       key: "sender",
@@ -98,6 +94,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       done: senderReason === null,
       reason: senderReason,
       fix: { kind: "href", href: EMAIL_SENDING_HREF, label: "Set up sending" },
+      checklist: true,
     },
     {
       key: "test",
@@ -105,6 +102,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       done: testReason === null,
       reason: testReason,
       fix: { kind: "anchor", id: TEST_ANCHOR, label: "Send a test" },
+      checklist: true,
     },
   ];
 }

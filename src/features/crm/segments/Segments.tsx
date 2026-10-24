@@ -1,8 +1,9 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DrawerShell,ErrorNotice,Field,Select,type DrawerTab } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
+import { ApiError,Button,DrawerShell,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { patchRoute } from "../../../bridge/route";
 import { onScopeRetired } from "../../../bridge/scope";
+import { useSurface } from "../../../bridge/presentation";
 import {
 audienceClient,
 type AudienceScope,
@@ -21,6 +22,7 @@ SEGMENT_OPS,
 import type { Viewer } from "../viewer";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { useListMemory } from "../listMemory";
+import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 
 /** Human-readable predicate: the same labels the rule form offers.
  *  Unknown stored values fall back to the raw tokens, never hide. */
@@ -64,18 +66,24 @@ export function eligibilityFunnel(p: AudiencePreview, translate: (value: string)
     { label: translate("Email consent"), count: consent },
     { label: translate("Can be emailed"), count: p.finalCount },
   ];
-  const causes: [number, string][] = [
-    [p.excluded.noConsent, translate("have not agreed to receive email")],
-    [p.excluded.unsubscribed, translate("have unsubscribed")],
-    [p.excluded.invalid, translate("have no valid email address")],
-    [p.excluded.suppressed, translate("are on the suppression list")],
-    [p.exclusionCount, translate("are on the saved exclusion list")],
+  const causes: { count: number; one: string; many: string }[] = [
+    { count: p.excluded.noConsent, one: translate("has not agreed to receive email"), many: translate("have not agreed to receive email") },
+    { count: p.excluded.unsubscribed, one: translate("has unsubscribed"), many: translate("have unsubscribed") },
+    { count: p.excluded.invalid, one: translate("has no valid email address"), many: translate("have no valid email address") },
+    { count: p.excluded.suppressed, one: translate("is on the suppression list"), many: translate("are on the suppression list") },
+    { count: p.exclusionCount, one: translate("is on the saved exclusion list"), many: translate("are on the saved exclusion list") },
   ];
-  const top = causes.filter(([n]) => n > 0).sort((a, b) => b[0] - a[0])[0];
+  const top = causes.filter((cause) => cause.count > 0).sort((a, b) => b.count - a.count)[0];
   let reason: string | null = null;
   if (p.baseCount === 0) reason = translate("No customers match this rule yet.");
-  else if (p.finalCount === 0 && top) reason = translate("Nobody can be emailed: {count} {cause}.").replace("{count}", () => String(top[0])).replace("{cause}", () => top[1]);
-  else if (p.finalCount < p.baseCount && top) reason = translate("{count} {unit} {cause}.").replace("{count}", () => String(top[0])).replace("{unit}", () => translate(top[0] === 1 ? "customer" : "customers")).replace("{cause}", () => top[1]);
+  else if (p.finalCount === 0 && top) reason = translate("Nobody can be emailed: {count} {unit} {cause}.")
+    .replace("{count}", () => String(top.count))
+    .replace("{unit}", () => translate(top.count === 1 ? "customer" : "customers"))
+    .replace("{cause}", () => (top.count === 1 ? top.one : top.many));
+  else if (p.finalCount < p.baseCount && top) reason = translate("{count} {unit} {cause}.")
+    .replace("{count}", () => String(top.count))
+    .replace("{unit}", () => translate(top.count === 1 ? "customer" : "customers"))
+    .replace("{cause}", () => (top.count === 1 ? top.one : top.many));
   return { steps, reason };
 }
 
@@ -203,30 +211,35 @@ export default function CrmSegments({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
+  // While the host's independent overlay is modal the list behind it is
+  // inert, not merely covered, so keyboard focus stays in the detail.
+  const hostModal = useSurface().modal;
   return (
     <div className="crm-list" data-section="segments">
-      {view === "list" && (
-        <SegmentList
-          scope={scope}
-          viewer={viewer}
-          onSelect={onSelect}
-          onNew={() => onView("new")}
-        />
-      )}
-      {view === "new" && (
-        <SegmentNew
-          scope={scope}
-          viewer={viewer}
-          onCreated={(id) => {
-            if (onRecordCreated) onRecordCreated(id);
-            else {
-              onView("list");
-              onSelect(id);
-            }
-          }}
-          onCancel={() => onView("list")}
-        />
-      )}
+      <div className="crm-surface" inert={hostModal}>
+        {view === "list" && (
+          <SegmentList
+            scope={scope}
+            viewer={viewer}
+            onSelect={onSelect}
+            onNew={() => onView("new")}
+          />
+        )}
+        {view === "new" && (
+          <SegmentNew
+            scope={scope}
+            viewer={viewer}
+            onCreated={(id) => {
+              if (onRecordCreated) onRecordCreated(id);
+              else {
+                onView("list");
+                onSelect(id);
+              }
+            }}
+            onCancel={() => onView("list")}
+          />
+        )}
+      </div>
       {recordId !== null && (
         <SegmentDrawer
           scope={scope}
@@ -259,13 +272,22 @@ function SegmentList({
   const { loading, error } = queryState;
   const listRef = useListMemory(scope, "segments", viewer.operator === true && queryState.data !== null, queryState.failure);
   const [counts, setCounts] = useState<Record<string, AudiencePreview | null>>({});
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const filtered = useMemo(() => {
+    const search = query.trim().toLocaleLowerCase();
+    return segments.filter(segment => `${segment.name} ${segment.id}`.toLocaleLowerCase().includes(search));
+  }, [segments, query]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const shown = useMemo(() => filtered.slice(currentPage * LIST_PAGE_SIZE, (currentPage + 1) * LIST_PAGE_SIZE), [filtered, currentPage]);
 
   // Per-row exact host counts (bounded); a failed row shows an em dash.
   useEffect(() => {
     const controller = new AbortController();
     const unsubscribe = onScopeRetired(() => controller.abort());
     segmentCountReads = segmentCountReads.then(async () => {
-      for (const segment of segments.slice(0, 25)) {
+      for (const segment of shown) {
         if (controller.signal.aborted) return;
         try {
           const value = await audienceClient.preview(scope, { mode: "segment", segmentId: segment.id });
@@ -277,20 +299,30 @@ function SegmentList({
     });
     return () => { controller.abort(); unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments]);
+  }, [shown]);
 
 
   return (
-    <section ref={listRef} aria-label={t("Segments list")} className="crm-list">
+    <section ref={listRef} aria-label={t("Segments list")} className="crm-list crm-list-controls">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Segments")}
       </h3>
-      <div className="crm-toolbar mb-4">
-        <p className="crm-toolbar-lede text-secondary text-ink-300">
-          {t("Saved rules over customer tags, source, consent and email domain.")}
-        </p>
+      <div className="crm-toolbar crm-list-toolbar">
+        <div className="crm-search">
+          <label className="sr-only" htmlFor="crm-segment-search">{t("Search segments")}</label>
+          <input
+            id="crm-segment-search"
+            className="field crm-search-input"
+            value={query}
+            onChange={(event) => { setQuery(event.target.value); setPage(0); }}
+            maxLength={120}
+            autoComplete="off"
+            placeholder={t("Search segments…")}
+            title={t("Search by segment name or ID")}
+          />
+        </div>
         {canWrite && (
-          <Button variant="primary" size="sm" onClick={onNew}>
+          <Button variant="primary" className="crm-list-create" onClick={onNew}>
             {t("New segment")}
           </Button>
         )}
@@ -299,48 +331,32 @@ function SegmentList({
         viewer.access === "unavailable" ? (
           // CAD-1193: a completed unanswered check is unavailable, not
           // still checking — the retry re-runs the real access probe.
-          <p className="card px-4 py-3 text-label text-ink-400" data-state="access-unavailable">
-            {t("Access could not be confirmed — the board's access check did not answer, so saved segments stay closed.")}{" "}
-            {viewer.onRetryAccess && (
-              <button type="button" className="lnk" onClick={viewer.onRetryAccess}>
-                {t("Retry access check")}
-              </button>
-            )}
-          </p>
+          <Notice state="access-unavailable" onRetry={viewer.onRetryAccess} retryLabel={t("Retry access check")}>
+            {t("Access could not be confirmed — the board's access check did not answer, so saved segments stay closed.")}
+          </Notice>
         ) : (
-          <p className="card px-4 py-3 text-label text-ink-400" role="status">
-            {t("Checking whether this session may inspect saved segments…")}
-          </p>
+          <Notice>{t("Checking whether this session may inspect saved segments…")}</Notice>
         )
       )}
       {viewer.operator === false && (
-        <p className="card px-4 py-3 text-label text-ink-400">
-          {t("Sign in as the operator to inspect saved segments.")}
-        </p>
+        <Notice>{t("Sign in as the operator to inspect saved segments.")}</Notice>
       )}
       {viewer.operator && viewer.readOnly && (
-        <p className="card px-4 py-3 text-label text-ink-400" data-state="read-only">
-          {t("Read-only view. Segment creation and edits are unavailable.")}
-        </p>
+        <Notice state="read-only">{t("Read-only view. Segment creation and edits are unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
-        <p className="text-secondary text-ink-400" role="status">
-          {t("Reading segments…")}
-        </p>
+        <Loading>{t("Reading segments…")}</Loading>
       )}
       {viewer.operator && error !== null && !loading && (
         <ErrorNotice onRetry={() => void queryState.store.refresh()}>{error}</ErrorNotice>
       )}
       {viewer.operator && error === null && !loading && segments.length === 0 && (
-        <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="segments" role="status">
-          <p className="font-medium text-ink-200">{t("No segments yet")}</p>
-          <p className="mt-1">
-            {t("Create the first saved rule with New segment. Only real server rows appear here.")}
-          </p>
-        </div>
+        <EmptyState name="segments" title={t("No segments yet")}>
+          {t("Create the first saved rule with New segment. Only real server rows appear here.")}
+        </EmptyState>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {viewer.operator && segments.length > 0 && (
+      {viewer.operator && shown.length > 0 && (
         <div
           className="crm-table-wrap"
           tabIndex={0}
@@ -360,7 +376,7 @@ function SegmentList({
               </tr>
             </thead>
             <tbody>
-              {segments.map((segment) => (
+              {shown.map((segment) => (
                 <tr
                   key={segment.id}
                   data-record-id={segment.id}
@@ -401,6 +417,20 @@ function SegmentList({
             </tbody>
           </table>
         </div>
+      )}
+      {viewer.operator && !loading && error === null && segments.length > 0 && (
+        <>
+          {filtered.length === 0 && <p role="status" className="text-label text-ink-400">{t("No segments match this search")}</p>}
+          <ListPager
+            page={currentPage}
+            pageCount={pageCount}
+            summary={t(pageCount > 1 ? "{shown} of {count} segments" : filtered.length === 1 ? "{count} segment" : "{count} segments").replace("{shown}", formatNumber(shown.length)).replace("{count}", formatNumber(filtered.length))}
+            onPage={setPage}
+            hasNext={currentPage + 1 < pageCount}
+            busy={queryState.updating}
+            label={t("Segment page")}
+          />
+        </>
       )}
     </section>
   );
@@ -526,13 +556,12 @@ function SegmentNew({
       <p className="text-label text-ink-400 mt-1">
         <button type="button" className="lnk" onClick={onCancel}>
           ← {t("Segments")}
-        </button>{" "}
-        {t("— exact recipient counts render on the detail after Create.")}
+        </button>
       </p>
       {!canWrite ? (
-        <p className="card px-4 py-3 mt-2 text-label text-ink-400" data-state="read-only">
+        <Notice className="mt-2" state="read-only">
           {t("Read-only view. A verified operator creates saved segments.")}
-        </p>
+        </Notice>
       ) : (
         <form
           className="card px-4 py-4 mt-2 grid gap-3"
@@ -586,11 +615,7 @@ function SegmentNew({
               </button>
             </p>
           )}
-          {formError && (
-            <p className="text-label text-fail" role="alert">
-              {t(formError)}
-            </p>
-          )}
+          {formError && <ErrorNotice bare>{t(formError)}</ErrorNotice>}
           <div>
             <Button type="submit" variant="primary" loading={pending} disabled={pending}>
               {t("Create segment")}
@@ -675,7 +700,7 @@ export function PreviewPanel({
       {preview.sample.length > 0 && (
         <section aria-label={t("Audience sample")} className="mt-3">
           <h4 className="text-label font-medium text-ink-200">
-            {t("Sample (")}{preview.sample.length} {t("of")}{formatNumber(preview.finalCount)})
+            {t("Sample (")}{preview.sample.length} {t("of")}{" "}{formatNumber(preview.finalCount)})
           </h4>
           <ol className="crm-history">
             {preview.sample.map((entry) => (
@@ -690,7 +715,7 @@ export function PreviewPanel({
   );
 }
 
-function SegmentDrawer({
+export function SegmentDrawer({
   scope,
   segmentId,
   viewer,
@@ -765,11 +790,11 @@ function SegmentDrawer({
             label: t("Overview"),
             panel: (
               <>
-                <section aria-label={t("Segment rule")}>
+                <section className="crm-sect" aria-label={t("Segment rule")}>
                   <RuleSentence rules={segment.predicates} />
                 </section>
-                <section aria-label={t("Who can be emailed")} className="mt-3">
-                  <h4 className="text-label font-medium text-ink-200">{t("Who can be emailed")}</h4>
+                <section className="crm-sect" aria-label={t("Who can be emailed")}>
+                  <h4>{t("Who can be emailed")}</h4>
                   {previewLoading && (
                     <p className="text-secondary text-ink-400" role="status">{t("Reading host audience counts…")}</p>
                   )}
@@ -798,14 +823,14 @@ function SegmentDrawer({
                     </>
                   )}
                 </section>
-                <section aria-label={t("Members preview")} className="mt-3">
-                  <h4 className="text-label font-medium text-ink-200">{t("Members")}</h4>
+                <section className="crm-sect" aria-label={t("Members preview")}>
+                  <h4>{t("Members who can be emailed")}</h4>
                   {members.length === 0 && !previewLoading && (
                     <p className="text-secondary text-ink-400">{t("No one can be emailed from this segment yet.")}</p>
                   )}
                   {memberList(members.slice(0, 10))}
                   {members.length > 0 && (
-                    <button type="button" className="lnk text-label" onClick={() => setTab("members")}>{t("View all")}</button>
+                    <button type="button" className="lnk text-label" onClick={() => setTab("members")}>{t("View members")}</button>
                   )}
                 </section>
               </>
@@ -815,9 +840,12 @@ function SegmentDrawer({
             id: "members",
             label: t("Members"),
             panel: (
-              <section aria-label={t("All members")}>
+              <section className="crm-sect" aria-label={t("All members")}>
                 <p className="text-label text-ink-400">
-                  {t("Showing")}{formatNumber(members.length)} {t("of")}{formatNumber(preview?.finalCount ?? 0)} {t("customers who can be emailed.")}
+                  {t("Showing")}{" "}
+                  {formatNumber(members.length)} {t("of")}{" "}
+                  {formatNumber(preview?.finalCount ?? 0)}{" "}
+                  {t((preview?.finalCount ?? 0) === 1 ? "customer who can be emailed." : "customers who can be emailed.")}
                 </p>
                 {memberList(members)}
               </section>
@@ -827,12 +855,12 @@ function SegmentDrawer({
             id: "details",
             label: t("Details"),
             panel: (
-              <section aria-label={t("Record diagnostics")}>
+              <section className="crm-sect" aria-label={t("Record diagnostics")}>
                 <p className="num text-micro text-ink-500">
                   {t("Segment")} <span className="num">{segmentId}</span> · {t("revision")} r{segment.revision} · {t("digest")}{" "}
                   {segment.digest.slice(0, 18)}…
                 </p>
-                <div className="mt-3">
+                <div className="crm-sect">
                   <PreviewPanel
                     preview={preview}
                     loading={previewLoading}
@@ -1031,9 +1059,9 @@ function SegmentEdit({
         </p>
       )}
       {formError && (
-        <p className="text-label text-fail" role="alert">
+        <ErrorNotice bare>
           {t(formError)} {t("If another operator saved first, close and reopen to review their rules before retrying.")}
-        </p>
+        </ErrorNotice>
       )}
     </form>
   );

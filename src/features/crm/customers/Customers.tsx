@@ -2,7 +2,9 @@ import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,DrawerShell,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
 import { onScopeRetired } from "../../../bridge/scope";
+import { useSurface } from "../../../bridge/presentation";
 import { readCustomerList,useListMemory } from "../listMemory";
+import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import {
 activityItems,
 buildConsentChange,
@@ -23,7 +25,6 @@ type CustomerFormFields,
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
 import type { Viewer } from "../viewer";
-import CustomerCsvImport from "./CustomerCsvImport";
 
 /**
  * The CRM workspace inside the trusted shared App shell (CAD-781
@@ -61,66 +62,40 @@ export default function Customers({
   onRecordCreated?: (recordId: string) => void;
 }) {
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  // The CSV import page is component-local page state under
-  // Customers — it never enters the route URL (no customer content
-  // or bulk bytes in history), so `record`/`view` still own the URL
-  // grammar exactly as before.
-  const [importing, setImporting] = useState(false);
+  // While the host's independent overlay is modal the list behind it is
+  // inert, not merely covered, so keyboard focus stays in the detail.
+  const hostModal = useSurface().modal;
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
-      {view === "list" && (
-        <CustomerList
-          scope={scope}
-          viewer={viewer}
-          onSelect={onSelect}
-          onNew={() => {
-            setImporting(false);
-            onView("new");
-          }}
-          onImport={() => {
-            setImporting(true);
-            onView("new");
-          }}
-        />
-      )}
-      {view === "new" && importing && (
-        <CustomerCsvImport
-          scope={scope}
-          viewer={viewer}
-          onDone={() => {
-            // A committed import re-reads the list from the server —
-            // never trust local state over the rows the host stores.
-            setImporting(false);
-            onView("list");
-          }}
-          onCancel={() => {
-            setImporting(false);
-            onView("list");
-          }}
-        />
-      )}
-      {view === "new" && !importing && (
-        <CustomerNew
-          scope={scope}
-          viewer={viewer}
-          onCreated={(id) => {
-            // Prefer the shell's atomic landing; the two-step fallback
-            // is only for hosts without it (and keeps stale `appview=new`).
-            if (onRecordCreated) onRecordCreated(id);
-            else {
-              onView("list");
-              onSelect(id);
-            }
-          }}
-          onCancel={() => {
-            setImporting(false);
-            onView("list");
-          }}
-        />
-      )}
+      <div className="crm-surface" inert={hostModal}>
+        {view === "list" && (
+          <CustomerList
+            scope={scope}
+            viewer={viewer}
+            onSelect={onSelect}
+            onNew={() => onView("new")}
+          />
+        )}
+        {view === "new" && (
+          <CustomerNew
+            scope={scope}
+            viewer={viewer}
+            onCreated={(id) => {
+              // Prefer the shell's atomic landing; the two-step fallback
+              // is only for hosts without it (and keeps stale `appview=new`).
+              if (onRecordCreated) onRecordCreated(id);
+              else {
+                onView("list");
+                onSelect(id);
+              }
+            }}
+            onCancel={() => onView("list")}
+          />
+        )}
+      </div>
       {recordId !== null && (
         <CustomerDrawer
           scope={scope}
@@ -134,7 +109,6 @@ export default function Customers({
   );
 }
 
-const PAGE_SIZE = 20;
 const NO_RECORDS: HostRecord[] = [];
 
 function CustomerList({
@@ -142,13 +116,11 @@ function CustomerList({
   viewer,
   onSelect,
   onNew,
-  onImport,
 }: {
   scope: HostScope;
   viewer: Viewer;
   onSelect: (recordId: string) => void;
   onNew: () => void;
-  onImport: () => void;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
@@ -156,19 +128,21 @@ function CustomerList({
   const [query, setQuery] = useState(initialList?.query ?? "");
   const [committed, setCommitted] = useState(initialList?.committed ?? "");
   const [cursors, setCursors] = useState<string[]>(initialList?.cursors ?? []);
-  const cursor = cursors.length > 0 ? cursors[cursors.length - 1] : undefined;
-  const queryState = useCrmQuery(scope, "records.list", { query: committed || undefined, limit: PAGE_SIZE, cursor }, parseRecordList);
+  const [page, setPage] = useState(initialList?.page ?? 0);
+  const cursor = page > 0 ? cursors[page - 1] : undefined;
+  const queryState = useCrmQuery(scope, "records.list", { query: committed || undefined, limit: LIST_PAGE_SIZE, cursor }, parseRecordList);
   const records = queryState.data?.records ?? NO_RECORDS;
   const truncated = queryState.data?.truncated ?? false;
   const nextCursor = queryState.data?.nextCursor ?? null;
   const { loading, error } = queryState;
+  const pagingBusy = loading || queryState.updating || query.trim() !== committed;
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
   const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
   const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
   const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
-    queryState.failure, { query, committed, cursors, consentFilter, sourceFilter, tagFilter },
+    queryState.failure, { query, committed, cursors, page, consentFilter, sourceFilter, tagFilter },
     JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const sources = Array.from(
@@ -187,6 +161,15 @@ function CustomerList({
     setSelected(new Set());
   }, [records]);
 
+  // A changed server boundary invalidates later discovered pages, not
+  // the current page or its predecessors. Never derive pages from totals.
+  useEffect(() => {
+    if (loading || queryState.updating || error !== null || queryState.data === null) return;
+    if (cursors.length > page && (!truncated || nextCursor !== cursors[page])) {
+      setCursors((known) => known.slice(0, page));
+    }
+  }, [page, cursors, truncated, nextCursor, loading, queryState.updating, queryState.data, error]);
+
   // Debounced search: typing never navigates, so no customer content
   // reaches the URL, history or session storage.
   useEffect(() => {
@@ -196,6 +179,7 @@ function CustomerList({
       // query/committed difference still finishes its ordinary debounce.
       if (next !== committed) {
         setCursors([]);
+        setPage(0);
         setCommitted(next);
       }
     }, 250);
@@ -205,7 +189,7 @@ function CustomerList({
 
   useEffect(() => {
     if (viewer.operator !== true || (queryState.failure instanceof ApiError && [401, 403].includes(queryState.failure.status))) {
-      setQuery(""); setCommitted(""); setCursors([]);
+      setQuery(""); setCommitted(""); setCursors([]); setPage(0);
       setConsentFilter(""); setSourceFilter(""); setTagFilter("");
       setSelected(new Set());
     }
@@ -213,11 +197,11 @@ function CustomerList({
 
 
   return (
-    <section ref={listRef} aria-label={t("Customers list")} className="crm-list">
+    <section ref={listRef} aria-label={t("Customers list")} className="crm-list crm-list-controls">
       <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Customers")}
       </h3>
-      <div className="crm-toolbar mb-1">
+      <div className="crm-toolbar crm-list-toolbar">
         <div className="crm-search">
           <label className="sr-only" htmlFor="crm-customer-search">
             {t("Search customers")}
@@ -229,18 +213,40 @@ function CustomerList({
             onChange={(e) => setQuery(e.target.value)}
             maxLength={120}
             autoComplete="off"
-            placeholder={t("Search name, email or tag…")}
+            placeholder={t("Search customers…")}
+            title={t("Search by name, email or tag")}
           />
         </div>
+        {viewer.operator === true && (
+          <div className="crm-filters" role="group" aria-label={t("Filter customers on this page")}>
+            <Select
+              value={consentFilter}
+              onChange={setConsentFilter}
+              options={[
+                { value: "", label: t("Email consent: any") },
+                { value: "granted", label: "Granted" },
+                { value: "unknown", label: "Unknown" },
+                { value: "denied", label: "Withdrawn" },
+              ]}
+              aria-label={t("Filter by email consent")}
+            />
+            <Select
+              value={sourceFilter}
+              onChange={setSourceFilter}
+              options={[{ value: "", label: t("Source: any") }, ...sources.map((v) => ({ value: v, label: v }))]}
+              aria-label={t("Filter by source")}
+            />
+            {tagFilter !== "" && (
+              <button type="button" className="chip crm-chip-on" onClick={() => setTagFilter("")} aria-label={t("Clear tag filter {tag}").replace("{tag}", () => tagFilter)}>
+                {t("tag")}: {tagFilter} ✕
+              </button>
+            )}
+          </div>
+        )}
         {canWrite && (
-          <>
-            <Button size="sm" onClick={onImport}>
-              {t("Import CSV")}
-            </Button>
-            <Button variant="primary" size="sm" onClick={onNew}>
-              {t("New customer")}
-            </Button>
-          </>
+          <Button variant="primary" className="crm-list-create" onClick={onNew}>
+            {t("New customer")}
+          </Button>
         )}
       </div>
       {viewer.operator === null && (
@@ -272,37 +278,13 @@ function CustomerList({
           title={t(committed === "" ? "No customers yet" : "No customers match this search")}
         >
           {committed === ""
-            ? t("Create the first record with New customer, or import a CSV. Only real server rows appear here.")
+            ? t("Create the first record with New customer. Only real server rows appear here.")
             : t("Clear the search to see every record.")}
         </EmptyState>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-      {viewer.operator && records.length > 0 && (
+      {viewer.operator && (records.length > 0 || page > 0) && (
         <>
-          <div className="crm-filters" role="group" aria-label={t("Filter customers on this page")}>
-            <Select
-              value={consentFilter}
-              onChange={setConsentFilter}
-              options={[
-                { value: "", label: t("Email consent: any") },
-                { value: "granted", label: "Granted" },
-                { value: "unknown", label: "Unknown" },
-                { value: "denied", label: "Withdrawn" },
-              ]}
-              aria-label={t("Filter by email consent")}
-            />
-            <Select
-              value={sourceFilter}
-              onChange={setSourceFilter}
-              options={[{ value: "", label: t("Source: any") }, ...sources.map((v) => ({ value: v, label: v }))]}
-              aria-label={t("Filter by source")}
-            />
-            {tagFilter !== "" && (
-              <button type="button" className="chip crm-chip-on" onClick={() => setTagFilter("")} aria-label={t("Clear tag filter {tag}").replace("{tag}", () => tagFilter)}>
-                {t("tag")}: {tagFilter} ✕
-              </button>
-            )}
-          </div>
           {selected.size > 0 && (
             <p className="crm-selection text-label text-ink-300" role="status">
               {formatNumber(selected.size)} {t("selected")}{" "}
@@ -416,27 +398,27 @@ function CustomerList({
             rows={shown}
           />
           )}
-          <div className="crm-pager">
-            <Button
-              size="sm"
-              disabled={cursors.length === 0 || loading}
-              onClick={() => setCursors((prev) => prev.slice(0, -1))}
-            >
-              ← {t("Previous")}
-            </Button>
-            <span className="num text-micro text-ink-500" aria-live="polite">
-              {shown.length === records.length ? "" : `${shown.length} ${t("of")} `}
-              {records.length} {t(records.length === 1 ? "row" : "rows")}
-              {truncated ? ` ${t("· more on the server")}` : ""}
-            </span>
-            <Button
-              size="sm"
-              disabled={!truncated || nextCursor === null || loading}
-              onClick={() => nextCursor !== null && setCursors((prev) => [...prev, nextCursor])}
-            >
-              {t("Next")} →
-            </Button>
-          </div>
+          <ListPager
+            page={page}
+            pageCount={cursors.length + 1}
+            summary={(shown.length === records.length
+              ? t(records.length === 1 ? "{count} customer on this page" : "{count} customers on this page")
+              : t("{shown} of {count} customers on this page"))
+              .replace("{shown}", formatNumber(shown.length))
+              .replace("{count}", formatNumber(records.length))}
+            onPage={setPage}
+            onNext={() => {
+              if (nextCursor === null) return;
+              if (cursors[page] !== nextCursor) {
+                setCursors((known) => [...known.slice(0, page), nextCursor]);
+              }
+              setPage((current) => current + 1);
+            }}
+            hasNext={truncated && nextCursor !== null}
+            busy={pagingBusy}
+            label={t("Customer page")}
+            visitedOnly
+          />
         </>
       )}
     </section>
@@ -770,8 +752,7 @@ function CustomerNew({
       <p className="text-label text-ink-400 mt-1">
         <button type="button" className="lnk" onClick={onCancel}>
           ← {t("Customers")}
-        </button>{" "}
-        {t("— duplicates and stale writes are refused by the server.")}
+        </button>
       </p>
       {!canWrite ? (
         <Notice className="mt-2" state="read-only">
@@ -809,7 +790,7 @@ function CustomerNew({
   );
 }
 
-function CustomerDrawer({
+export function CustomerDrawer({
   scope,
   recordId,
   viewer,
@@ -879,14 +860,6 @@ function CustomerDrawer({
                       { key: "source", term: "Source", value: view.source ?? "—" },
                     ]}
                   />
-                </section>
-                <section className="crm-sect" aria-label={t("Segments")}>
-                  <h4>{t("Segments")}</h4>
-                  <p className="text-secondary text-ink-400">{t("Membership is shown on each segment.")}</p>
-                </section>
-                <section className="crm-sect" aria-label={t("Campaigns")}>
-                  <h4>{t("Campaigns")}</h4>
-                  <p className="text-secondary text-ink-400">{t("Send history is shown on each campaign.")}</p>
                 </section>
               </>
             ),

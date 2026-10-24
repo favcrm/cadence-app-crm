@@ -4,6 +4,34 @@
   gap: 0.75rem;
 }
 
+/* The pinned screen-UI package exports no Badge/Chip component and ships
+   no base rule for the `.chip` markup the CRM screens already use, so
+   status and tag spans ran into surrounding text. This is the single
+   app-scoped composition: the core compact badge treatment on this app's
+   semantic text/edge tokens. Tones, consent and send states stay with
+   their feature CSS. */
+.crm .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.25rem;
+  font: 500 var(--text-micro) var(--font-mono);
+  line-height: 1.5;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+/* Outlet headings are focused programmatically after navigation
+   (tabIndex=-1) and are not interactive, so the full-width native ring
+   adds no affordance. Controls and links keep their own keyboard
+   outline; only these headings opt out. */
+.crm :is(h1, h2, h3, h4)[data-outlet-heading]:focus {
+  outline: none;
+}
+
 .crm-crumb {
   display: flex;
   align-items: center;
@@ -34,6 +62,93 @@
 
 .crm-search-input {
   width: 100%;
+}
+
+/* Single-line fields share the Select trigger's 2rem height, 12px label
+   scale and 0.75rem inset, so a row of inputs and selects reads as one
+   control group. Textareas keep their own multi-line height. */
+.crm .field:not(textarea) {
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: var(--text-label);
+}
+
+/* Match the SDK's standard button/compact select scale on desktop.
+   Keep this local: forms and other app screens retain their own density. */
+.crm-list-controls {
+  --crm-list-control-height: 1.75rem;
+  container-type: inline-size;
+}
+
+/* An idle live region must not add an empty grid row and a second gap. */
+.crm-list-controls > span[role="status"]:empty {
+  display: none;
+}
+
+.crm-list-controls :is(.crm-list-toolbar, .crm-pager) :is(.field, .btn, .select-trigger) {
+  height: var(--crm-list-control-height);
+  font-size: var(--text-label);
+}
+
+.crm-list-toolbar {
+  gap: 0.5rem;
+}
+
+.crm-list-toolbar .crm-search {
+  flex: 0 1 24rem;
+}
+
+.crm-list-toolbar .crm-filters {
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.crm-list-toolbar .crm-list-create {
+  margin-left: auto;
+  padding-inline: 0.75rem;
+}
+
+.crm-list-controls .crm-pager {
+  justify-content: space-between;
+}
+
+.crm-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@container (max-width: 52rem) {
+  .crm-list-toolbar .crm-search {
+    flex: 1 1 14rem;
+  }
+
+  .crm-list-toolbar .crm-filters {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+
+@container (max-width: 30rem) {
+  .crm-list-toolbar .crm-search {
+    flex-basis: 100%;
+  }
+
+  .crm-list-toolbar .crm-list-create {
+    margin-left: 0;
+  }
+
+  .crm-page-controls {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 639px), (pointer: coarse) {
+  .crm-list-controls {
+    --crm-list-control-height: 2.25rem;
+  }
 }
 
 .crm-table-wrap {
@@ -122,19 +237,6 @@
   list-style: none;
   margin: 0.35rem 0 0;
   padding: 0;
-}
-
-/* The test-send panel reads apart from every save/preview control:
-   one operator address, SMTP acceptance only — not a campaign send. */
-.crm-test {
-  border-color: var(--color-info);
-}
-
-/* The final-send panel reads as the irreversible section: warning
-   chrome, a prepared material view and a typed-count confirm — never
-   visually confusable with the test send above it. */
-.crm-send {
-  border-color: var(--color-warn);
 }
 
 /* Send state chips: prepared/sending read informational; completed
@@ -230,6 +332,11 @@
   .crm-diag > summary::after {
     transition: none;
   }
+}
+/* Inline jump from a send-confirmation check to the control that fixes it. */
+.crm-confirm-go {
+  margin-inline-start: 0.4rem;
+  white-space: nowrap;
 }
 
 .crm-field-row {

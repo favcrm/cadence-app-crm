@@ -19,11 +19,14 @@ export default function CampaignTabs({
   tabs,
   active,
   onChange,
+  actions,
   children,
 }: {
   tabs: TabSpec[];
   active: CampaignTab;
   onChange: (tab: CampaignTab) => void;
+  /** One compact action aligned with the tab row (e.g. Clone). */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useLocale();
@@ -44,27 +47,30 @@ export default function CampaignTabs({
   };
   return (
     <>
-      <div className="crm-ctabs" role="tablist" aria-label={t("Campaign sections")}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            id={`cmp-tab-${tab.id}`}
-            type="button"
-            role="tab"
-            className="crm-ctab"
-            data-tab={tab.id}
-            aria-selected={active === tab.id}
-            aria-controls={`cmp-panel-${tab.id}`}
-            tabIndex={active === tab.id ? 0 : -1}
-            onClick={() => onChange(tab.id)}
-            onKeyDown={(e) => {
-              if (move(tab.id, e.key)) e.preventDefault();
-            }}
-          >
-            {t(tab.label)}
-            {tab.badge ? <span className="chip">{t(tab.badge)}</span> : null}
-          </button>
-        ))}
+      <div className="crm-ctabs-bar">
+        <div className="crm-ctabs" role="tablist" aria-label={t("Campaign sections")}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              id={`cmp-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              className="crm-ctab"
+              data-tab={tab.id}
+              aria-selected={active === tab.id}
+              aria-controls={`cmp-panel-${tab.id}`}
+              tabIndex={active === tab.id ? 0 : -1}
+              onClick={() => onChange(tab.id)}
+              onKeyDown={(e) => {
+                if (move(tab.id, e.key)) e.preventDefault();
+              }}
+            >
+              {t(tab.label)}
+              {tab.badge ? <span className="chip">{t(tab.badge)}</span> : null}
+            </button>
+          ))}
+        </div>
+        {actions !== undefined && <div className="crm-ctabs-action">{actions}</div>}
       </div>
       <div
         id={`cmp-panel-${active}`}

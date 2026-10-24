@@ -317,7 +317,7 @@ export function useEmailDraft(
         requestEpoch.current += 1;
         blockHistory.current = [];
         onDoc(next);
-        setNote({ key: "Saved v{v} — approval reset. The preview below is the host render.", slots: { v: String(next.revision) } });
+        setNote({ key: "Saved v{v}.", slots: { v: String(next.revision) } });
       })
       .catch((err: unknown) => {
         if (!isConflict(err)) {

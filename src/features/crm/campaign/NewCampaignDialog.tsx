@@ -167,7 +167,7 @@ export default function NewCampaignDialog({
               {t("New campaign")}
             </h4>
             <p className="text-label text-ink-400">
-              {t("Name it and choose how to start. You can change everything later.")}
+              {t("Name it and choose how to start.")}
             </p>
           </div>
           <Button size="sm" variant="ghost" aria-label={t("Close")} onClick={onCancel} disabled={pending}>
