@@ -32,6 +32,12 @@ pkg = importlib.util.module_from_spec(spec)
 sys.modules["package_app"] = pkg  # dataclass resolution needs the module registered
 spec.loader.exec_module(pkg)
 
+# The real bundle's declared version, so a manifest version bump renames the
+# archive these tests build instead of breaking them on a stale literal.
+REAL_APP_VERSION = pkg.parse_manifest(
+    (REPO / "app" / "app.md").read_text(encoding="utf-8")
+).version
+
 APP_MD = """---
 app: crm
 title: CRM
@@ -280,7 +286,7 @@ class ManifestMetadataTests(unittest.TestCase):
     def test_real_app_md_parses_declared_fields(self):
         manifest = pkg.parse_manifest((REPO / "app" / "app.md").read_text(encoding="utf-8"))
         self.assertEqual(manifest.app, "crm")
-        self.assertEqual(manifest.version, "0.1.2")
+        self.assertEqual(manifest.version, "0.1.3")
         self.assertEqual(manifest.title, "CRM")
         self.assertEqual(manifest.connections, ())
         self.assertIsNone(manifest.view_contract)
@@ -409,34 +415,35 @@ class BuildAndExclusionTests(unittest.TestCase):
         # Package the real repo app/: the archive must carry only
         # bundle paths — no scripts/, src/, tests/, docs/, .git, .env.
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
-        archive = self.out / "crm-0.1.2.tar.gz"
+        root = f"crm-{REAL_APP_VERSION}"
+        archive = self.out / f"{root}.tar.gz"
         names = [n for n, _ in pkg._archive_members(archive)[0]]
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
             self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "workflows", "rubrics", "templates", "views", "bindings", "screens"})
             self.assertFalse(any(p.startswith(".") for p in rel.split("/")))
-        self.assertIn("crm-0.1.2/app.md", names)
-        self.assertIn("crm-0.1.2/workflows/email-brief.md", names)
-        self.assertIn("crm-0.1.2/rubrics/email.md", names)
-        self.assertIn("crm-0.1.2/app-actions.json", names)
-        self.assertIn("crm-0.1.2/app-assistant.json", names)
-        self.assertIn("crm-0.1.2/app-chat.json", names)
+        self.assertIn(f"{root}/app.md", names)
+        self.assertIn(f"{root}/workflows/email-brief.md", names)
+        self.assertIn(f"{root}/rubrics/email.md", names)
+        self.assertIn(f"{root}/app-actions.json", names)
+        self.assertIn(f"{root}/app-assistant.json", names)
+        self.assertIn(f"{root}/app-chat.json", names)
         self.assertEqual(
-            {n for n in names if n.startswith("crm-0.1.2/screens/")},
+            {n for n in names if n.startswith(f"{root}/screens/")},
             {
-                "crm-0.1.2/screens/crm/runtime.js",
-                "crm-0.1.2/screens/crm/client.js",
-                "crm-0.1.2/screens/crm/crm.css",
-                "crm-0.1.2/screens/crm/screens.json",
+                f"{root}/screens/crm/runtime.js",
+                f"{root}/screens/crm/client.js",
+                f"{root}/screens/crm/crm.css",
+                f"{root}/screens/crm/screens.json",
             },
         )
 
     def test_verify_real_archive(self):
         self.assertEqual(pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(self.out)]), 0)
-        result = pkg.verify_archive(self.out / "crm-0.1.2.tar.gz")
+        result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
         self.assertEqual(result["app"], "crm")
-        self.assertEqual(result["version"], "0.1.2")
+        self.assertEqual(result["version"], REAL_APP_VERSION)
         self.assertEqual(result["files"], 10)
 
 
@@ -585,7 +592,7 @@ class VerifyParityTests(unittest.TestCase):
     def test_legit_dir_trailing_slash_still_passes(self):
         # The real built archive carries explicit dir entries with a
         # trailing slash — canonicalization must not reject it.
-        result = pkg.verify_archive(self.out / "crm-0.1.2.tar.gz")
+        result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
         self.assertEqual(result["files"], 10)
 
 
@@ -604,7 +611,7 @@ class CleanRefusalTests(unittest.TestCase):
         self.assertEqual(
             pkg.main(["build", "--source", str(REPO / "app"), "--outdir", str(out)]), 0
         )
-        return out / "crm-0.1.2.tar.gz"
+        return out / f"crm-{REAL_APP_VERSION}.tar.gz"
 
     def test_non_ascii_sidecar_is_clean_refusal(self):
         archive = self._good_archive()
@@ -630,9 +637,9 @@ class CleanRefusalTests(unittest.TestCase):
             ),
             0,
         )
-        archive = out / "crm-0.1.2.zip"
+        archive = out / f"crm-{REAL_APP_VERSION}.zip"
         raw = bytearray(archive.read_bytes())
-        idx = raw.find(b"crm-0.1.2/app.md")
+        idx = raw.find(f"crm-{REAL_APP_VERSION}/app.md".encode())
         self.assertGreater(idx, 0)
         raw[idx] ^= 0xFF  # corrupt a filename byte in a local header
         archive.write_bytes(raw)
