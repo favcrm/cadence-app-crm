@@ -1,7 +1,7 @@
 import { ApiError } from "@cadence/screen-ui";
 import { serviceCall,serviceSlot } from "../../bridge/services";
 import { type HostScope } from "./hostActions";
-import { hostErrorText } from "./hostErrors";
+import { APPROVAL_REQUIRED_TEXT,hostErrorText,isApprovalRequired } from "./hostErrors";
 
 /**
  * Typed host action client for the CRM send routes (CAD-786 UI over
@@ -344,6 +344,7 @@ export const sendClient = {
 
 /** Server refusals stay verbatim; transport failures name the retry. */
 export function friendlySendError(error: unknown): string {
+  if (isApprovalRequired(error)) return APPROVAL_REQUIRED_TEXT;
   return hostErrorText(error, "The send request was refused — retry.");
 }
 

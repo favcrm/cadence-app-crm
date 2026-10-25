@@ -1,5 +1,5 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,ConfirmDialog } from "@cadence/screen-ui";
+import { ApiError,ConfirmDialog } from "@cadence/screen-ui";
 import { useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState } from "react";
 import { channel } from "../../../bridge/channel";
 import {
@@ -18,6 +18,7 @@ parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import "../crm-campaign.css";
+import { isApprovalRequired } from "../hostErrors";
 import { friendlyAudienceError } from "../segmentGrammar";
 import { type AudiencePreview } from "../segments/Segments";
 import type { Viewer } from "../viewer";
@@ -41,7 +42,7 @@ export default function CampaignDetail({
   onBack: () => void;
   onCloned: (campaignId: string) => void;
 }) {
-  const { t, formatNumber } = useLocale();
+  const { t } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const queryState = useCrmQuery(scope, "content.show", { campaign_id: campaignId }, parseContentDoc);
@@ -113,6 +114,7 @@ export default function CampaignDetail({
   // No freeze row for this derived id yet — the honest "not frozen" state,
   // distinct from an error.
   const [freezeMissing, setFreezeMissing] = useState(false);
+  const [freezeWaiting, setFreezeWaiting] = useState(false);
 
   const requestBack = () => {
     if (unsaved) setConfirmLeave(true);
@@ -147,6 +149,7 @@ export default function CampaignDetail({
         const root = (value as Record<string, unknown> | null) ?? {};
         const row = (root.freeze as Record<string, unknown> | null) ?? {};
         setFreezeMissing(false);
+        setFreezeWaiting(false);
         setFreeze({
           finalCount: typeof row.final_count === "number" ? row.final_count : -1,
           digest: typeof row.digest === "string" ? row.digest : "",
@@ -193,7 +196,14 @@ export default function CampaignDetail({
         maxRecipients: ceiling,
       })
       .then(() => checkFreeze())
-      .catch((err: unknown) => setFreezeError(friendlyAudienceError(err)))
+      .catch((err: unknown) => {
+        if (isApprovalRequired(err)) {
+          setFreezeWaiting(true);
+          setFreezeError(null);
+          return;
+        }
+        setFreezeError(friendlyAudienceError(err));
+      })
       .finally(() => setFreezePending(false));
   };
 
@@ -248,97 +258,28 @@ export default function CampaignDetail({
             starterSenderBindingId={starterSenderBindingId}
             freezeId={freezeId}
             freeze={freeze}
+            freezeMissing={freezeMissing}
+            freezePending={freezePending}
+            freezeError={freezeError}
+            freezeWaiting={freezeWaiting}
+            onFreeze={freezeAudience}
             tab={tab}
             onTab={setTab}
             audienceLabel={audienceSummary(pick, audiencePreview)}
             activitySlot={<CampaignSends scope={scope} viewer={viewer} campaignId={campaignId} />}
             audienceSlot={
-              <div className="crm-cgrid">
-                <AudienceSection
-                  scope={scope}
-                  viewer={viewer}
-                  pick={pick}
-                  onPick={(next) => {
-                    pickEdited.current = true;
-                    setPick(next);
-                    setAudiencePreviewState(null);
-                  }}
-                  onPreview={recordAudiencePreview}
-                  layout="detail"
-                />
-                <section aria-label={t("Frozen audience")} className="card px-4 py-4 grid gap-3 crm-freeze">
-                  <h4 className="text-cardtitle font-medium text-ink-100">{t("Freeze")}</h4>
-                  <p className="text-label text-ink-400">
-                    {t("A freeze snapshots the exact recipients; later customer changes cannot alter it.")}
-                  </p>
-                  <p className="text-label text-ink-100" data-freeze-state={
-                    freeze === null ? "unfrozen" : freeze.valid === true ? "valid" : "drifted"
-                  }>
-                    {freeze === null
-                      ? freezeMissing
-                        ? t("Not frozen yet.")
-                        : t("Checking the freeze…")
-                      : freeze.valid === true
-                        ? `${t("Audience frozen")} · ${formatNumber(freeze.finalCount)} ${t("recipients")} · ${t("checked just now")}`
-                        : `${t("Audience changed since you froze it")} (${t("was")} ${formatNumber(freeze.finalCount)}, ${t("now")} ${freeze.currentCount === null ? "—" : formatNumber(freeze.currentCount)}) — ${t("refreeze to continue.")}`}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      loading={freezePending}
-                      disabled={freezePending || !canWrite || audiencePreview === null || audiencePreview.finalCount === 0}
-                      onClick={freezeAudience}
-                    >
-                      {t(freeze === null ? "Create snapshot" : "Refresh snapshot")}
-                    </Button>
-                    {freeze !== null && (
-                      <Button size="sm" loading={freezePending} disabled={freezePending} onClick={checkFreeze}>
-                        {t("Recheck")}
-                      </Button>
-                    )}
-                  </div>
-                  {freezeError && (
-                    <p className="text-label text-fail" role="alert">
-                      {t(freezeError)}
-                    </p>
-                  )}
-                  {freeze && (
-                    <>
-                      <dl className="crm-detail" aria-label={t("Freeze validity")}>
-                        <div>
-                          <dt>{t("Frozen recipients")}</dt>
-                          <dd className="num">{formatNumber(freeze.finalCount)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Current recount")}</dt>
-                          <dd className="num">{freeze.currentCount === null ? "—" : formatNumber(freeze.currentCount)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("Validity")}</dt>
-                          <dd>
-                            <span
-                              className="chip"
-                              title={freeze.drift ?? t("The frozen digest still matches the live audience")}
-                            >
-                              {freeze.valid === true ? t("Valid") : freeze.valid === false ? `${t("Invalid")} — ${freeze.drift}` : t("Unknown")}
-                            </span>
-                          </dd>
-                        </div>
-                      </dl>
-                      <details className="crm-diag">
-                        <summary className="text-micro text-ink-500">{t("Technical details")}</summary>
-                        <p className="num text-micro text-ink-500 mt-1" title={t("Freeze ID (derived from the audience)")}>
-                          {t("Freeze")} {freezeId}
-                        </p>
-                        <p className="num text-micro text-ink-500 mt-1" title={t("Frozen audience digest")}>
-                          {t("Digest")} {freeze.digest}
-                        </p>
-                      </details>
-                    </>
-                  )}
-                </section>
-              </div>
+              <AudienceSection
+                scope={scope}
+                viewer={viewer}
+                pick={pick}
+                onPick={(next) => {
+                  pickEdited.current = true;
+                  setPick(next);
+                  setAudiencePreviewState(null);
+                }}
+                onPreview={recordAudiencePreview}
+                layout="detail"
+              />
             }
           />
         </>

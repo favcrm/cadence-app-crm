@@ -63,6 +63,11 @@ export default function CampaignWorkspace({
   starterSenderBindingId,
   freezeId,
   freeze,
+  freezeMissing,
+  freezePending,
+  freezeError,
+  freezeWaiting,
+  onFreeze,
   audienceSlot,
   activitySlot,
   audienceLabel,
@@ -80,7 +85,14 @@ export default function CampaignWorkspace({
   /** The detail page's named freeze + its last validity recheck —
    *  the final-send gate reads both. */
   freezeId?: string;
-  freeze?: { valid: boolean | null } | null;
+  freeze?: { valid: boolean | null; finalCount?: number } | null;
+  /** The detail page's freeze action, surfaced in the send panel so the
+   *  snapshot sits immediately before the send it belongs to. */
+  freezeMissing?: boolean;
+  freezePending?: boolean;
+  freezeError?: string | null;
+  freezeWaiting?: boolean;
+  onFreeze?: () => void;
   /** CAD-1008: the saved campaign's audience/freeze panel, supplied by
    *  the owning page so the task order renders Content+Preview →
    *  Audience → Sender → Test → Proposals → Final send; prepare approves the
@@ -671,6 +683,11 @@ export default function CampaignWorkspace({
       doc={doc}
       freezeId={freezeId}
       freeze={freeze ?? null}
+      freezeMissing={freezeMissing}
+      freezePending={freezePending}
+      freezeError={freezeError}
+      freezeWaiting={freezeWaiting}
+      onFreeze={onFreeze}
       binding={binding}
       testEvidence={testReceipt}
       audienceLabel={audienceLabel ?? "—"}

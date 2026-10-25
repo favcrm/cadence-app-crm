@@ -1,5 +1,5 @@
 import { ApiError } from "@cadence/screen-ui";
-import { hostErrorText } from "./hostErrors";
+import { APPROVAL_REQUIRED_TEXT,hostErrorText,isApprovalRequired } from "./hostErrors";
 
 /**
  * The approved saved-segment rule grammar (CAD-780 allowlist,
@@ -119,5 +119,6 @@ export function newAudienceId(prefix: string): string {
 
 /** Server refusals stay generic; transport failures name the retry. */
 export function friendlyAudienceError(error: unknown): string {
+  if (isApprovalRequired(error)) return APPROVAL_REQUIRED_TEXT;
   return hostErrorText(error, "The audience request was refused — retry.");
 }
