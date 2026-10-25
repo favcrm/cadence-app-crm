@@ -112,7 +112,9 @@ export interface SegmentDoc {
   id: string;
   revision: number;
   name: string;
+  segmentType: "dynamic" | "static";
   predicates: SegmentPredicate[];
+  memberIds: string[];
   digest: string;
 }
 
@@ -131,11 +133,17 @@ export function parseSegment(value: unknown): SegmentDoc {
   ) {
     throw new ApiError("The server returned an invalid segment receipt", 502);
   }
+  const segmentType = row.segment_type === "static" ? "static" : "dynamic";
+  const memberIds = Array.isArray(row.member_ids)
+    ? row.member_ids.filter((id): id is string => typeof id === "string")
+    : [];
   return {
     id: row.id,
     revision: row.revision,
     name: row.name,
+    segmentType,
     predicates: row.predicates as SegmentPredicate[],
+    memberIds,
     digest: row.digest,
   };
 }
@@ -392,9 +400,17 @@ function SegmentList({
                     <span className="num text-micro text-ink-500"> · {segment.id}</span>
                   </td>
                   <td className="text-ink-300">
-                    <span className="chip">{segment.predicates[0] ? describeRule(segment.predicates[0], t) : "—"}</span>
-                    {segment.predicates.length > 1 && (
-                      <span className="num text-micro text-ink-500"> +{formatNumber(segment.predicates.length - 1)} {t("more")}</span>
+                    {segment.segmentType === "static" ? (
+                      <span className="chip">
+                        {formatNumber(segment.memberIds.length)} {t("selected customers")}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="chip">{segment.predicates[0] ? describeRule(segment.predicates[0], t) : "—"}</span>
+                        {segment.predicates.length > 1 && (
+                          <span className="num text-micro text-ink-500"> +{formatNumber(segment.predicates.length - 1)} {t("more")}</span>
+                        )}
+                      </>
                     )}
                   </td>
                   <td className="num text-ink-300">
@@ -800,7 +816,13 @@ export function SegmentDrawer({
             panel: (
               <>
                 <section className="crm-sect" aria-label={t("Segment rule")}>
-                  <RuleSentence rules={segment.predicates} />
+                  {segment.segmentType === "static" ? (
+                    <p className="text-label text-ink-300">
+                      {formatNumber(segment.memberIds.length)} {t("selected customers")}
+                    </p>
+                  ) : (
+                    <RuleSentence rules={segment.predicates} />
+                  )}
                 </section>
                 <section className="crm-sect" aria-label={t("Who can be emailed")}>
                   <h4>{t("Who can be emailed")}</h4>
@@ -907,7 +929,13 @@ export function SegmentDrawer({
       label={t("Segment details")}
       title={loading ? t("Segment details") : (segment?.name ?? t("Segment details"))}
       avatar="◎"
-      subtitle={segment ? `${segment.predicates.length} rule${segment.predicates.length === 1 ? "" : "s"}` : undefined}
+      subtitle={
+        segment
+          ? segment.segmentType === "static"
+            ? `${segment.memberIds.length} selected`
+            : `${segment.predicates.length} rule${segment.predicates.length === 1 ? "" : "s"}`
+          : undefined
+      }
       pills={
         ready && preview ? (
           <>
@@ -924,10 +952,21 @@ export function SegmentDrawer({
       secondary={
         ready ? (
           <>
-            <Button size="sm" onClick={duplicate} disabled={!canWrite} title={canWrite ? undefined : t("Operators only")}>
+            <Button
+              size="sm"
+              onClick={duplicate}
+              disabled={!canWrite || segment.segmentType === "static"}
+              title={
+                segment.segmentType === "static"
+                  ? t("Static segments are edited by their member list")
+                  : canWrite
+                    ? undefined
+                    : t("Operators only")
+              }
+            >
               {t("Duplicate")}
             </Button>
-            {canWrite ? (
+            {canWrite && segment.segmentType === "dynamic" ? (
               <Button size="sm" onClick={() => { setEditSegment(segment); setEditing(true); }}>
                 {t("Edit rules")}
               </Button>

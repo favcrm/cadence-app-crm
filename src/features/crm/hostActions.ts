@@ -46,6 +46,17 @@ export interface HostRecord {
   profile: unknown;
   history?: unknown;
   consentHistory?: unknown;
+  notes?: CustomerNote[];
+}
+
+/** A plain-text note on a customer timeline. Notes never change the
+ *  profile digest, a segment or a frozen audience. */
+export interface CustomerNote {
+  id: string;
+  recordId: string;
+  body: string;
+  actor: string;
+  created: number;
 }
 
 /** How consent was given (CAD-1053). Granting requires one; the note is optional (≤280). */
@@ -128,6 +139,20 @@ export function parseRecord(value: unknown): HostRecord {
     profile: row.profile,
     history: row.history,
     consentHistory: (row as Record<string, unknown>).consent_history,
+    notes: Array.isArray(row.notes)
+      ? row.notes.flatMap((item): CustomerNote[] => {
+          if (item === null || typeof item !== "object") return [];
+          const note = item as Record<string, unknown>;
+          if (
+            typeof note.id !== "string" ||
+            typeof note.record_id !== "string" ||
+            typeof note.body !== "string" ||
+            typeof note.actor !== "string" ||
+            typeof note.created !== "number"
+          ) return [];
+          return [{ id: note.id, recordId: note.record_id, body: note.body, actor: note.actor, created: note.created }];
+        })
+      : [],
   };
 }
 
