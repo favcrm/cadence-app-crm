@@ -1,23 +1,15 @@
 // CRM-12 campaign-work client: the wire body is closed and revision-bound.
 // Run: bun test tests/contract/campaign_work_client.test.mjs
 //
-// The real bridge modules run unchanged; React and @cadence/screen-ui are
-// stubbed because only the browser frame supplies them. `channel.request`
-// is observed directly so the test sees the exact operation and body a
-// real host would receive — no live host, no retry, no synthetic rows.
+// The real bridge modules run unchanged; @cadence/screen-ui is the shared
+// stub because only the browser frame supplies it. `channel.request` is
+// observed directly so the test sees the exact operation and body a real
+// host would receive — no live host, no retry, no synthetic rows.
 
 import { test, expect, beforeAll, mock } from "bun:test";
+import { sdkMock } from "../support/sdk-mock.mjs";
 
-mock.module("@cadence/screen-ui", () => ({
-  ApiError: class ApiError extends Error {
-    constructor(message, status, extra) {
-      super(message);
-      this.status = status;
-      this.code = extra?.code;
-    }
-  },
-}));
-mock.module("react", () => ({ useSyncExternalStore: (_subscribe, get) => get() }));
+mock.module("@cadence/screen-ui", sdkMock);
 
 const DIGEST = "sha256:" + "a".repeat(64);
 const scope = { installId: "inst-1", digest: DIGEST };

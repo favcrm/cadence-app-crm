@@ -118,7 +118,10 @@ Request (closed body; at least one value field required):
   `assigned_at` from the authenticated caller. Leaving `blocked` clears
   the blocked reason. Every accepted write increments `revision`, stamps
   `updated_at` and re-binds `content_revision` to the live content.
-- `blocked_reason` without `status: "blocked"` refuses.
+- `blocked_reason` without `status: "blocked"` refuses. Editing only the
+  reason of an already-blocked row therefore sends `status: "blocked"` with
+  it; the panel's patch builder does that, so a reason-only edit is a valid
+  CAS write rather than a refused one.
 
 Reply: the same facts shape as `campaign-work.show`, after the write.
 
@@ -158,6 +161,12 @@ vectors.
 | `forbidden` | The caller is not authorized for this source. No values, `refusal.code = "forbidden"`. |
 | `stale` | The caller's `expected_revision` is not current. Only `revision`/`content_revision` are returned; no values, `refusal.code = "stale_revision"`. |
 
+`forbidden` and `stale` carry no recorded values and no content facts:
+`assignment`, `due_at`, `lifecycle`, `next_decision` and `content` are all
+`null`. `stale` returns only the revision tokens (`revision`, and
+`content_revision` from the work row) so a caller can retry against the
+current row; `forbidden` returns neither.
+
 `unavailable` is the exact list of recorded-value gaps: `assignee`,
 `assigned_by`, `assigned_at`, `due_at`, `status` (and `blocked_reason` when
 the status is `blocked` but no reason is recorded), plus `next_decision`
@@ -181,6 +190,23 @@ chain behind `sendReadiness`) plus the recorded lifecycle:
 
 Assignment is not a readiness gate, so an unassigned campaign still shows
 the campaign's next decision.
+
+## Panel behavior
+
+The campaign-work panel applies the same rules to its own reads and writes:
+
+- A read failure other than "no metadata" (transport, 503, malformed reply)
+  renders an explicit alert with **Retry** for writable *and* read-only
+  viewers. It never falls back to empty fields or an "Unassigned" summary.
+  A host that does not advertise the operations, or a caller refused access,
+  gets its own unavailable note instead of a form.
+- A refused value (bad due date, bad assignee) shows its message and leaves
+  the controls usable; validation happens before the busy state, so the form
+  is never stuck.
+- A stale save (409) writes nothing, re-reads the current row, keeps the
+  operator's typed values on screen and shows a persistent conflict notice
+  naming the current revision. The operator reviews and saves again; there
+  is no silent overwrite and no automatic retry.
 
 ## What this contract does not do
 

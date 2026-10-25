@@ -9,11 +9,11 @@ import {
   nextDecision,
   parseWorkView,
   readinessFacts,
+  workPatch,
   workRevision,
-  workStatusLabel,
   type CampaignWorkFacts,
   type WorkRecord,
-  type WorkStatus,
+  type WorkWritePatch,
 } from "../../../domain/campaignWork";
 import { getScope } from "../../../bridge/scope";
 import { campaignWorkClient, type WorkScope, type WorkWriteInput } from "../campaignWorkClient";
@@ -24,11 +24,17 @@ import type { ReadinessItem } from "../campaign/readiness";
  * reached and the app-computed next decision (CRM-12).
  *
  * Nothing is inferred. A campaign with no recorded work shows "Unassigned"
- * and "not set" values; a host that does not advertise the campaign-work
- * operations shows an explicit unavailable note instead of a form. The
- * next decision comes from the same readiness chain the Overview checklist
- * renders, so the two can never disagree. A save carries the revision the
- * panel read; a stale revision is refused and re-read, never overwritten.
+ * and "not set" values; a host that does not advertise the operations shows
+ * an explicit unavailable note instead of a form. Any other read failure
+ * (transport, 503, malformed reply) is its own alert with a retry, for
+ * writable and read-only viewers alike. The next decision comes from the
+ * same readiness chain the Overview checklist renders, so the two can never
+ * disagree.
+ *
+ * A save carries the revision the panel read. A stale revision saves
+ * nothing, re-reads the current row and keeps the operator's edits on
+ * screen with a persistent conflict notice — never a silent overwrite and
+ * never a silent retry.
  */
 export default function CampaignWorkPanel({
   scope,
@@ -45,10 +51,15 @@ export default function CampaignWorkPanel({
   const [view, setView] = useState<CampaignWorkFacts | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  /** Why the panel cannot read: the host lacks the operations, the caller
-   *  is forbidden, or the campaign has no source row. Never a fallback. */
-  const [blocked, setBlocked] = useState<"host" | "forbidden" | "missing" | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  /** A read failure that is not "no metadata": transport, 5xx or a reply the
+   *  contract refuses. Shown to every viewer and never replaced by a guess. */
+  const [unreadable, setUnreadable] = useState<string | null>(null);
+  /** Why the panel cannot read: the host lacks the operations, the caller is
+   *  forbidden, or the campaign has no source row. */
+  const [blocked, setBlocked] = useState<"host" | "forbidden" | null>(null);
+  /** Set after a stale refusal; `revision: null` while the re-read runs. */
+  const [conflict, setConflict] = useState<{ revision: number | null } | null>(null);
   const [assignee, setAssignee] = useState("");
   const [dueAt, setDueAt] = useState("");
   const [status, setStatus] = useState("");
@@ -67,18 +78,16 @@ export default function CampaignWorkPanel({
       setBlocked(getScope()?.actions.includes("campaign-work.show") === true ? "forbidden" : "host");
       return;
     }
-    if (reason instanceof ApiError && reason.status === 404) {
-      setBlocked("missing");
-      return;
-    }
-    setError(reason instanceof ApiError ? reason.message : "Couldn't read the campaign work details.");
+    setUnreadable(reason instanceof ApiError ? reason.message : "Couldn't read the campaign work details.");
   };
 
   const load = () => {
     const current = ++generation.current;
     setLoading(true);
     setBlocked(null);
-    setError(null);
+    setUnreadable(null);
+    setSaveError(null);
+    setConflict(null);
     campaignWorkClient.show(scope, campaignId).then((raw) => {
       if (current !== generation.current) return;
       const facts = parseWorkView(raw);
@@ -98,45 +107,57 @@ export default function CampaignWorkPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope.installId, campaignId]);
 
-  /** Only what actually changed travels, always with the revision read. */
-  const patchFor = (loaded: WorkRecord | null): WorkWriteInput => {
-    const patch: WorkWriteInput = { campaignId, expectedRevision: workRevision(loaded) };
-    const nextAssignee = assignee.trim();
-    if (nextAssignee !== (loaded?.assignee ?? "")) patch.assignee = nextAssignee === "" ? null : nextAssignee;
-    const nextDue = dueAt.trim();
-    if (nextDue !== (loaded?.dueAt ?? "")) patch.dueAt = nextDue === "" ? null : nextDue;
-    if (status !== (loaded?.status ?? "")) patch.status = status === "" ? null : (status as WorkStatus);
-    if (status === "blocked" && blockedReason.trim() !== (loaded?.blockedReason ?? "")) {
-      patch.blockedReason = blockedReason.trim() === "" ? null : blockedReason.trim();
-    }
-    return patch;
+  /** After a stale refusal: re-read the current row *without* touching the
+   *  operator's typed values, so the conflict notice can be reviewed against
+   *  the values that actually won. */
+  const reread = () => {
+    const current = ++generation.current;
+    campaignWorkClient.show(scope, campaignId).then((raw) => {
+      if (current !== generation.current) return;
+      const facts = parseWorkView(raw);
+      setView(facts);
+      setUnreadable(null);
+      setConflict({ revision: workRevision(facts.work) });
+    }).catch((reason: unknown) => {
+      if (current !== generation.current) return;
+      fail(reason);
+    });
   };
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canWrite || view === null || saving) return;
-    let patch: WorkWriteInput;
+    setSaveError(null);
+    let request: Promise<unknown>;
     try {
-      patch = patchFor(view.work);
-    } catch (reason: unknown) {
-      setError(reason instanceof ApiError ? reason.message : "That work detail is not valid.");
+      const patch: WorkWritePatch = workPatch(view.work, { assignee, dueAt, status, blockedReason });
+      if (Object.keys(patch).length === 0) throw new ApiError("Change at least one work detail before saving.", 400);
+      const input: WorkWriteInput = { campaignId, expectedRevision: workRevision(view.work), ...patch };
+      // Grammar, scope and value refusals are synchronous. Build the request
+      // before the busy state so a refused value leaves the controls usable
+      // and shows its message instead of disabling the form.
+      request = campaignWorkClient.save(scope, input);
+    } catch (reason) {
+      setSaveError(reason instanceof ApiError ? reason.message : "That work detail is not valid.");
       return;
     }
     setSaving(true);
-    setError(null);
-    campaignWorkClient.save(scope, patch).then((raw) => {
+    request.then((raw) => {
       const facts = parseWorkView(raw);
       setView(facts);
       seed(facts.work);
+      setConflict(null);
     }).catch((reason: unknown) => {
       if (reason instanceof ApiError && reason.status === 409) {
-        setError("These campaign work details changed. Reload them before saving again.");
-        load();
-      } else if (reason instanceof ApiError && [401, 403].includes(reason.status)) {
-        fail(reason);
-      } else {
-        setError(reason instanceof ApiError ? reason.message : "Couldn't save the campaign work details.");
+        setConflict({ revision: null });
+        reread();
+        return;
       }
+      if (reason instanceof ApiError && [401, 403].includes(reason.status)) {
+        fail(reason);
+        return;
+      }
+      setSaveError(reason instanceof ApiError ? reason.message : "Couldn't save the campaign work details.");
     }).finally(() => setSaving(false));
   };
 
@@ -167,16 +188,20 @@ export default function CampaignWorkPanel({
       {!loading && blocked !== null && (
         <p className="text-label text-ink-400" role="status">
           {blocked === "host"
-            ? t("Campaign work isn't available on this host, so no assignment or status is shown.")
-            : blocked === "forbidden"
-              ? t("You don't have access to this campaign's work details.")
-              : t("This campaign has no work record on the source.")}
+            ? t("Campaign work isn't available on this host.")
+            : t("You don't have access to this campaign's work details.")}
+        </p>
+      )}
+      {!loading && blocked === null && unreadable !== null && (
+        <p className="text-label text-fail" role="alert">
+          {t(unreadable)}{" "}
+          <button type="button" className="lnk" onClick={load}>{t("Retry")}</button>
         </p>
       )}
       {!loading && blocked === null && view !== null && (
         <>
-          <p className="text-label" data-work-summary>
-            {work?.assignee ?? t("Unassigned")} · {work?.dueAt ?? t("No due date")} · {work?.status == null ? t("Status not set") : t(workStatusLabel(work.status))}
+          <p className="text-label">
+            {work?.assignee ?? t("Unassigned")} · {work?.dueAt ?? t("No due date")} · {work?.status == null ? t("Status not set") : t(WORK_STATUSES.find((row) => row.value === work.status)?.label ?? work.status)}
           </p>
           <p className="text-label text-ink-300">{t("Next decision:")} {t(decision.label)}</p>
           {work?.assignedBy != null && work?.assignedAt != null && (
@@ -187,6 +212,13 @@ export default function CampaignWorkPanel({
           {work?.blockedReason != null && <p className="text-label text-ink-300">{t("Blocked:")} {work.blockedReason}</p>}
           {work === null && (
             <p className="text-label text-ink-400">{t("No work details are recorded. Content authorship is not an owner.")}</p>
+          )}
+          {conflict !== null && (
+            <p className="text-label text-warn" role="alert">
+              {t("These details changed; nothing was saved.")}{" "}
+              {conflict.revision !== null && `${t("Current revision")} ${formatNumber(conflict.revision)}. `}
+              {t("Your edits are still here.")}
+            </p>
           )}
           {canWrite && (
             <form className="grid gap-2" onSubmit={submit}>
@@ -216,7 +248,7 @@ export default function CampaignWorkPanel({
                   </Field>
                 )}
               </div>
-              {error !== null && <p className="text-label text-fail" role="alert">{t(error)}</p>}
+              {saveError !== null && <p className="text-label text-fail" role="alert">{t(saveError)}</p>}
               <div className="flex justify-end">
                 <Button type="submit" size="sm" variant="primary" loading={saving} disabled={saving || !dirty}>{t("Save work")}</Button>
               </div>

@@ -53,10 +53,6 @@ export function isWorkStatus(value: unknown): value is WorkStatus {
   return typeof value === "string" && WORK_STATUSES.some((status) => status.value === value);
 }
 
-export function workStatusLabel(status: WorkStatus): string {
-  return WORK_STATUSES.find((row) => row.value === status)?.label ?? status;
-}
-
 /** One recorded work row. `revision` is the write CAS token, never the
  *  content revision; `contentRevision` records what the write saw. */
 export interface WorkRecord {
@@ -157,27 +153,29 @@ const WORK_SOURCE_KEYS = ["app", "install_id", "context_id"] as const;
 const WORK_CONTENT_KEYS = ["revision", "digest"] as const;
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 
-function invalid(message: string): never {
-  throw new ApiError(message, 502);
+/** A host reply that does not match the closed shape. One message: the
+ *  caller cannot act on the difference between malformed fields. */
+function invalid(): never {
+  throw new ApiError("The campaign work reply is invalid.", 502);
 }
 
 /** One work row exactly as the source stores it. Closed keys and bounded
  *  values: a host reply that grew an authority-shaped field (an actor, a
  *  revision claim, a link) is refused rather than half-read. */
 export function parseWorkRecord(value: unknown): WorkRecord {
-  if (!obj(value) || !closed(value, WORK_RECORD_KEYS)) invalid("The campaign work record has an unsupported shape.");
-  if (!revisionValue(value.revision) || value.revision < 1) invalid("The campaign work revision is invalid.");
-  if (!revisionValue(value.content_revision) && value.content_revision !== null) invalid("The campaign work content revision is invalid.");
-  if (!nullableText(value.assignee, ASSIGNEE_MAX)) invalid("The campaign work assignee is invalid.");
-  if (!nullableText(value.assigned_by, ASSIGNEE_MAX)) invalid("The campaign work assigner is invalid.");
-  if (!isInstant(value.assigned_at) && value.assigned_at !== null) invalid("The campaign work assignment time is invalid.");
+  if (!obj(value) || !closed(value, WORK_RECORD_KEYS)) invalid();
+  if (!revisionValue(value.revision) || value.revision < 1) invalid();
+  if (!revisionValue(value.content_revision) && value.content_revision !== null) invalid();
+  if (!nullableText(value.assignee, ASSIGNEE_MAX)) invalid();
+  if (!nullableText(value.assigned_by, ASSIGNEE_MAX)) invalid();
+  if (!isInstant(value.assigned_at) && value.assigned_at !== null) invalid();
   if (value.due_at !== null) {
-    if (typeof value.due_at !== "string") invalid("The campaign work due date is invalid.");
+    if (typeof value.due_at !== "string") invalid();
     checkDueAt(value.due_at);
   }
-  if (!isWorkStatus(value.status) && value.status !== null) invalid("The campaign work status is invalid.");
-  if (!nullableText(value.blocked_reason, BLOCKED_REASON_MAX)) invalid("The campaign work blocked reason is invalid.");
-  if (!isInstant(value.updated_at)) invalid("The campaign work update time is invalid.");
+  if (!isWorkStatus(value.status) && value.status !== null) invalid();
+  if (!nullableText(value.blocked_reason, BLOCKED_REASON_MAX)) invalid();
+  if (!isInstant(value.updated_at)) invalid();
   return {
     revision: value.revision,
     contentRevision: value.content_revision,
@@ -203,20 +201,20 @@ export interface CampaignWorkFacts {
 
 export function parseWorkView(value: unknown): CampaignWorkFacts {
   if (!obj(value) || !closed(value, WORK_VIEW_KEYS) || value.contract !== WORK_CONTRACT) {
-    invalid("The campaign work reply does not carry the expected contract.");
+    invalid();
   }
   if (!obj(value.source) || !closed(value.source, WORK_SOURCE_KEYS) || value.source.app !== WORK_APP) {
-    invalid("The campaign work source identity is invalid.");
+    invalid();
   }
-  if (typeof value.source.install_id !== "string" || !ID.test(value.source.install_id)) invalid("The campaign work installation is invalid.");
-  if (value.source.context_id !== null && (typeof value.source.context_id !== "string" || !ID.test(value.source.context_id))) invalid("The campaign work context is invalid.");
-  if (typeof value.campaign_id !== "string") invalid("The campaign work campaign is invalid.");
+  if (typeof value.source.install_id !== "string" || !ID.test(value.source.install_id)) invalid();
+  if (value.source.context_id !== null && (typeof value.source.context_id !== "string" || !ID.test(value.source.context_id))) invalid();
+  if (typeof value.campaign_id !== "string") invalid();
   checkCampaignId(value.campaign_id);
   const work = value.work === null ? null : parseWorkRecord(value.work);
   let content: { revision: number; digest: string } | null = null;
   if (value.content !== null) {
     if (!obj(value.content) || !closed(value.content, WORK_CONTENT_KEYS) || !revisionValue(value.content.revision) || value.content.revision < 1 || typeof value.content.digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value.content.digest)) {
-      invalid("The campaign work content reference is invalid.");
+      invalid();
     }
     content = { revision: value.content.revision, digest: value.content.digest };
   }
@@ -292,11 +290,6 @@ export function applyWorkWrite(
       next.assignedBy = attribution.actor;
       next.assignedAt = attribution.at;
     }
-  } else if (next.assignee === null) {
-    // An unassigned row carries no assignment provenance: it never
-    // inherits who assigned a previous owner.
-    next.assignedBy = null;
-    next.assignedAt = null;
   }
   if (patch.dueAt !== undefined) {
     if (patch.dueAt !== null) checkDueAt(patch.dueAt);
@@ -317,6 +310,36 @@ export function applyWorkWrite(
   next.revision += 1;
   next.updatedAt = attribution.at;
   return next;
+}
+
+/** The form's strings, as the panel holds them. */
+export interface WorkEdit {
+  assignee: string;
+  dueAt: string;
+  status: string;
+  blockedReason: string;
+}
+
+/** Only what changed, derived from the form. An empty string clears a value.
+ *  A reason-only edit on a blocked row carries the blocked status too: a
+ *  blocked reason is only ever valid with it. Structural only — the client
+ *  owns the value grammar and refuses before any request is built. */
+export function workPatch(loaded: WorkRecord | null, edit: WorkEdit): WorkWritePatch {
+  const patch: WorkWritePatch = {};
+  const assignee = edit.assignee.trim();
+  if (assignee !== (loaded?.assignee ?? "")) patch.assignee = assignee === "" ? null : assignee;
+  const dueAt = edit.dueAt.trim();
+  if (dueAt !== (loaded?.dueAt ?? "")) patch.dueAt = dueAt === "" ? null : dueAt;
+  const status = edit.status === "" ? null : checkWorkStatus(edit.status);
+  if (status !== (loaded?.status ?? null)) patch.status = status;
+  if (status === "blocked") {
+    const reason = edit.blockedReason.trim();
+    if (reason !== (loaded?.blockedReason ?? "")) {
+      patch.status = "blocked";
+      patch.blockedReason = reason === "" ? null : reason;
+    }
+  }
+  return patch;
 }
 
 /** What the app can prove about send readiness, as four recorded facts.
@@ -441,20 +464,23 @@ export function campaignWorkRead(input: CampaignWorkReadInput): CampaignWorkRead
     identity: workIdentity(source, campaignId),
     campaign: { id: campaignId, link: workLink(campaignId) },
   };
-  const blank = {
+  /** Nothing recorded: no revision, no content facts, no decision. */
+  const noValues = {
     revision: null,
-    content_revision: work?.contentRevision ?? content?.revision ?? null,
-    content,
+    content_revision: null,
+    content: null,
     assignment: null,
     due_at: null,
     lifecycle: null,
     next_decision: null,
     unavailable: [] as string[],
   };
+  /** Authorized content facts are the caller's to see; forbidden/stale are not. */
+  const contentFacts = { content, content_revision: content?.revision ?? null };
   if (access !== "authorized") {
     return {
       ...base,
-      ...blank,
+      ...noValues,
       state: "forbidden",
       unavailable: [...UNRECORDED, "next_decision"],
       refusal: { code: "forbidden", text: "This caller is not authorized for this campaign work source." },
@@ -463,8 +489,11 @@ export function campaignWorkRead(input: CampaignWorkReadInput): CampaignWorkRead
   if (expectedRevision !== undefined && isStaleRevision(work, expectedRevision)) {
     return {
       ...base,
-      ...blank,
+      ...noValues,
+      // Revision tokens only: enough to retry against the current row, with
+      // no content facts and no recorded work values.
       revision: workRevision(work),
+      content_revision: work?.contentRevision ?? null,
       state: "stale",
       unavailable: [...UNRECORDED, "next_decision"],
       refusal: {
@@ -480,7 +509,8 @@ export function campaignWorkRead(input: CampaignWorkReadInput): CampaignWorkRead
     unavailable.push(...UNRECORDED);
     return {
       ...base,
-      ...blank,
+      ...noValues,
+      ...contentFacts,
       state: "unavailable",
       next_decision: decision,
       unavailable,

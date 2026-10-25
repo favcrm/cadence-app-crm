@@ -3,18 +3,15 @@
 // fields absent. A malformed non-empty id is still refused.
 // Run: bun test tests/contract/scope_push.test.mjs
 //
-// The bridge imports @cadence/screen-ui and react, which are only present
-// after the screen SDK is installed. Those two modules are stubbed here so the
-// real src/bridge/scope.ts runs unchanged.
+// The bridge imports @cadence/screen-ui, which only the browser frame
+// supplies; the shared stub keeps `bun test` coherent when several test
+// files run in one process. Real React is used — no bridge module calls a
+// hook at import.
 
 import { test, expect, beforeAll, mock } from "bun:test";
+import { sdkMock } from "../support/sdk-mock.mjs";
 
-mock.module("@cadence/screen-ui", () => ({
-  ApiError: class ApiError extends Error {
-    constructor(message, status) { super(message); this.status = status; }
-  },
-}));
-mock.module("react", () => ({ useSyncExternalStore: (_s, get) => get() }));
+mock.module("@cadence/screen-ui", sdkMock);
 
 let scope;
 beforeAll(async () => {

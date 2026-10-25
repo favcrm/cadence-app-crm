@@ -5,16 +5,9 @@
 // host bridge is involved, so only that module is stubbed.
 
 import { test, expect, beforeAll, mock } from "bun:test";
+import { sdkMock } from "../support/sdk-mock.mjs";
 
-mock.module("@cadence/screen-ui", () => ({
-  ApiError: class ApiError extends Error {
-    constructor(message, status, extra) {
-      super(message);
-      this.status = status;
-      this.code = extra?.code;
-    }
-  },
-}));
+mock.module("@cadence/screen-ui", sdkMock);
 
 let domain;
 beforeAll(async () => {
@@ -116,6 +109,53 @@ test("applyWorkWrite clears the block on resume and refuses an orphan reason", (
   expect(() => applyWorkWrite(record(), { revision: 9 }, { actor: "operator", at: LATER }, 4)).toThrow();
   // A null content revision leaves the previous binding untouched.
   expect(applyWorkWrite(record(), { dueAt: "2026-12-01" }, { actor: "operator", at: LATER }, null).contentRevision).toBe(4);
+});
+
+test("unrelated writes keep the last assignment provenance", () => {
+  const { applyWorkWrite } = domain;
+  const assigned = applyWorkWrite(null, { assignee: "Ada" }, { actor: "owner", at: AT }, 4);
+  const unassigned = applyWorkWrite(assigned, { assignee: null }, { actor: "agent", at: LATER }, 4);
+  expect(unassigned.assignee).toBeNull();
+  expect(unassigned.assignedBy).toBe("agent");
+  expect(unassigned.assignedAt).toBe(LATER);
+  for (const patch of [{ dueAt: "2026-12-01" }, { status: "in_progress" }, { status: null }]) {
+    const next = applyWorkWrite(unassigned, patch, { actor: "agent", at: "2026-10-27T09:00:00.000Z" }, 5);
+    expect(next.assignedBy).toBe("agent");
+    expect(next.assignedAt).toBe(LATER);
+    expect(next.revision).toBe(unassigned.revision + 1);
+  }
+});
+
+test("workPatch sends only changes and carries blocked status for a reason-only edit", () => {
+  const { workPatch } = domain;
+  const blocked = record({ status: "blocked", blockedReason: "waiting on legal" });
+  expect(workPatch(blocked, {
+    assignee: blocked.assignee,
+    dueAt: blocked.dueAt,
+    status: "blocked",
+    blockedReason: "waiting on legal",
+  })).toEqual({});
+  expect(workPatch(blocked, {
+    assignee: blocked.assignee,
+    dueAt: blocked.dueAt,
+    status: "blocked",
+    blockedReason: "waiting on finance",
+  })).toEqual({ status: "blocked", blockedReason: "waiting on finance" });
+  expect(workPatch(null, { assignee: "Ada", dueAt: "2026-11-01", status: "blocked", blockedReason: "legal" }))
+    .toEqual({ assignee: "Ada", dueAt: "2026-11-01", status: "blocked", blockedReason: "legal" });
+  // Clearing is explicit null.
+  expect(workPatch(record(), { assignee: "", dueAt: "", status: "", blockedReason: "" }))
+    .toEqual({ assignee: null, dueAt: null, status: null });
+  // Adjusting only the reason of a row that is no longer blocked is not a reason edit.
+  expect(workPatch(record({ status: "in_progress", blockedReason: null }), {
+    assignee: record().assignee,
+    dueAt: record().dueAt,
+    status: "in_progress",
+    blockedReason: "late",
+  })).toEqual({});
+  // An unknown status refuses here; the client owns the value grammar for
+  // assignee/due date and refuses before any request is built.
+  expect(() => workPatch(null, { assignee: "", dueAt: "", status: "Blocked", blockedReason: "" })).toThrow();
 });
 
 test("stale revisions refuse with 409 and never expose a fallback token", () => {
@@ -310,13 +350,23 @@ test("forbidden and stale reads refuse with no values", () => {
   expect(forbidden.assignment).toBeNull();
   expect(forbidden.next_decision).toBeNull();
   expect(forbidden.revision).toBeNull();
+  // No content facts either: a forbidden caller learns nothing recorded.
+  expect(forbidden.content).toBeNull();
+  expect(forbidden.content_revision).toBeNull();
+  expect(forbidden.due_at).toBeNull();
+  expect(forbidden.lifecycle).toBeNull();
   expect(forbidden.unavailable).toContain("next_decision");
 
   const stale = campaignWorkRead({ ...input, access: "authorized", expectedRevision: 0 });
   expect(stale.state).toBe("stale");
   expect(stale.refusal?.code).toBe("stale_revision");
+  // Revision tokens only — never the content facts or recorded work values.
   expect(stale.revision).toBe(1);
+  expect(stale.content_revision).toBe(4);
+  expect(stale.content).toBeNull();
   expect(stale.assignment).toBeNull();
+  expect(stale.due_at).toBeNull();
+  expect(stale.lifecycle).toBeNull();
   expect(stale.next_decision).toBeNull();
 
   const current = campaignWorkRead({ ...input, access: "authorized", expectedRevision: 1 });

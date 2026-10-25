@@ -24,23 +24,6 @@ import { checkCampaignId } from "./campaignGrammar";
  * overwrite. No field here can approve, send or publish anything.
  */
 
-/** Fields this client refuses in any body or input: authority claims,
- *  recorded provenance and derived state. */
-export const FORBIDDEN_WORK_KEYS = [
-  "by",
-  "actor",
-  "owner",
-  "assigned_by",
-  "assigned_at",
-  "revision",
-  "updated_at",
-  "content_revision",
-  "next_decision",
-  "link",
-  "install_id",
-  "context_id",
-] as const;
-
 export interface WorkScope {
   installId: string;
   digest: string;
