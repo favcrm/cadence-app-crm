@@ -7,6 +7,27 @@ needs:
   connections: []
   requires:
     contracts: {app-screens: [1], screen-records: [1], screen-startup: [1]}
+listing:
+  tagline: Run customer records and campaigns with an agent you can audit
+  category: customers
+  tags: [email, crm]
+  publisher:
+    name: Cadence
+  about: CRM keeps your customer list, notes and segments, drafts reviewed campaign content and prepares an audience through host-owned controls. At the operator’s chosen autonomy, a scoped agent can create and update customers, add notes, build rule or selected-member segments, apply its email proposal, approve content and freeze the audience. The final test and send stay guarded host actions.
+  can:
+    - Keep customer records with tags, consent, notes and a static or rule-based segment
+    - Draft one reviewed email brief per run
+    - Apply an assistant draft, approve content and freeze the exact audience
+    - Run record writes autonomously at the operator’s chosen autonomy level
+    - Keep unsubscriptions and send history for good
+  screenshots: []
+  setup: []
+  data:
+    stores:
+      - Your customer list, segments and unsubscribes
+      - Campaign content, audiences and send history
+      - Reviewed email-brief text
+    personal: true
 ---
 
 # CRM — reviewed email briefs
