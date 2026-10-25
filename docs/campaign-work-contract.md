@@ -203,10 +203,18 @@ The campaign-work panel applies the same rules to its own reads and writes:
 - A refused value (bad due date, bad assignee) shows its message and leaves
   the controls usable; validation happens before the busy state, so the form
   is never stuck.
-- A stale save (409) writes nothing, re-reads the current row, keeps the
-  operator's typed values on screen and shows a persistent conflict notice
-  naming the current revision. The operator reviews and saves again; there
-  is no silent overwrite and no automatic retry.
+- A stale save (409) writes nothing and re-reads the current row. Inputs the
+  operator did **not** edit are refreshed to the winner's values; the fields
+  they did edit keep their typed values. A persistent conflict notice names
+  the current revision, and Save stays disabled until that re-read
+  establishes the new baseline — so the next save carries only the
+  operator's own change and cannot revert another writer (for example by
+  resending an old due date or reopening a completed campaign).
+- If the conflict re-read itself fails, the conflict notice and the
+  operator's values both stay. **Retry** in that state performs an
+  edit-preserving re-read, never the initial load that would seed the form
+  and discard the attempted edits. There is no silent overwrite and no
+  automatic retry of the write.
 
 ## What this contract does not do
 

@@ -12,6 +12,7 @@ import {
   workPatch,
   workRevision,
   type CampaignWorkFacts,
+  type WorkEdit,
   type WorkRecord,
   type WorkWritePatch,
 } from "../../../domain/campaignWork";
@@ -58,8 +59,10 @@ export default function CampaignWorkPanel({
   /** Why the panel cannot read: the host lacks the operations, the caller is
    *  forbidden, or the campaign has no source row. */
   const [blocked, setBlocked] = useState<"host" | "forbidden" | null>(null);
-  /** Set after a stale refusal; `revision: null` while the re-read runs. */
-  const [conflict, setConflict] = useState<{ revision: number | null } | null>(null);
+  /** Set after a stale refusal; `revision: null` while the re-read runs.
+   *  `fields` is the operator's edit intent: untouched inputs are refreshed
+   *  to the new baseline so the next save cannot revert another writer. */
+  const [conflict, setConflict] = useState<{ revision: number | null; fields: (keyof WorkEdit)[] } | null>(null);
   const [assignee, setAssignee] = useState("");
   const [dueAt, setDueAt] = useState("");
   const [status, setStatus] = useState("");
@@ -107,30 +110,41 @@ export default function CampaignWorkPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope.installId, campaignId]);
 
-  /** After a stale refusal: re-read the current row *without* touching the
-   *  operator's typed values, so the conflict notice can be reviewed against
-   *  the values that actually won. */
-  const reread = () => {
+  /** After a stale refusal: re-read the current row and refresh every input
+   *  the operator did NOT edit to the new baseline, keeping the ones they did.
+   *  Saving against the new revision then sends only their own change. */
+  const reread = (fields: (keyof WorkEdit)[]) => {
     const current = ++generation.current;
     campaignWorkClient.show(scope, campaignId).then((raw) => {
       if (current !== generation.current) return;
       const facts = parseWorkView(raw);
       setView(facts);
       setUnreadable(null);
-      setConflict({ revision: workRevision(facts.work) });
+      if (!fields.includes("assignee")) setAssignee(facts.work?.assignee ?? "");
+      if (!fields.includes("dueAt")) setDueAt(facts.work?.dueAt ?? "");
+      if (!fields.includes("status")) setStatus(facts.work?.status ?? "");
+      if (!fields.includes("status") && !fields.includes("blockedReason")) setBlockedReason(facts.work?.blockedReason ?? "");
+      setConflict({ revision: workRevision(facts.work), fields });
     }).catch((reason: unknown) => {
       if (current !== generation.current) return;
+      // The conflict and the operator's values stay; Retry re-reads without
+      // discarding either.
       fail(reason);
     });
   };
+
+  /** A retry during a conflict must not seed the form or drop the notice. */
+  const retry = () => (conflict === null ? load() : reread(conflict.fields));
 
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canWrite || view === null || saving) return;
     setSaveError(null);
     let request: Promise<unknown>;
+    let fields: (keyof WorkEdit)[] = [];
     try {
       const patch: WorkWritePatch = workPatch(view.work, { assignee, dueAt, status, blockedReason });
+      fields = Object.keys(patch) as (keyof WorkEdit)[];
       if (Object.keys(patch).length === 0) throw new ApiError("Change at least one work detail before saving.", 400);
       const input: WorkWriteInput = { campaignId, expectedRevision: workRevision(view.work), ...patch };
       // Grammar, scope and value refusals are synchronous. Build the request
@@ -149,8 +163,8 @@ export default function CampaignWorkPanel({
       setConflict(null);
     }).catch((reason: unknown) => {
       if (reason instanceof ApiError && reason.status === 409) {
-        setConflict({ revision: null });
-        reread();
+        setConflict({ revision: null, fields });
+        reread(fields);
         return;
       }
       if (reason instanceof ApiError && [401, 403].includes(reason.status)) {
@@ -195,7 +209,7 @@ export default function CampaignWorkPanel({
       {!loading && blocked === null && unreadable !== null && (
         <p className="text-label text-fail" role="alert">
           {t(unreadable)}{" "}
-          <button type="button" className="lnk" onClick={load}>{t("Retry")}</button>
+          <button type="button" className="lnk" onClick={retry}>{t("Retry")}</button>
         </p>
       )}
       {!loading && blocked === null && view !== null && (
@@ -250,7 +264,7 @@ export default function CampaignWorkPanel({
               </div>
               {saveError !== null && <p className="text-label text-fail" role="alert">{t(saveError)}</p>}
               <div className="flex justify-end">
-                <Button type="submit" size="sm" variant="primary" loading={saving} disabled={saving || !dirty}>{t("Save work")}</Button>
+                <Button type="submit" size="sm" variant="primary" loading={saving} disabled={saving || !dirty || conflict?.revision === null}>{t("Save work")}</Button>
               </div>
             </form>
           )}

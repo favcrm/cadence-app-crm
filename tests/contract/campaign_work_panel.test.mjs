@@ -109,6 +109,7 @@ function makeHost(initial) {
   const calls = [];
   let work = initial;
   let failure = null;
+  let showFailure = null;
   let show = null;
   const view = () => show ?? {
     contract: domain.WORK_CONTRACT,
@@ -130,6 +131,11 @@ function makeHost(initial) {
   const request = (_kind, verb, args) => {
     calls.push({ verb, args });
     if (failure !== null) return Promise.reject(failure);
+    if (verb === "campaign-work.show" && showFailure !== null) {
+      const error = showFailure;
+      showFailure = null;
+      return Promise.reject(error);
+    }
     if (verb === "campaign-work.show") return Promise.resolve(view());
     if (verb === "campaign-work.save") {
       try {
@@ -154,6 +160,7 @@ function makeHost(initial) {
     get work() { return work; },
     setWork(next) { work = next; },
     failWith(error) { failure = error; },
+    failNextShow(error) { showFailure = error; },
     replyWith(reply) { show = reply; },
   };
 }
@@ -240,6 +247,82 @@ test("a stale save writes nothing, re-reads, keeps the edits and the conflict no
   // shown beside it rather than replacing it silently.
   expect(label("Assigned to")(container).value).toBe("Bea");
   expect(container.querySelector("section").textContent).toContain("Cy · No due date · Status not set");
+});
+
+test("after a stale re-read, untouched inputs take the new baseline and the next save sends only the edited field", async () => {
+  const host = makeHost(domain.applyWorkWrite(
+    null,
+    { assignee: "Ada", dueAt: "2026-11-01", status: "in_progress" },
+    { actor: "owner", at: AT },
+    4,
+  ));
+  channelModule.channel.request = host.request;
+  const container = await mount();
+
+  await type(container, "Assigned to", "Bea");
+  // Another writer moves the due date and completes the campaign.
+  host.setWork(domain.applyWorkWrite(
+    host.work,
+    { dueAt: "2026-12-15", status: "done" },
+    { actor: "other", at: AT2 },
+    4,
+  ));
+  await submit(container);
+
+  expect(host.saves()).toHaveLength(1);
+  // The re-read refreshed only the fields the operator did not touch.
+  expect(label("Assigned to")(container).value).toBe("Bea");
+  expect(label("Due date")(container).value).toBe("2026-12-15");
+  expect(label("Status")(container).value).toBe("done");
+  const alerts = [...container.querySelectorAll("[role='alert']")].map((node) => node.textContent).join(" ");
+  expect(alerts).toContain("Current revision 2.");
+
+  // The follow-up save carries the operator's edit only, so the other
+  // writer's due date and completion survive.
+  await submit(container);
+  expect(host.saves()).toHaveLength(2);
+  expect(host.saves()[1].args).toEqual({ campaign_id: "welcome", expected_revision: 2, assignee: "Bea" });
+  expect(host.work.assignee).toBe("Bea");
+  expect(host.work.dueAt).toBe("2026-12-15");
+  expect(host.work.status).toBe("done");
+  expect(host.work.revision).toBe(3);
+});
+
+test("a failed conflict re-read keeps the edits and the notice, and Retry preserves both", async () => {
+  const host = makeHost(domain.applyWorkWrite(
+    null,
+    { assignee: "Ada", dueAt: "2026-11-01" },
+    { actor: "owner", at: AT },
+    4,
+  ));
+  channelModule.channel.request = host.request;
+  const container = await mount();
+
+  await type(container, "Assigned to", "Bea");
+  host.setWork(domain.applyWorkWrite(host.work, { dueAt: "2026-12-15" }, { actor: "other", at: AT2 }, 4));
+  host.failNextShow(new ApiError("Unavailable offline.", 503, { code: "unavailable" }));
+  await submit(container);
+
+  const alerts = () => [...container.querySelectorAll("[role='alert']")].map((node) => node.textContent).join(" ");
+  expect(alerts()).toContain("These details changed; nothing was saved.");
+  expect(alerts()).toContain("Unavailable offline.");
+  expect(label("Assigned to")(container).value).toBe("Bea");
+  const save = [...container.querySelectorAll("button")].find((button) => button.textContent === "Save work");
+  // No save against a baseline the panel could not re-read.
+  expect(save.disabled).toBe(true);
+
+  const retry = [...container.querySelectorAll("button")].find((button) => button.textContent === "Retry");
+  await react.act(async () => retry.click());
+  await settle();
+  expect(container.textContent).not.toContain("Unavailable offline.");
+  expect(label("Assigned to")(container).value).toBe("Bea");
+  expect(label("Due date")(container).value).toBe("2026-12-15");
+  expect(alerts()).toContain("Current revision 2.");
+
+  await submit(container);
+  expect(host.saves()).toHaveLength(2);
+  expect(host.saves()[1].args).toEqual({ campaign_id: "welcome", expected_revision: 2, assignee: "Bea" });
+  expect(host.work.dueAt).toBe("2026-12-15");
 });
 
 test("a failed read is an explicit alert for writable and read-only viewers, with recovery", async () => {
