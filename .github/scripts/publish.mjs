@@ -52,18 +52,28 @@ if (!installCheckPath) {
       "against the target host before publishing",
   );
 }
-{
-  const installCheck = JSON.parse(readFileSync(installCheckPath, "utf8"));
-  if (installCheck.error || installCheck.compatibility?.compatible !== true) {
-    throw new Error(
-      "install-check refused: " +
-        JSON.stringify(installCheck.error ?? installCheck.compatibility ?? installCheck),
-    );
-  }
-  if (installCheck.digest !== digest) {
-    throw new Error("install-check digest does not match app check");
-  }
+const installCheck = JSON.parse(readFileSync(installCheckPath, "utf8"));
+if (installCheck.error || installCheck.compatibility?.compatible !== true) {
+  throw new Error(
+    "install-check refused: " +
+      JSON.stringify(installCheck.error ?? installCheck.compatibility ?? installCheck),
+  );
 }
+if (installCheck.digest !== digest) {
+  throw new Error("install-check digest does not match app check");
+}
+const compatibility = {
+  host:
+    typeof installCheck.compatibility?.host?.core === "string"
+      ? installCheck.compatibility.host.core
+      : null,
+  compatible: true,
+  ...(installCheck.compatibility?.contracts &&
+  typeof installCheck.compatibility.contracts === "object" &&
+  !Array.isArray(installCheck.compatibility.contracts)
+    ? { contracts: installCheck.compatibility.contracts }
+    : {}),
+};
 
 const files = {};
 for (const full of walk(APP_DIR).sort()) files[relative(APP_DIR, full)] = readFileSync(full, "utf8");
@@ -79,6 +89,7 @@ const entry = {
   source: { repo: REPO, commit: process.env.GITHUB_SHA, path: APP_DIR },
   artifact: { path: artifact, sha256: sha256(upload) },
   digest,
+  compatibility,
 };
 
 function applyTo(dir) {
