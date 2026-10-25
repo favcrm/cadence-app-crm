@@ -46,7 +46,13 @@ if (!digest || !version || !app || !check.title || !check.summary || !check.list
 // the two reports honest when both are supplied: the same bytes, the same
 // digest, and an explicit compatible result.
 const installCheckPath = process.env.APP_INSTALL_CHECK_JSON;
-if (installCheckPath) {
+if (!installCheckPath) {
+  throw new Error(
+    "install-check report is required; run `cadence app catalog install-check` " +
+      "against the target host before publishing",
+  );
+}
+{
   const installCheck = JSON.parse(readFileSync(installCheckPath, "utf8"));
   if (installCheck.error || installCheck.compatibility?.compatible !== true) {
     throw new Error(
