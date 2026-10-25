@@ -95,10 +95,12 @@ read tools `customers.search`, `customers.show`, segment list/show/preview/
 save, `segments.save_static`, `segments.delete`, campaign list/show/
 create_draft, `campaigns.apply`, `campaigns.discard`, `campaigns.approve`,
 `audiences.prepare`, `audiences.show`, `sends.list`, `sends.show`,
-`email.draft` and `customer.tags.update`) and two customer actions in
-`app-actions.json`: `crm.customer.create` (create, requires `display_name`;
-fields `email`, `phone`, `tags`, `source`) and `crm.customer.update` (partial
-update of `display_name`/`email`/`phone`/`tags`/`source`). The chat context
+`email.draft`, `customer.tags.update`, `customers.notes.list`,
+`customers.notes.create` and `customers.notes.delete`) and two customer
+actions in `app-actions.json`: `crm.customer.create` (create, requires
+`display_name`; fields `email`, `phone`, `tags`, `source`) and
+`crm.customer.update` (partial update of
+`display_name`/`email`/`phone`/`tags`/`source`). The chat context
 declarations in `app-chat.json` are unchanged from the installed 0.1.0
 contract. Both action files are checked by the host at install; the host owns
 storage, guards, approvals and every write. The host registry is authoritative:
@@ -120,7 +122,10 @@ Agent procedure:
    `campaigns.approve` pins the exact content revision and `audiences.prepare`
    freezes the audience. These are host-authorized internal actions; the
    host decides whether the current autonomy policy runs them directly.
-7. `sends.list` and `sends.show` are read-only. This bundle declares no send
+7. A note is plain text on the customer timeline: `customers.notes.create`
+   appends, `customers.notes.list` reads and `customers.notes.delete` soft-deletes.
+   A note never changes the profile digest, a segment or a frozen audience.
+8. `sends.list` and `sends.show` are read-only. This bundle declares no send
    or SMTP action; the final send remains the host operator's guarded action.
 
 Upload is not import or consent. There is no consent inference, no custom

@@ -301,7 +301,7 @@ export interface ActivityItem {
  *  literally), so word order can change per locale. English is unchanged. */
 export function activityItems(record: HostRecord, t: Translate = identity): ActivityItem[] {
   const consent = consentEntries(record);
-  return revisionEntries(record)
+  const revisions = revisionEntries(record)
     .map((rev) => {
       const here = consent.filter((c) => c.revision === rev.revision);
       const parts = here.map((c) => {
@@ -336,6 +336,13 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
       return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), at: rev.at, agent: rev.actor !== "operator" };
     })
     .reverse();
+  const notes: ActivityItem[] = (record.notes ?? []).map((note) => ({
+    key: `n:${note.id}`,
+    text: `${t("Note")}: ${note.body}`,
+    at: note.created,
+    agent: note.actor !== "operator",
+  }));
+  return [...notes, ...revisions].sort((a, b) => b.at - a.at);
 }
 
 /** Per-channel consent/suppression transitions; malformed entries are dropped. */

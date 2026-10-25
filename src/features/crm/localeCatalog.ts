@@ -146,6 +146,7 @@ export const zhTW: Record<string, string> = {
   "Host audience digest": "主機受眾摘要",
   "Can email": "可寄送電子郵件",
   "selected customers": "已選取的客戶",
+  "Note": "備註",
   "Static segments are edited by their member list": "靜態客群請透過成員清單編輯",
   "Selected customers": "已選取的客戶",
   "Segment rule": "客群規則",
