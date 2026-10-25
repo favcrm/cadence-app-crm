@@ -1,0 +1,58 @@
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      cadence_version:
+        description: "Cadence release to validate against (for example 0.2.6). Empty uses the latest release."
+        required: false
+        type: string
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Install the cadence CLI
+        env:
+          GH_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+          CADENCE_VERSION: ${{ inputs.cadence_version || vars.CADENCE_TARGET_VERSION }}
+        run: |
+          if [ -n "$CADENCE_VERSION" ]; then
+            tag="v${CADENCE_VERSION#v}"
+          else
+            tag=$(gh release view --repo favcrm/cadence --json tagName -q .tagName)
+          fi
+          version=${tag#v}
+          gh release download "$tag" --repo favcrm/cadence \
+            --pattern "cadence-v${version}-x86_64-linux.tar.gz" --output /tmp/cadence.tgz
+          mkdir -p /tmp/cadence-bin
+          tar -xzf /tmp/cadence.tgz -C /tmp/cadence-bin
+          bin=$(dirname "$(find /tmp/cadence-bin -name cadence -type f | head -1)")
+          chmod +x "$bin/cadence"
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: Validate the bundle
+        run: cadence app check app > /tmp/app-check.json
+      - name: Host install-check
+        run: |
+          set -euo pipefail
+          cadence issue init
+          STATE="$RUNNER_TEMP/cadence-state"
+          cadence daemon start --state-dir "$STATE" >/dev/null
+          trap 'cadence daemon stop --state-dir "$STATE" >/dev/null 2>&1 || true' EXIT
+          cadence app catalog install-check app --state-dir "$STATE" > /tmp/app-install-check.json
+      - name: Publish the release to the marketplace
+        env:
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+          APP_CHECK_JSON: /tmp/app-check.json
+          APP_INSTALL_CHECK_JSON: /tmp/app-install-check.json
+        run: node .github/scripts/publish.mjs
