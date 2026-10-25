@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 278197,
-      "sha256": "sha256:4608c303cf00862c08df0a9883e360ec9e6c2c80b63b8fabdf285d68669e168e"
+      "size": 289589,
+      "sha256": "sha256:f53ee42122cd97b0173a7e40bfd51e43b68f91c756fcf488cfd4e76fef39ee0d"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:424139249ac7efe971cf4234f2152fd42311e200b34e70d33f9a140cd30be368",
+    "source_digest": "sha256:67719867ebc1277c1d558ee9b8a0d230e0df7194683b153de60baad6a8bc2e65",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
@@ -69,6 +69,8 @@
     "sender-bindings.save",
     "content.test-prepare",
     "content.send-prepare",
+    "campaign-work.show",
+    "campaign-work.save",
     "sends.prepare",
     "sends.show",
     "sends.list",

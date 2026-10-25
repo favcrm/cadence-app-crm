@@ -73,3 +73,21 @@ before expansion. No installation, refresh or Native replacement is authorized
 by the development checks.
 
 The shared UI export now pins genuine committed candidate source in paired host draft PR #992, with its toolchain and archive bytes verified reproducibly. That source is not yet reviewed or approved for release; a release must verify its actual reviewed source rather than treat candidate provenance as approval. Native CRM stays available until the actual replacement and unchanged-host package update/rollback checks pass. Full CAD-811 backend domain/migration independence remains a separate unmet outcome; this UI extraction does not assert it is complete.
+
+## Campaign work pairing (CRM-12)
+
+The CRM screen now records campaign work metadata (assignee, assignment
+provenance, due date, lifecycle status, blocked reason) and derives the
+next decision from the existing readiness chain. `screens/crm/screens.json`
+declares `campaign-work.show` and `campaign-work.save`, and `app.md`
+requires the `crm-campaign-work` v1 host contract.
+
+Those declarations are a paired change. The current host's screenOperation
+registry and closed verb tables do not include the two operations, so an
+older HOST refuses this bundle at install (unknown requirement/operation)
+rather than mounting a screen whose work actions would be inert. Install
+the reviewed HOST first, then this APP; see
+[campaign-work-contract.md](campaign-work-contract.md) for the exact
+request/response shapes and the host work still required. Existing content,
+approval, audience, test-send and send behavior is unchanged, and the new
+metadata grants no send or approval authority.
