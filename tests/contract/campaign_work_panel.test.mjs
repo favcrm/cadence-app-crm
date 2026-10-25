@@ -110,6 +110,7 @@ function makeHost(initial) {
   let work = initial;
   let failure = null;
   let showFailure = null;
+  let held = null;
   let show = null;
   const view = () => show ?? {
     contract: domain.WORK_CONTRACT,
@@ -136,6 +137,11 @@ function makeHost(initial) {
       showFailure = null;
       return Promise.reject(error);
     }
+    if (verb === "campaign-work.show" && held !== null) {
+      const pending = held;
+      held = null;
+      return pending.promise;
+    }
     if (verb === "campaign-work.show") return Promise.resolve(view());
     if (verb === "campaign-work.save") {
       try {
@@ -161,6 +167,13 @@ function makeHost(initial) {
     setWork(next) { work = next; },
     failWith(error) { failure = error; },
     failNextShow(error) { showFailure = error; },
+    /** Hold the next show so the caller can land a winner in between. */
+    holdNextShow() {
+      let release;
+      const promise = new Promise((resolve) => { release = resolve; });
+      held = { promise };
+      return { release: () => release(view()) };
+    },
     replyWith(reply) { show = reply; },
   };
 }
@@ -323,6 +336,57 @@ test("a failed conflict re-read keeps the edits and the notice, and Retry preser
   expect(host.saves()).toHaveLength(2);
   expect(host.saves()[1].args).toEqual({ campaign_id: "welcome", expected_revision: 2, assignee: "Bea" });
   expect(host.work.dueAt).toBe("2026-12-15");
+});
+
+test("inputs stay locked while the conflict baseline is pending, so an edit cannot be overwritten", async () => {
+  const host = makeHost(domain.applyWorkWrite(
+    null,
+    { assignee: "Ada", dueAt: "2026-11-01", status: "in_progress" },
+    { actor: "owner", at: AT },
+    4,
+  ));
+  channelModule.channel.request = host.request;
+  const container = await mount();
+
+  await type(container, "Assigned to", "Bea");
+  host.setWork(domain.applyWorkWrite(host.work, { dueAt: "2026-12-15" }, { actor: "other", at: AT2 }, 4));
+  const pending = host.holdNextShow();
+  await submit(container);
+
+  // The save refused, its promise settled, and the re-read is still held:
+  // nothing is editable until the new baseline exists.
+  expect(host.saves()).toHaveLength(1);
+  for (const field of ["Assigned to", "Due date", "Status"]) {
+    expect(label(field)(container).disabled).toBe(true);
+  }
+  const save = () => [...container.querySelectorAll("button")].find((button) => button.textContent === "Save work");
+  expect(save().disabled).toBe(true);
+
+  await react.act(async () => { pending.release(); });
+  await settle();
+
+  // The operator's edit survives, the untouched field took the winner's
+  // value, the notice stays and nothing was written automatically.
+  expect(label("Assigned to")(container).value).toBe("Bea");
+  expect(label("Due date")(container).value).toBe("2026-12-15");
+  expect(label("Assigned to")(container).disabled).toBe(false);
+  const alerts = [...container.querySelectorAll("[role='alert']")].map((node) => node.textContent).join(" ");
+  expect(alerts).toContain("Current revision 2.");
+  expect(host.saves()).toHaveLength(1);
+
+  // Editing a newly available field after recovery sends it plus the
+  // retained assignee, against the new baseline.
+  await type(container, "Due date", "2026-12-20");
+  await submit(container);
+  expect(host.saves()).toHaveLength(2);
+  expect(host.saves()[1].args).toEqual({
+    campaign_id: "welcome",
+    expected_revision: 2,
+    assignee: "Bea",
+    due_at: "2026-12-20",
+  });
+  expect(host.work.dueAt).toBe("2026-12-20");
+  expect(host.work.assignee).toBe("Bea");
 });
 
 test("a failed read is an explicit alert for writable and read-only viewers, with recovery", async () => {

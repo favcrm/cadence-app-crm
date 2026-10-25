@@ -177,6 +177,10 @@ export default function CampaignWorkPanel({
 
   const work = view?.work ?? null;
   const decision = nextDecision(work, readinessFacts(readiness));
+  /** A field edit while the conflict re-read is outstanding would be
+   *  overwritten by the incoming baseline, so the controls stay locked
+   *  until the re-read has a baseline to edit against. */
+  const locked = saving || conflict?.revision === null;
   const statusOptions = [
     { value: "", label: t("Not set") },
     ...WORK_STATUSES.map((row) => ({ value: row.value, label: t(row.label) })),
@@ -239,32 +243,32 @@ export default function CampaignWorkPanel({
               <div className="crm-field-row">
                 <Field label={t("Assigned to")} className="crm-field">
                   {(c) => (
-                    <input {...c} className="field" value={assignee} maxLength={ASSIGNEE_MAX} autoComplete="off" disabled={saving} onChange={(event) => setAssignee(event.target.value)} />
+                    <input {...c} className="field" value={assignee} maxLength={ASSIGNEE_MAX} autoComplete="off" disabled={locked} onChange={(event) => setAssignee(event.target.value)} />
                   )}
                 </Field>
                 <Field label={t("Due date")} hint="YYYY-MM-DD" className="crm-field">
                   {(c) => (
-                    <input {...c} className="field" value={dueAt} maxLength={DUE_AT_LENGTH} inputMode="numeric" autoComplete="off" disabled={saving} onChange={(event) => setDueAt(event.target.value)} />
+                    <input {...c} className="field" value={dueAt} maxLength={DUE_AT_LENGTH} inputMode="numeric" autoComplete="off" disabled={locked} onChange={(event) => setDueAt(event.target.value)} />
                   )}
                 </Field>
               </div>
               <div className="crm-field-row">
                 <Field label={t("Status")} className="crm-field">
                   {(c) => (
-                    <Select id={c.id} value={status} onChange={setStatus} options={statusOptions} placeholder={t("Not set")} disabled={saving} full />
+                    <Select id={c.id} value={status} onChange={setStatus} options={statusOptions} placeholder={t("Not set")} disabled={locked} full />
                   )}
                 </Field>
                 {status === "blocked" && (
                   <Field label={t("Blocked reason")} className="crm-field">
                     {(c) => (
-                      <input {...c} className="field" value={blockedReason} maxLength={BLOCKED_REASON_MAX} autoComplete="off" disabled={saving} onChange={(event) => setBlockedReason(event.target.value)} />
+                      <input {...c} className="field" value={blockedReason} maxLength={BLOCKED_REASON_MAX} autoComplete="off" disabled={locked} onChange={(event) => setBlockedReason(event.target.value)} />
                     )}
                   </Field>
                 )}
               </div>
               {saveError !== null && <p className="text-label text-fail" role="alert">{t(saveError)}</p>}
               <div className="flex justify-end">
-                <Button type="submit" size="sm" variant="primary" loading={saving} disabled={saving || !dirty || conflict?.revision === null}>{t("Save work")}</Button>
+                <Button type="submit" size="sm" variant="primary" loading={saving} disabled={locked || !dirty}>{t("Save work")}</Button>
               </div>
             </form>
           )}

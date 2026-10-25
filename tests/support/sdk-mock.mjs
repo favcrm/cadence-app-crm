@@ -22,9 +22,9 @@ export function sdkMock() {
     const id = `field-${String(label).replace(/[^A-Za-z0-9]+/g, "-")}`;
     return createElement("div", null, createElement("label", { htmlFor: id }, label), hint ?? null, children({ id }));
   };
-  const Select = ({ id, value, onChange, options = [] }) => createElement(
+  const Select = ({ id, value, onChange, options = [], disabled }) => createElement(
     "select",
-    { id, value, onChange: (event) => onChange(event.target.value) },
+    { id, value, disabled, onChange: (event) => onChange(event.target.value) },
     options.map((option) => createElement("option", { key: option.value, value: option.value }, option.label)),
   );
   const LocaleTextProvider = ({ children }) => children;

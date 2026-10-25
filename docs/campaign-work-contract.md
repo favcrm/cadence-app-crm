@@ -209,7 +209,10 @@ The campaign-work panel applies the same rules to its own reads and writes:
   the current revision, and Save stays disabled until that re-read
   establishes the new baseline — so the next save carries only the
   operator's own change and cannot revert another writer (for example by
-  resending an old due date or reopening a completed campaign).
+  resending an old due date or reopening a completed campaign). While the
+  conflict re-read is outstanding every field and Save stay disabled: an
+  edit typed against the old baseline would otherwise be overwritten when
+  the winner's values land.
 - If the conflict re-read itself fails, the conflict notice and the
   operator's values both stay. **Retry** in that state performs an
   edit-preserving re-read, never the initial load that would seed the form
