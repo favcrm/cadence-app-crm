@@ -170,6 +170,13 @@ class RejectionGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(pkg.PackageError, "version"):
             pkg.parse_manifest(bad)
 
+    def test_manifest_listing_is_admitted(self):
+        text = APP_MD.replace(
+            "summary:", "listing:\n  tagline: A test app\n  category: other\nsummary:", 1
+        )
+        manifest = pkg.parse_manifest(text)
+        self.assertEqual(manifest.app, "crm")
+
     def test_manifest_unknown_key_refuses(self):
         bad = APP_MD.replace("summary:", "runtime:")
         with self.assertRaisesRegex(pkg.PackageError, "unknown"):

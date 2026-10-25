@@ -69,7 +69,7 @@ DESCRIPTOR_CONTRACTS = {
     "app-chat.json": "app-chat/v1",
 }
 TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens")
-MANIFEST_KEYS = ("app", "title", "version", "needs", "summary")
+MANIFEST_KEYS = ("app", "title", "version", "needs", "summary", "listing")
 GATED_KEYS = ("records", "actions", "ui", "settings", "actors")
 NEEDS_KEYS = ("connections", "capabilities", "views", "bindings", "requires")
 VIEW_CONTRACT = "app-views/v1"
@@ -259,6 +259,7 @@ def parse_manifest(text: str) -> Manifest:
     seen_fields: set[str] = set()
     seen_needs: set[str] = set()
     in_needs = False
+    in_listing = False
     # Indent of `needs:` children; `needs.views:`/`needs.bindings:` may
     # carry one nested `contract:` line deeper than that indent.
     needs_child_indent: int | None = None
@@ -273,6 +274,7 @@ def parse_manifest(text: str) -> Manifest:
         line = raw_line.strip()
         if not indented:
             in_needs = False
+            in_listing = False
             needs_sub = None
             if ":" not in line:
                 raise PackageError(
@@ -296,6 +298,12 @@ def parse_manifest(text: str) -> Manifest:
                     f"{MANIFEST} frontmatter key '{key}' is unknown — v0 knows "
                     f"{', '.join(MANIFEST_KEYS)}; anything else can never be installed"
                 )
+            if key == "listing":
+                # The host validates the listing shape; this offline
+                # checker only admits the top-level key and its nested
+                # display fields.
+                in_listing = True
+                continue
             if key == "needs":
                 # `needs:` holds a mapping — a null/empty/scalar value
                 # refuses like the host's `needs is a mapping` error.
@@ -315,6 +323,8 @@ def parse_manifest(text: str) -> Manifest:
             # Refuse the obvious non-string scalars here so the field
             # never pretends to be a string.
             _refuse_nonstring_scalar(key, fields[key])
+        elif in_listing:
+            continue
         elif in_needs:
             indent = len(raw_line) - len(raw_line.lstrip())
             if needs_child_indent is None:
