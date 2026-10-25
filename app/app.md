@@ -6,7 +6,7 @@ summary: Static and rule-based customer segments, scoped campaign content approv
 needs:
   connections: []
   requires:
-    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1]}
+    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1], crm-campaign-work: [1]}
 listing:
   tagline: Run customer records and campaigns with an agent you can audit
   category: customers
@@ -151,6 +151,39 @@ Agent procedure:
 
 Upload is not import or consent. There is no consent inference, no custom
 attributes and no sending from this app.
+
+## Campaign work metadata (CRM-12)
+
+A saved campaign carries app-owned work metadata beside its content: the
+assignee (the operator or agent name), who assigned it and when, a due
+date, a lifecycle status and a blocked reason. The record is versioned by
+its own revision, quoted as `expected_revision` on every write; the first
+write sends 0 and any other mismatch is refused as stale instead of
+overwriting a newer decision. Attribution is recorded by the source from
+the authenticated caller, never from bundle or request text. A campaign
+with no recorded row is *unassigned*: its content author is never treated
+as the owner, and an absent due date or status stays unset.
+
+The app computes `next_decision` from its existing send-readiness chain
+(content drafted, audience frozen and valid, live sender, accepted test)
+plus the recorded lifecycle — blocked and closed states win first. It is
+never stored, so the checklist and the decision cannot drift apart.
+
+`app/screens/crm/screens.json` declares two operations for this:
+`campaign-work.show` reads the recorded facts for one campaign, and
+`campaign-work.save` records assignment, due date, status and blocked
+reason. Neither grants approval, send or publish authority; the final
+test and send stay guarded host actions.
+
+The package requires the `crm-campaign-work` v1 host contract and
+declares it in `needs.requires.contracts`. That declaration is the source
+discovery key: a host finds campaign-work sources by this contract and
+the installation/context scope it already owns, not by branching on the
+app name `crm`. A host without the contract refuses this package instead
+of mounting a screen whose work operations would be inert; see
+`docs/campaign-work-contract.md` for the exact read/write request,
+response and refusal shapes.
+
 
 ## What a brief is, and is not
 

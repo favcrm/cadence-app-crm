@@ -38,7 +38,7 @@ const scripts=decl.assets.filter(a=>a.media_type==='text/javascript').map(a=>a.n
 if (decl.startup !== undefined && (!Array.isArray(decl.startup) || decl.startup.length<2 || decl.startup.length>32 || decl.startup.some(name=>typeof name!=='string') || new Set(decl.startup).size!==decl.startup.length || decl.startup.at(-1)!==decl.entry || decl.startup.length!==scripts.length || decl.startup.some(name=>!scripts.includes(name)))) fail('Startup must name every declared JavaScript asset once, entry last');
 if (JSON.stringify(decl.startup)!==JSON.stringify(['runtime.js','client.js'])) fail('CRM requires the ordered static framework/client partition');
 const manifest=decoder.decode(readFileSync(safePath(root,'app/app.md'))).split('\n---\n')[0];
-if (!/^    contracts: \{app-screens: \[1\], screen-records: \[1\], screen-startup: \[1\]\}$/m.test(manifest)) fail('CRM manifest must demand app-screens, screen-records and screen-startup v1');
+if (!/^    contracts: \{app-screens: \[1\], screen-records: \[1\], screen-startup: \[1\], crm-campaign-work: \[1\]\}$/m.test(manifest)) fail('CRM manifest must demand app-screens, screen-records, screen-startup and crm-campaign-work v1');
 const actual=files(out).map(p=>relative(out,p));
 if (actual.length !== names.size+1 || actual.some(p=>p !== 'screens.json' && !names.has(p))) fail('Unspecified screen assets');
 // Offline source audit, not a replacement for the real sandbox/CSP guard.
