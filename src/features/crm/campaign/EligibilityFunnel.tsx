@@ -1,12 +1,12 @@
-import { useTranslate } from "../locale";
+import { useLocale } from "../locale";
 import type { AudiencePreview } from "../segments/Segments";
 
 /**
- * Eligibility funnel (CAD-1055) over the host's existing audience
- * counts — no new wire. Each row is a count the host reported; the
- * final row is the host's own final count, never a figure derived
- * here. When nobody can be emailed, one plain-language line names the
- * biggest reason.
+ * One plain-language audience count (CAD-1055) over the host's existing
+ * audience preview — no new wire. The headline is the only number that
+ * decides anything; the exclusions are one quiet line so the reader can
+ * see why the count is not the whole base. Every figure the host
+ * reported is shown as reported; nothing is inferred here.
  */
 export function blockingReason(
   preview: AudiencePreview,
@@ -39,7 +39,7 @@ export default function EligibilityFunnel({
   error: string | null;
   onRetry: () => void;
 }) {
-  const t = useTranslate();
+  const { t, formatNumber } = useLocale();
   if (loading) {
     return (
       <p className="text-secondary text-ink-400" role="status">
@@ -59,34 +59,29 @@ export default function EligibilityFunnel({
   }
   if (preview === null) return null;
   const base = Math.max(preview.baseCount, 1);
-  const rows: { key: string; label: string; n: number; drop: boolean }[] = [
-    { key: "match", label: "Match this audience", n: preview.baseCount, drop: false },
-    ...(preview.exclusionCount > 0
-      ? [{ key: "exclusion", label: "On the exclusion list", n: preview.exclusionCount, drop: true }]
-      : []),
-    { key: "invalid", label: "No valid email address", n: preview.excluded.invalid, drop: true },
-    { key: "consent", label: "No email consent", n: preview.excluded.noConsent, drop: true },
-    { key: "unsub", label: "Unsubscribed", n: preview.excluded.unsubscribed, drop: true },
-    { key: "suppressed", label: "Suppressed", n: preview.excluded.suppressed, drop: true },
-    { key: "final", label: "Can be emailed", n: preview.finalCount, drop: false },
-  ];
+  const share = Math.min(100, Math.round((preview.finalCount / base) * 100));
+  const excluded: string[] = [];
+  if (preview.exclusionCount > 0) excluded.push(`${formatNumber(preview.exclusionCount)} ${t("on the exclusion list")}`);
+  if (preview.excluded.invalid > 0) excluded.push(`${formatNumber(preview.excluded.invalid)} ${t("no valid email address")}`);
+  if (preview.excluded.noConsent > 0) excluded.push(`${formatNumber(preview.excluded.noConsent)} ${t("no email consent")}`);
+  if (preview.excluded.unsubscribed > 0) excluded.push(`${formatNumber(preview.excluded.unsubscribed)} ${t("unsubscribed")}`);
+  if (preview.excluded.suppressed > 0) excluded.push(`${formatNumber(preview.excluded.suppressed)} ${t("suppressed")}`);
   const reason = blockingReason(preview, t);
   return (
-    <div className="grid gap-2" aria-label={t("Eligibility")} data-funnel>
-      <ul className="crm-funnel">
-        {rows.map((row) => (
-          <li key={row.key} data-step={row.key} data-drop={row.drop || undefined}>
-            <span>{t(row.label)}</span>
-            <span className="crm-funnel-bar" aria-hidden="true">
-              <i style={{ width: `${Math.min(100, Math.round((row.n / base) * 100))}%` }} />
-            </span>
-            <span className="num">
-              {row.drop && row.n > 0 ? "−" : ""}
-              {row.n}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <div className="grid gap-2" aria-label={t("Eligibility")} data-funnel data-final-count={preview.finalCount}>
+      <p className="text-label text-ink-100" role="status">
+        {t("{final} of {base} customers can be emailed")
+          .replace("{final}", () => formatNumber(preview.finalCount))
+          .replace("{base}", () => formatNumber(preview.baseCount))}
+      </p>
+      <span className="crm-funnel-bar" aria-hidden="true">
+        <i style={{ width: `${share}%` }} />
+      </span>
+      {excluded.length > 0 && (
+        <p className="text-micro text-ink-500" data-excluded-count={preview.baseCount - preview.finalCount}>
+          {t("Excluded:")} {excluded.join(" · ")}
+        </p>
+      )}
       {reason !== null && (
         <p className="text-label text-warn" role="status" data-blocked>
           {reason}

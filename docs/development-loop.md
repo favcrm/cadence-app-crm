@@ -30,8 +30,10 @@ The real app action buttons operate on browser-memory fixtures:
 - Segments: create, edit and duplicate rules; counts use the current local customers.
 - Campaigns: choose **Blank** or **Paste HTML**, edit/save revisions and clone
   drafts without copying live sender/audience state. Saving never creates an
-  approval; **Prepare send** approves the current revision, and the campaign UI
-  has no separate content-approval step.
+  approval; **Send N emails** approves the current revision when the send is
+  confirmed, and the campaign UI has no separate content-approval step. The
+  audience snapshot is frozen from the send panel, immediately before the send
+  it belongs to.
   Subject/preheader validation is shared with the real editor in both modes,
   including direct local saves; it is not host authorization.
 - **Reset local data** asks before discarding all local changes and the chat draft.

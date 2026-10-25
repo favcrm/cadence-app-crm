@@ -85,7 +85,9 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       label: "Audience frozen and still valid",
       done: freezeReason === null,
       reason: freezeReason,
-      fix: { kind: "tab", tab: "audience", label: "Fix" },
+      // The freeze action lives in the send panel, immediately before the
+      // send it belongs to; the Audience tab only counts the audience.
+      fix: { kind: "anchor", id: "cmp-final-send", label: "Fix" },
       checklist: false,
     },
     {
