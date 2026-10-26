@@ -1,13 +1,18 @@
-# AOS-376 / AOS-390: publish one CRM release as an immutable catalogue candidate.
+# AOS-376 / AOS-390 / AOS-384: publish one CRM release as an immutable
+# catalogue candidate.
 #
 # Tag-driven and OIDC-only. The catalogue binds this repository, this workflow
-# file and `refs/tags/v<version>` to the CRM app id, stores the bundle as a
-# draft, and refuses anything else. Publishing is not releasing: the candidate
-# becomes recommended only after the demo company's owner installs exactly it
-# and the platform records that result.
+# file and `refs/tags/v<version>` to the CRM app id, re-verifies the uploaded
+# bytes/digest/identity, and stores the bundle as a draft. Publishing is not
+# releasing: the candidate becomes recommended only after the demo company's
+# owner installs exactly it on a hosted host and the platform records that
+# result.
 #
-# The Cadence host used for qualification is an exact version, never "latest":
-# an unpinned qualification target can move between the check and the claim.
+# The pinned native CLI supplies the canonical bundle digest and inventory from
+# `app check`. A hosted-only package such as CRM 0.3.0 (`app-storage: [1]`) is
+# refused by the native validator; exit 3 with a digest/inventory report is
+# accepted as metadata only. No native install-check, daemon, compatibility
+# claim or `compatible: true` is part of a hosted candidate.
 name: publish
 
 on:
@@ -16,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       cadence_version:
-        description: "Exact Cadence release to qualify against, e.g. 0.2.6 (no 'latest')"
+        description: "Exact Cadence release whose checker contains app-storage grammar v2 (no 'latest')"
         required: false
         type: string
 
@@ -34,7 +39,12 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version: "22.23.2"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - name: Install locked publisher dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install the exact pinned Cadence CLI
         env:
@@ -56,24 +66,27 @@ jobs:
           bin=$(dirname "$(find /tmp/cadence-bin -name cadence -type f | head -1)")
           chmod +x "$bin/cadence"
           echo "$bin" >> "$GITHUB_PATH"
-          echo "Qualifying against Cadence ${version}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Canonical checker Cadence ${version}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate the bundle
-        run: cadence app check app > /tmp/app-check.json
-
-      - name: Host install-check
+      - name: Inspect the bundle for its canonical digest and inventory
         run: |
           set -euo pipefail
-          cadence issue init
-          STATE="$RUNNER_TEMP/cadence-state"
-          cadence daemon start --state-dir "$STATE" >/dev/null
-          trap 'cadence daemon stop --state-dir "$STATE" >/dev/null 2>&1 || true' EXIT
-          cadence app catalog install-check app --state-dir "$STATE" > /tmp/app-install-check.json
+          set +e
+          cadence app check app > /tmp/app-check.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then
+            echo "app check failed with exit ${status}" >&2
+            cat /tmp/app-check.json >&2 || true
+            exit 1
+          fi
+          if [ "$status" -eq 3 ]; then
+            echo "Native app check refused this hosted-only package; its digest/inventory are metadata only." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Publish the candidate to the catalogue
         env:
           APP_CHECK_JSON: /tmp/app-check.json
-          APP_INSTALL_CHECK_JSON: /tmp/app-install-check.json
           APP_DIR: app
           EXPECTED_REPOSITORY: favcrm/cadence-app-crm
         run: node .github/scripts/publish.mjs
