@@ -18,22 +18,38 @@ const APP_DIR = process.env.APP_DIR ?? "app";
 const UPLOAD_JSON = process.env.APP_UPLOAD_JSON ?? "";
 const EXPECTED_REPOSITORY = process.env.EXPECTED_REPOSITORY ?? "";
 const PUBLISH_URL =
-  process.env.CATALOGUE_PUBLISH_URL ?? "https://api-v2.agenticos.hk/public/apps/publish";
+  process.env.CATALOGUE_PUBLISH_URL ?? "https://api-v2.agenticos.hk/public/apps/candidates";
 
 function refuse(message) {
   console.error("publish refused: " + message);
   process.exit(1);
 }
 
+let destination;
+try {
+  destination = new URL(PUBLISH_URL);
+} catch {
+  refuse("a candidate endpoint URL is required");
+}
+if (
+  destination.protocol !== "https:" ||
+  destination.pathname !== "/public/apps/candidates" ||
+  destination.username ||
+  destination.password ||
+  destination.search ||
+  destination.hash
+)
+  refuse("only the HTTPS candidate endpoint is supported; legacy publication is unsafe");
+
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function bundleFiles(dir, out = {}) {
+function bundleFiles(dir, out = {}, root = dir) {
   for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) bundleFiles(full, out);
-    else out[relative(dir, full)] = readFileSync(full, "utf8");
+    if (statSync(full).isDirectory()) bundleFiles(full, out, root);
+    else out[relative(root, full)] = readFileSync(full, "utf8");
   }
   return out;
 }
@@ -70,7 +86,10 @@ const installCheck = readJson(
   "install-check report",
 );
 if (installCheck.error || installCheck.compatibility?.compatible !== true)
-  refuse("install-check did not pass: " + JSON.stringify(installCheck.error ?? installCheck.compatibility));
+  refuse(
+    "install-check did not pass: " +
+      JSON.stringify(installCheck.error ?? installCheck.compatibility),
+  );
 if (installCheck.digest !== digest) refuse("install-check digest does not match app check");
 
 const compatibility = {
@@ -131,6 +150,7 @@ if (typeof value !== "string" || value.length === 0) refuse("OIDC token request 
 
 const response = await fetch(PUBLISH_URL, {
   method: "POST",
+  redirect: "error",
   headers: { "content-type": "application/json", authorization: `Bearer ${value}` },
   body: JSON.stringify({ upload, entry }),
 });

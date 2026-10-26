@@ -56,3 +56,26 @@ Local fixture success is not installation, live API, domain/migration independen
 update/isolation/rollback or production evidence. Native host guards and sandbox contracts
 are unchanged. Use [packaging.md](docs/packaging.md) for packaging and
 [crm-ui-extraction.md](docs/crm-ui-extraction.md) for the shipped screen contract.
+
+## Release delivery
+
+The manifest's plain `X.Y.Z` version and matching `vX.Y.Z` tag identify an
+immutable app release. Source, catalogue publication and live installation are
+different states; a merged commit is not evidence of a deployed app.
+
+The `publish` workflow requires an exact `CADENCE_TARGET_VERSION` repository
+variable (or `cadence_version` input when dispatched on the release tag), runs
+package and host install checks, and uses GitHub OIDC to deliver a **draft**
+to `/public/apps/candidates`. There is no `latest` host fallback, long-lived
+catalogue PAT or Git/PR publisher fallback.
+
+Deploy the prepared AgenticOS candidate API before enabling this publisher.
+An old API or a configured legacy publication URL fails closed, before stable
+publication. The package's nested paths are preserved in its upload.
+
+The Demo owner then qualifies the exact candidate using AgenticOS's
+`tools/tenant-board/app-candidate.mjs` (`plan`, `release`, or observation-only
+`resume`). Owner CLI credentials stay outside publisher CI. Only an exact
+observed Demo install unlocks publication; other hosted tenants update through
+the consent-aware app fleet workflow. Nothing here rolls out the Cadence host
+or performs customer/provider actions.
