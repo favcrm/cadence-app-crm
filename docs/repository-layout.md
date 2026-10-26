@@ -5,16 +5,20 @@ Decision: use `cadence-app-<slug>` for separately versioned app repositories, be
 project convention, not a claim of an ecosystem-wide standard.
 
 `app/` is the deployable bundle root. The existing loader expects `app.md` and known bundle
-content such as `workflows/`, `rubrics/`, `views/app-views-v1.json` and
-`bindings/app-bindings-v1.json`. Do not add unsupported runtime, migration or action files
-and imply that the current host executes them. Declare descriptors/companions only when
-both package content and compatible host contracts have been validated.
+content such as `workflows/`, `rubrics/`, `views/app-views-v1.json`, `bindings/app-bindings-v1.json`
+and the bounded `screens/crm/` assets. A storage-bearing app additionally declares
+`needs.requires.contracts.app-storage: [1]` and carries `app-storage.json` with flat
+`storage/<tag>.json` migrations. Native Cadence has no app-storage execution runtime and
+refuses that requirement; only a hosted v2 runtime with the real adapter executes the plan.
+A packaging PASS validates member shape and exact migration hashes only — it does not prove
+schema execution, installation or update. Declare descriptors/companions only when both
+package content and compatible host contracts have been validated.
 
 `src/` contains app-specific source authored here; `tests/` separates unit, pinned-host
 contract, and lifecycle acceptance. `scripts/` packages validated release inputs into ignored
-`dist/`. Toolchain, domain execution mechanism, migration format and integrity envelope must
-be chosen through the CAD-811 boundary plan before implementation. No SDK or compatibility
-version is invented by this scaffold.
+`dist/`. The domain execution mechanism and migration format/integrity envelope are fixed by
+the AOS-384 app-storage/v1 contract documented in `docs/packaging.md`; changing them needs a
+new contract major. No SDK or compatibility version is invented by this scaffold.
 
 Shared visual components remain in Cadence. The app uses them through a versioned host
 contract; it must not vendor copies of the host sidebar, chat, Field, DataTable or drawers.

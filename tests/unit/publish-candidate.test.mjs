@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,12 +7,28 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const script = fileURLToPath(new URL("../../.github/scripts/publish.mjs", import.meta.url));
+
+const MANIFEST = [
+  "---",
+  "app: test-app",
+  "title: Synthetic",
+  "version: '1.2.3'",
+  "summary: Synthetic package",
+  "listing:",
+  "  tagline: Test",
+  "  category: customers",
+  "---",
+  "",
+  "Body.",
+  "",
+].join("\n");
+
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "app-publisher-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const files = {
-    "app.md": "synthetic manifest\n",
-    "screens/shared.md": "screen\n",
+    "app.md": MANIFEST,
+    "templates/shared.md": "template\n",
     "workflows/shared.md": "workflow\n",
   };
   for (const [path, content] of Object.entries(files)) {
@@ -21,29 +36,31 @@ function fixture(t) {
     writeFileSync(join(root, "app", path), content);
   }
   const digest = `sha256:${"a".repeat(64)}`;
-  writeFileSync(
-    join(root, "check.json"),
-    JSON.stringify({
-      ok: true,
-      name: "test-app",
-      version: "1.2.3",
-      title: "Synthetic",
-      summary: "Synthetic package",
-      listing: {},
-      digest,
-    }),
-  );
-  writeFileSync(
-    join(root, "install.json"),
-    JSON.stringify({ digest, compatibility: { compatible: true, host: { core: "0.0.1" } } }),
-  );
+  const inventory = Object.entries(files).map(([path, content]) => ({
+    path,
+    bytes: Buffer.byteLength(content, "utf8"),
+    cap: 262144,
+  }));
+  const report = {
+    ok: true,
+    check: "app-package/1",
+    name: "test-app",
+    version: "1.2.3",
+    title: "Synthetic",
+    summary: "Synthetic package",
+    listing: { tagline: "Test", category: "customers" },
+    digest,
+    files: inventory,
+    compatibility: { compatible: true, host: { core: "0.0.1" } },
+  };
+  const checkPath = join(root, "check.json");
+  writeFileSync(checkPath, JSON.stringify(report));
   const env = {
     ...process.env,
     DRY_RUN: "1",
     APP_DIR: "app",
     APP_UPLOAD_JSON: "",
-    APP_CHECK_JSON: join(root, "check.json"),
-    APP_INSTALL_CHECK_JSON: join(root, "install.json"),
+    APP_CHECK_JSON: checkPath,
     GITHUB_REF: "refs/tags/v1.2.3",
     GITHUB_REPOSITORY: "synthetic/app",
     EXPECTED_REPOSITORY: "synthetic/app",
@@ -51,22 +68,140 @@ function fixture(t) {
   delete env.CATALOGUE_PUBLISH_URL;
   return {
     files,
+    report,
+    checkPath,
     run: (extra = {}) =>
       spawnSync(process.execPath, [script], {
         cwd: root,
         env: { ...env, ...extra },
         encoding: "utf8",
       }),
+    writeReport: (report) => writeFileSync(checkPath, JSON.stringify(report)),
+    inspect: () =>
+      spawnSync("cadence", ["--state-dir", join(root, "inspection-state"), "app", "check", "app"], {
+        cwd: root,
+        env,
+        encoding: "utf8",
+      }),
+    writeUpload: (content) => {
+      const path = join(root, "upload.json");
+      writeFileSync(path, content);
+      return path;
+    },
+    writeManifest: (text) => writeFileSync(join(root, "app", "app.md"), text),
   };
 }
 
-test("nested package paths survive publication without basename collisions", (t) => {
+test("a supplied upload cannot replace the inspected members", (t) => {
+  const f = fixture(t);
+  const path = f.writeUpload(JSON.stringify({
+    files: { ...f.files, "app.md": MANIFEST + "Different bytes.\n" },
+  }));
+  assert.notEqual(f.run({ APP_UPLOAD_JSON: path }).status, 0);
+});
+
+test("a supplied upload preserves normalized nested members without imposing JSON whitespace", (t) => {
+  const f = fixture(t);
+  const path = f.writeUpload(JSON.stringify({ files: f.files }));
+  const result = f.run({ APP_UPLOAD_JSON: path });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test("duplicate upload keys cannot hide uninspected credential-bearing bytes", (t) => {
+  const f = fixture(t);
+  const credential = ["gh", "p_", "a".repeat(36)].join("");
+  const path = f.writeUpload(
+    `{"files":{"app.md":${JSON.stringify(credential)}},"files":${JSON.stringify(f.files)}}`,
+  );
+  const result = f.run({ APP_UPLOAD_JSON: path });
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout.includes(credential), false);
+  assert.equal(result.stderr.includes(credential), false);
+});
+
+test("a real native content refusal cannot publish credential-bearing members", (t) => {
+  const f = fixture(t);
+  const credential = ["gh", "p_", "a".repeat(36)].join("");
+  f.writeManifest(MANIFEST + credential + "\n");
+  const inspected = f.inspect();
+  assert.equal(inspected.status, 3, inspected.stderr);
+  const report = JSON.parse(inspected.stdout);
+  assert.equal(report.refusal.code, "app_check_content");
+  f.writeReport(report);
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout.includes(credential), false);
+  assert.equal(result.stderr.includes(credential), false);
+});
+
+test("publication fails closed when its independent credential scanner is unavailable", (t) => {
+  assert.notEqual(fixture(t).run({ PATH: "" }).status, 0);
+});
+
+test("a hosted-only native refusal publishes identity/listing from app.md without a compatibility claim", (t) => {
+  const f = fixture(t);
+  f.writeReport({
+    ok: false,
+    digest: f.report.digest,
+    files: f.report.files,
+    refusal: {
+      code: "app_check_content",
+      kind: "rejected",
+      message: "app is not installable — unsupported requirement app-storage: [1]",
+    },
+  });
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.entry.id, "test-app");
+  assert.equal(output.entry.app, "test-app");
+  assert.equal(output.entry.version, "1.2.3");
+  assert.equal(output.entry.title, "Synthetic");
+  assert.equal(output.entry.summary, "Synthetic package");
+  assert.deepEqual(output.entry.listing, { tagline: "Test", category: "customers" });
+  assert.equal(output.entry.digest, f.report.digest);
+  assert.equal(Object.hasOwn(output.entry, "compatibility"), false);
+  assert.equal(output.native.ok, false);
+  assert.equal(output.native.refusal, "app_check_content");
+});
+
+test("a passing native report still cannot invent a compatibility claim", (t) => {
   const f = fixture(t);
   const result = f.run();
   assert.equal(result.status, 0, result.stderr);
-  const expected = JSON.stringify({ files: f.files }, null, 2) + "\n";
-  const digest = createHash("sha256").update(expected).digest("hex");
-  assert.equal(JSON.parse(result.stdout).uploadSha256, digest);
+  const entry = JSON.parse(result.stdout).entry;
+  assert.equal(Object.hasOwn(entry, "compatibility"), false);
+});
+
+test("a refusal without inventory cannot publish", (t) => {
+  const f = fixture(t);
+  f.writeReport({
+    ok: false,
+    digest: f.report.digest,
+    refusal: { code: "app_check_content", kind: "rejected", message: "refused" },
+  });
+  assert.notEqual(f.run().status, 0);
+});
+
+test("malformed identity cannot publish", (t) => {
+  const f = fixture(t);
+  f.writeManifest("---\napp: test-app\nversion: '1.2.3'\n---\n");
+  assert.notEqual(f.run().status, 0);
+});
+
+test("a non-sha256 digest cannot publish", (t) => {
+  const f = fixture(t);
+  f.writeReport({ ...f.report, digest: "sha256:nothex" });
+  assert.notEqual(f.run().status, 0);
+});
+
+test("an inventory that does not describe the bundle cannot publish", (t) => {
+  const f = fixture(t);
+  f.writeReport({
+    ...f.report,
+    files: [...f.report.files, { path: "extra.md", bytes: 1, cap: 262144 }],
+  });
+  assert.notEqual(f.run().status, 0);
 });
 
 test("a configured legacy endpoint cannot publish stable before draft verification", (t) => {

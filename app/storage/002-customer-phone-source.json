@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": {"name": "phone", "type": "text", "nullable": true, "max_length": 24, "format": "phone"}
+    },
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": {"name": "source", "type": "text", "nullable": true, "max_length": 40, "format": "tag"}
+    },
+    {
+      "op": "create_index",
+      "table": "customers",
+      "name": "customers_phone",
+      "columns": ["phone"],
+      "unique": false
+    }
+  ]
+}

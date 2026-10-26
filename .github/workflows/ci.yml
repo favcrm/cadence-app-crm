@@ -121,6 +121,20 @@ jobs:
       - name: Install locked screen dependencies
         run: pnpm install --frozen-lockfile
 
+      # This released CLI qualifies the secret-scan API only, not grammar v2
+      # or native/hosted app-storage execution.
+      - name: Install exact credential-scanner test dependency
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            https://github.com/favcrm/cadence/releases/download/v0.3.2/cadence-v0.3.2-x86_64-linux.tar.gz \
+            --output "$RUNNER_TEMP/cadence-scanner.tgz"
+          printf '%s  %s\n' dbec4c57144a41d63265af205587ba052e979b74743976de4f61f38d6a0d28b6 "$RUNNER_TEMP/cadence-scanner.tgz" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/cadence-scanner"
+          tar -xzf "$RUNNER_TEMP/cadence-scanner.tgz" -C "$RUNNER_TEMP/cadence-scanner" cadence
+          chmod +x "$RUNNER_TEMP/cadence-scanner/cadence"
+          echo "$RUNNER_TEMP/cadence-scanner" >> "$GITHUB_PATH"
+
       - name: Screen typecheck
         run: pnpm run typecheck
 

@@ -89,9 +89,11 @@ function phoneShapeValid(phone: string): boolean {
 
 /**
  * Build the allowlisted `profile` value for create/update. Throws a
- * field-named ApiError on the first bad field. Consent is explicit by
- * construction: the form always sends the operator-visible choice,
- * defaulting to `unknown` — never inferred as granted.
+ * field-named ApiError on the first bad field. Blank optional fields are
+ * sent as explicit null so an update clears them (a PATCH never infers
+ * clearing from omission). Consent is explicit by construction: the form
+ * always sends the operator-visible choice, defaulting to `unknown` —
+ * never inferred as granted.
  */
 export function buildCustomerProfile(fields: CustomerFormFields): Record<string, unknown> {
   const displayName = fields.displayName;
@@ -124,10 +126,12 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
     display_name: displayName,
     tags,
     consent: { email: fields.consentEmail, sms: fields.consentSms },
+    // Explicit null, never omission: an update is a PATCH, so a blank
+    // field must clear the stored value instead of preserving it.
+    email: email !== "" ? email : null,
+    phone: phone !== "" ? phone : null,
+    source: source !== "" ? source : null,
   };
-  if (email !== "") profile.email = email;
-  if (phone !== "") profile.phone = phone;
-  if (source !== "") profile.source = source;
   return profile;
 }
 
@@ -345,8 +349,7 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
   return [...notes, ...revisions].sort((a, b) => b.at - a.at);
 }
 
-/** Per-channel consent/suppression transitions; malformed entries are dropped. */
-export function consentEntries(record: HostRecord): ConsentEntry[] {
+function explicitConsentEntries(record: HostRecord): ConsentEntry[] {
   if (!Array.isArray(record.consentHistory)) return [];
   const entries: ConsentEntry[] = [];
   for (const item of record.consentHistory) {
@@ -372,6 +375,69 @@ export function consentEntries(record: HostRecord): ConsentEntry[] {
     });
   }
   return entries.sort((a, b) => a.revision - b.revision);
+}
+
+/** The reported state for one channel in a generic before/after value map. */
+function genericConsentState(values: unknown, channel: "email" | "sms"): string | null {
+  if (values === null || typeof values !== "object") return null;
+  const consent = (values as Record<string, unknown>).consent;
+  if (consent === null || typeof consent !== "object") return null;
+  const value = (consent as Record<string, unknown>)[channel];
+  if (typeof value === "string") return value;
+  return value === null ? "unknown" : null;
+}
+
+/**
+ * Project the generic record journal into the consent timeline when the
+ * host reports no explicit consent_history. Provenance stays reported
+ * metadata, never proof of consent; the app never infers a grant.
+ */
+function genericConsentEntries(record: HostRecord): ConsentEntry[] {
+  if (!Array.isArray(record.history)) return [];
+  const entries: ConsentEntry[] = [];
+  for (const item of record.history) {
+    if (item === null || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (
+      typeof row.revision !== "number" ||
+      typeof row.actor !== "string" ||
+      typeof row.at !== "number" ||
+      row.after === null ||
+      typeof row.after !== "object"
+    ) {
+      continue;
+    }
+    const provenance =
+      row.provenance !== null && typeof row.provenance === "object"
+        ? (row.provenance as Record<string, unknown>)
+        : null;
+    const created = row.before === null || row.before === undefined;
+    for (const channel of ["email", "sms"] as const) {
+      const next = genericConsentState(row.after, channel);
+      if (next === null) continue; // this write carries no value for the channel
+      const previous = genericConsentState(row.before, channel) ?? "unknown";
+      if (!created && previous === next) continue;
+      entries.push({
+        revision: row.revision,
+        channel,
+        state: next,
+        actor: row.actor,
+        at: row.at,
+        ...(provenance && typeof provenance.method === "string" ? { method: provenance.method } : {}),
+        ...(provenance && typeof provenance.note === "string" ? { note: provenance.note } : {}),
+      });
+    }
+  }
+  return entries.sort((a, b) => a.revision - b.revision);
+}
+
+/** Per-channel consent/suppression transitions; malformed entries are dropped.
+ *  A real explicit `consent_history` wins; otherwise the generic journal is
+ *  projected (the host deliberately reports no derived consent semantics). */
+export function consentEntries(record: HostRecord): ConsentEntry[] {
+  const explicit = explicitConsentEntries(record);
+  if (explicit.length > 0) return explicit;
+  return genericConsentEntries(record);
 }
 
 /**

@@ -19,6 +19,13 @@ Scope and honesty notes:
   manifest frontmatter key allowlist. They run offline and do NOT
   reimplement workflow checks, the secret guard, slot cross-checks or
   descriptor parsing — a PASS here is not host validation.
+* AOS-384/CRM-13 adds the `app-storage/v1` member contract: the
+  `app-storage.json` root descriptor and flat `storage/<tag>.json`
+  migrations, checked against the exact declared raw-byte sha256 and a
+  pure logical model. That member is a newer-host lexical contract;
+  native Cadence has no app-storage execution runtime and refuses the
+  bundle, so this check never claims schema execution, migration,
+  installation or update.
 * The release archive installs through the *extracted bundle path*:
   extract to a private directory and run
   `cadence app install <extracted-bundle-dir> --project <key>`. The
@@ -61,14 +68,86 @@ from pathlib import Path, PurePosixPath
 MANIFEST = "app.md"
 # Exact root descriptor names the host admits beside app.md (CAD-1415
 # draft: app-actions.json, app-assistant.json; CRM-3: app-chat.json, the
-# installed 0.1.0 chat contract kept for upgrade). Byte/shape checks only.
-ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json", "app-chat.json")
+# installed 0.1.0 chat contract kept for upgrade; AOS-384/CRM-13:
+# app-storage.json, the app-owned logical schema descriptor). Byte/shape
+# checks only.
+ROOT_DESCRIPTORS = ("app-actions.json", "app-assistant.json", "app-chat.json", "app-storage.json")
 DESCRIPTOR_CONTRACTS = {
     "app-actions.json": "app-actions/v1",
     "app-assistant.json": "app-assistant/v1",
     "app-chat.json": "app-chat/v1",
+    "app-storage.json": "app-storage/v1",
 }
-TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens")
+TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens", "storage")
+STORAGE_DESCRIPTOR = "app-storage.json"
+STORAGE_DIR = "storage"
+STORAGE_CONTRACT = "app-storage/v1"
+# AOS-384 package member bounds. The host re-validates the same shape at
+# install; these offline bounds keep a hostile bundle from shipping a
+# migration whose declared hash/filename cannot be checked here.
+MAX_STORAGE_DESCRIPTOR_BYTES = 32 * 1024
+MAX_MIGRATION_BYTES = 64 * 1024
+MAX_STORAGE_BYTES = 256 * 1024
+MAX_MIGRATIONS = 128
+MAX_RECORD_BYTES = 256 * 1024
+MAX_STORAGE_TABLES = 64
+MAX_TABLE_COLUMNS = 64
+MAX_TABLE_INDEXES = 32
+MAX_MIGRATION_OPS = 128
+MAX_PLAN_OPS = 512
+STORAGE_IDENT_RE = re.compile(r"[a-z][a-z0-9_]{0,62}\Z")
+RECORD_KIND_RE = re.compile(r"[a-z][a-z0-9_-]{0,31}\Z")
+COLUMN_FORMATS = ("email", "phone", "tag")
+MAX_JSON_SCHEMA_BYTES = 8 * 1024
+MAX_JSON_SCHEMA_DEPTH = 8
+MAX_JSON_SCHEMA_NODES = 128
+STORAGE_PATH_RE = re.compile(r"storage/[a-z0-9][a-z0-9-]{0,31}\.json\Z")
+HOST_COLUMNS = ("id", "context_id", "revision", "created_at", "updated_at")
+COLUMN_TYPES = ("text", "integer", "real", "boolean", "json")
+STORAGE_DESCRIPTOR_KEYS = (
+    "contract",
+    "app",
+    "record_kind",
+    "schema_version",
+    "compatible_schema_versions",
+    "default_table",
+    "migrations",
+    "record_write_schema",
+    "record_search_columns",
+)
+OPTIONAL_DESCRIPTOR_KEYS = ("record_write_schema", "record_search_columns")
+MIGRATION_KEYS = ("version", "path", "sha256")
+COLUMN_KEYS = ("name", "type", "nullable", "default", "max_length", "enum", "format", "json_schema")
+JSON_SCHEMA_TYPES = ("object", "array", "string", "number", "integer", "boolean", "null")
+JSON_SCHEMA_SINGLE = ("items", "not", "if", "then", "else")
+JSON_SCHEMA_ARRAY = ("allOf", "anyOf", "oneOf")
+JSON_SCHEMA_KEYWORDS = (
+    "type",
+    "const",
+    "enum",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "minLength",
+    "maxLength",
+    "pattern",
+    "properties",
+    "required",
+    "additionalProperties",
+    "items",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "if",
+    "then",
+    "else",
+)
+
 MANIFEST_KEYS = ("app", "title", "version", "needs", "summary", "listing")
 GATED_KEYS = ("records", "actions", "ui", "settings", "actors")
 NEEDS_KEYS = ("connections", "capabilities", "views", "bindings", "requires")
@@ -559,16 +638,18 @@ def bundle_files(root: Path) -> list[str]:
                 files.append(name)
                 continue
             raise PackageError(
-                f"app source entry '{name}' — v0 knows app.md, workflows/, "
-                "rubrics/, templates/, views/, bindings/; everything else refuses"
+                f"app source entry '{name}' — this package tool admits app.md, the known "
+                "root descriptors, workflows/, rubrics/, templates/, "
+                "views/, bindings/, screens/ and storage/; everything else refuses"
             )
         if entry.is_dir(follow_symlinks=False):
             if name in TOP_DIRS:
                 dirs.append(name)
                 continue
             raise PackageError(
-                f"app source entry '{name}' — v0 knows app.md, workflows/, "
-                "rubrics/, templates/, views/, bindings/; everything else refuses"
+                f"app source entry '{name}' — this package tool admits app.md, the known "
+                "root descriptors, workflows/, rubrics/, templates/, "
+                "views/, bindings/, screens/ and storage/; everything else refuses"
             )
         raise PackageError(f"app source entry '{name}': not a regular file")
 
@@ -611,6 +692,12 @@ def bundle_files(root: Path) -> list[str]:
                 )
             if not entry.is_file(follow_symlinks=False):
                 raise PackageError(f"app source entry '{rel}': not a regular file")
+            if top == "storage":
+                if not name.endswith(".json") or not STORAGE_PATH_RE.fullmatch(rel):
+                    raise PackageError(
+                        f"app source entry '{rel}': storage holds flat "
+                        "`storage/<tag>.json` migration files only"
+                    )
             if top == "workflows":
                 if not name.endswith(".md"):
                     raise PackageError(
@@ -647,6 +734,10 @@ def screen_leaf(name: str) -> bool:
 
 
 def file_cap(rel: str) -> int:
+    if rel == STORAGE_DESCRIPTOR:
+        return MAX_STORAGE_DESCRIPTOR_BYTES
+    if rel.startswith(f"{STORAGE_DIR}/"):
+        return MAX_MIGRATION_BYTES
     if rel.startswith("screens/crm/") and rel.count("/") == 2:
         if rel == "screens/crm/screens.json":
             return 16384
@@ -709,6 +800,575 @@ def _check_utf8_name(name: str, where: str) -> None:
         raise PackageError(f"{where} carries a file name that is not UTF-8") from e
 
 
+def _storage_json(raw: bytes, where: str, rel: str) -> object:
+    """Decode one storage member; closed maps refuse duplicate keys."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise PackageError(f"{where}: {rel}: not UTF-8 text") from e
+
+    def closed(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate field {key}")
+            result[key] = value
+        return result
+
+    try:
+        return json.loads(text, object_pairs_hook=closed)
+    except ValueError as e:
+        raise PackageError(f"{where}: {rel}: not valid JSON — {e}") from e
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _is_scalar(value: object) -> bool:
+    return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _scalar_matches(value: object, ctype: str) -> bool:
+    if ctype == "text":
+        return isinstance(value, str)
+    if ctype == "integer":
+        return _is_int(value)
+    if ctype == "real":
+        return _is_number(value)
+    if ctype == "boolean":
+        return isinstance(value, bool)
+    return False
+
+
+def _enum_matches(value: object, enum: list) -> bool:
+    # Python equates True and 1; a boolean/digest enum entry must match type too.
+    return any(type(value) is type(item) and value == item for item in enum)
+
+
+def _storage_value_ok(value: object, column: dict, where: str, what: str) -> None:
+    """Typed default/value validation for a declared column."""
+    ctype = column["type"]
+    if ctype == "json":
+        # Parsed JSON is bounded serializable data by construction.
+        return
+    if value is None:
+        return
+    if not _scalar_matches(value, ctype):
+        raise PackageError(f"{where}: {what} does not match column type '{ctype}'")
+    cap = column.get("max_length")
+    if ctype == "text" and cap is not None and len(value) > cap:
+        raise PackageError(f"{where}: {what} exceeds max_length {cap}")
+    if "enum" in column and not _enum_matches(value, column["enum"]):
+        raise PackageError(f"{where}: {what} is not one of the declared enum values")
+
+
+def _storage_json_schema(schema: object, where: str, what: str) -> None:
+    """Bounded admission for a standard JSON Schema declaration.
+
+    This mirrors the supported subset's shape/bounds only — it never
+    evaluates a schema or coerces a value. Final keyword admission stays
+    with the host's app-storage validation module; a packaging PASS only
+    proves the declaration is a bounded JSON object/boolean.
+    """
+    if isinstance(schema, bool):
+        return
+    if not isinstance(schema, dict):
+        raise PackageError(f"{where}: {what} is a JSON Schema object or boolean")
+    try:
+        encoded = json.dumps(schema, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    except (TypeError, ValueError) as e:
+        raise PackageError(f"{where}: {what} is not serializable JSON — {e}") from e
+    if len(encoded) > MAX_JSON_SCHEMA_BYTES:
+        raise PackageError(
+            f"{where}: {what} exceeds {MAX_JSON_SCHEMA_BYTES} bytes"
+        )
+    nodes = 0
+
+    def walk(node: object, depth: int) -> None:
+        nonlocal nodes
+        if depth > MAX_JSON_SCHEMA_DEPTH:
+            raise PackageError(
+                f"{where}: {what} nests deeper than {MAX_JSON_SCHEMA_DEPTH}"
+            )
+        nodes += 1
+        if nodes > MAX_JSON_SCHEMA_NODES:
+            raise PackageError(
+                f"{where}: {what} exceeds {MAX_JSON_SCHEMA_NODES} schema nodes"
+            )
+        if isinstance(node, bool):
+            return
+        if not isinstance(node, dict):
+            raise PackageError(f"{where}: {what} has a non-schema value where a schema is required")
+        for key, value in node.items():
+            if key not in JSON_SCHEMA_KEYWORDS:
+                raise PackageError(
+                    f"{where}: {what} uses unsupported JSON Schema keyword {key!r}"
+                )
+            if key in JSON_SCHEMA_SINGLE:
+                walk(value, depth + 1)
+            elif key in JSON_SCHEMA_ARRAY:
+                if not isinstance(value, list) or not 1 <= len(value) <= 16:
+                    raise PackageError(
+                        f"{where}: {what} keyword {key!r} carries 1–16 schemas"
+                    )
+                for item in value:
+                    walk(item, depth + 1)
+            elif key == "properties":
+                if not isinstance(value, dict) or len(value) > 64:
+                    raise PackageError(
+                        f"{where}: {what} properties is an object of at most 64 schemas"
+                    )
+                for name, child in value.items():
+                    if (
+                        not isinstance(name, str)
+                        or len(name) > 64
+                        or any(ord(c) < 0x20 or ord(c) > 0x7E for c in name)
+                        or name in ("__proto__", "constructor", "prototype")
+                    ):
+                        raise PackageError(
+                            f"{where}: {what} has an unsupported property name"
+                        )
+                    walk(child, depth + 1)
+            elif key == "type":
+                if value not in JSON_SCHEMA_TYPES:
+                    raise PackageError(
+                        f"{where}: {what} type is one of {JSON_SCHEMA_TYPES}"
+                    )
+            elif key == "enum":
+                if (
+                    not isinstance(value, list)
+                    or not 1 <= len(value) <= 64
+                    or any(not _is_scalar(item) for item in value)
+                    or len({json.dumps(item, sort_keys=True) for item in value}) != len(value)
+                ):
+                    raise PackageError(
+                        f"{where}: {what} enum is 1–64 unique scalars"
+                    )
+            elif key == "const":
+                if not _is_scalar(value):
+                    raise PackageError(f"{where}: {what} const is a scalar")
+            elif key == "required":
+                if (
+                    not isinstance(value, list)
+                    or len(value) > 64
+                    or any(not isinstance(item, str) or len(item) > 64 for item in value)
+                ):
+                    raise PackageError(
+                        f"{where}: {what} required is at most 64 property names"
+                    )
+            elif key == "additionalProperties":
+                if isinstance(value, bool):
+                    pass
+                else:
+                    walk(value, depth + 1)
+            elif key in ("minItems", "maxItems", "minLength", "maxLength"):
+                if not _is_int(value) or value < 0:
+                    raise PackageError(f"{where}: {what} {key} is a non-negative integer")
+            elif key == "uniqueItems":
+                if not isinstance(value, bool):
+                    raise PackageError(f"{where}: {what} uniqueItems is a boolean")
+            elif key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"):
+                if not _is_number(value):
+                    raise PackageError(f"{where}: {what} {key} is a number")
+            elif key == "pattern":
+                if not isinstance(value, str) or len(value) > 256:
+                    raise PackageError(f"{where}: {what} pattern is a bounded string")
+        if "then" in node or "else" in node:
+            if "if" not in node:
+                raise PackageError(f"{where}: {what} then/else requires if")
+        if "if" in node and "then" not in node and "else" not in node:
+            raise PackageError(f"{where}: {what} if requires then or else")
+
+    walk(schema, 1)
+
+
+def _storage_column(column: object, where: str, table: str) -> dict:
+    """Validate one closed Column object; return it for the logical model."""
+    if not isinstance(column, dict):
+        raise PackageError(f"{where}: table '{table}' column is not an object")
+    unknown = set(column) - set(COLUMN_KEYS)
+    if unknown:
+        raise PackageError(
+            f"{where}: column has unknown field(s) {sorted(unknown)} — the column grammar is closed"
+        )
+    for key in ("name", "type", "nullable"):
+        if key not in column:
+            raise PackageError(f"{where}: every column declares name/type/nullable")
+    name = column["name"]
+    if not isinstance(name, str) or not STORAGE_IDENT_RE.fullmatch(name):
+        raise PackageError(f"{where}: column name is not a lowercase identifier")
+    if name in HOST_COLUMNS:
+        raise PackageError(
+            f"{where}: column '{name}' is host-owned and cannot be declared by an app"
+        )
+    ctype = column["type"]
+    if ctype not in COLUMN_TYPES:
+        raise PackageError(f"{where}: column '{name}' has unsupported type {ctype!r}")
+    if not isinstance(column["nullable"], bool):
+        raise PackageError(f"{where}: column '{name}' nullable is a boolean")
+    if "max_length" in column:
+        cap = column["max_length"]
+        if not _is_int(cap) or cap < 1 or ctype != "text":
+            raise PackageError(
+                f"{where}: column '{name}' max_length is a positive integer on a text column"
+            )
+    if "enum" in column:
+        enum = column["enum"]
+        if ctype == "json" or not isinstance(enum, list) or not 1 <= len(enum) <= 32:
+            raise PackageError(
+                f"{where}: column '{name}' enum is 1–32 scalar values on a scalar column"
+            )
+        seen = []
+        for item in enum:
+            if item is None or not _scalar_matches(item, ctype):
+                raise PackageError(
+                    f"{where}: column '{name}' enum entry does not match type '{ctype}'"
+                )
+            if _enum_matches(item, seen):
+                raise PackageError(f"{where}: column '{name}' enum repeats an entry")
+            seen.append(item)
+    if "default" in column:
+        value = column["default"]
+        if value is None and not column["nullable"]:
+            raise PackageError(
+                f"{where}: column '{name}' is non-null and cannot default to null"
+            )
+        _storage_value_ok(value, column, where, f"column '{name}' default")
+    if "format" in column:
+        if ctype != "text" or column["format"] not in COLUMN_FORMATS:
+            raise PackageError(
+                f"{where}: column '{name}' format is email, phone or tag on a text column"
+            )
+    if "json_schema" in column:
+        if ctype != "json":
+            raise PackageError(
+                f"{where}: column '{name}' json_schema applies to a json column"
+            )
+        _storage_json_schema(column["json_schema"], where, f"column '{name}' json_schema")
+    return column
+
+
+def _storage_apply_op(model: dict, op: object, where: str, migration: str) -> None:
+    """Accumulate one operation against the pure logical model."""
+    if not isinstance(op, dict):
+        raise PackageError(f"{where}: {migration}: operation is not an object")
+    kind = op.get("op")
+    if kind == "create_table":
+        if set(op) not in (
+            {"op", "table", "columns"},
+            {"op", "table", "columns", "record_bytes"},
+        ):
+            raise PackageError(
+                f"{where}: {migration}: create_table fields are closed "
+                "(op, table, columns, optional record_bytes)"
+            )
+        table = op["table"]
+        if not isinstance(table, str) or not STORAGE_IDENT_RE.fullmatch(table):
+            raise PackageError(f"{where}: {migration}: table name is not a lowercase identifier")
+        record_bytes = op.get("record_bytes")
+        if "record_bytes" in op and (
+            not _is_int(record_bytes) or not 1 <= record_bytes <= MAX_RECORD_BYTES
+        ):
+            raise PackageError(
+                f"{where}: {migration}: record_bytes is a positive integer at most "
+                f"{MAX_RECORD_BYTES} (the host absolute record limit)"
+            )
+        if table in model:
+            raise PackageError(f"{where}: {migration}: table '{table}' is declared twice")
+        if len(model) >= MAX_STORAGE_TABLES:
+            raise PackageError(f"{where}: {migration}: more than {MAX_STORAGE_TABLES} tables")
+        columns = op["columns"]
+        if not isinstance(columns, list) or len(columns) > MAX_TABLE_COLUMNS:
+            raise PackageError(
+                f"{where}: {migration}: table '{table}' carries more than "
+                f"{MAX_TABLE_COLUMNS} columns"
+            )
+        declared: dict[str, dict] = {}
+        for column in columns:
+            entry = _storage_column(column, where, table)
+            if entry["name"] in declared:
+                raise PackageError(
+                    f"{where}: {migration}: table '{table}' repeats column '{entry['name']}'"
+                )
+            declared[entry["name"]] = entry
+        model[table] = {
+            "columns": declared,
+            "indexes": {},
+            "record_bytes": record_bytes,
+        }
+        return
+    if kind == "add_column":
+        if set(op) != {"op", "table", "column"}:
+            raise PackageError(f"{where}: {migration}: add_column fields are closed")
+        table = op["table"]
+        target = model.get(table) if isinstance(table, str) else None
+        if target is None:
+            raise PackageError(f"{where}: {migration}: add_column names unknown table {table!r}")
+        entry = _storage_column(op["column"], where, table)
+        if entry["name"] in target["columns"]:
+            raise PackageError(
+                f"{where}: {migration}: table '{table}' already declares column '{entry['name']}'"
+            )
+        # The table may hold rows; a non-null additive column needs a
+        # compatible default or the migration cannot be applied safely.
+        if not entry["nullable"] and "default" not in entry:
+            raise PackageError(
+                f"{where}: {migration}: non-null added column '{entry['name']}' "
+                "needs an explicit default"
+            )
+        if len(target["columns"]) >= MAX_TABLE_COLUMNS:
+            raise PackageError(
+                f"{where}: {migration}: table '{table}' would exceed {MAX_TABLE_COLUMNS} columns"
+            )
+        target["columns"][entry["name"]] = entry
+        return
+    if kind == "create_index":
+        if set(op) != {"op", "table", "name", "columns", "unique"}:
+            raise PackageError(f"{where}: {migration}: create_index fields are closed")
+        table = op["table"]
+        target = model.get(table) if isinstance(table, str) else None
+        if target is None:
+            raise PackageError(f"{where}: {migration}: index names unknown table {table!r}")
+        name = op["name"]
+        if not isinstance(name, str) or not STORAGE_IDENT_RE.fullmatch(name):
+            raise PackageError(f"{where}: {migration}: index name is not a lowercase identifier")
+        if name in target["indexes"]:
+            raise PackageError(f"{where}: {migration}: table '{table}' repeats index '{name}'")
+        if not isinstance(op["unique"], bool):
+            raise PackageError(f"{where}: {migration}: index '{name}' unique is a boolean")
+        columns = op["columns"]
+        if not isinstance(columns, list) or not 1 <= len(columns) <= MAX_TABLE_COLUMNS:
+            raise PackageError(f"{where}: {migration}: index '{name}' carries 1–{MAX_TABLE_COLUMNS} columns")
+        seen: list[str] = []
+        for column in columns:
+            if not isinstance(column, str) or column not in target["columns"]:
+                raise PackageError(
+                    f"{where}: {migration}: index '{name}' names undeclared column {column!r}"
+                )
+            if column in seen:
+                raise PackageError(f"{where}: {migration}: index '{name}' repeats a column")
+            seen.append(column)
+        if len(target["indexes"]) >= MAX_TABLE_INDEXES:
+            raise PackageError(
+                f"{where}: {migration}: table '{table}' would exceed {MAX_TABLE_INDEXES} indexes"
+            )
+        target["indexes"][name] = {"columns": seen, "unique": op["unique"]}
+        return
+    if kind == "backfill":
+        if set(op) != {"op", "table", "column", "value", "only_null"}:
+            raise PackageError(f"{where}: {migration}: backfill fields are closed")
+        table = op["table"]
+        target = model.get(table) if isinstance(table, str) else None
+        if target is None:
+            raise PackageError(f"{where}: {migration}: backfill names unknown table {table!r}")
+        column = op["column"]
+        entry = target["columns"].get(column) if isinstance(column, str) else None
+        if entry is None:
+            raise PackageError(f"{where}: {migration}: backfill names undeclared column {column!r}")
+        if not isinstance(op["only_null"], bool):
+            raise PackageError(f"{where}: {migration}: backfill only_null is a boolean")
+        value = op["value"]
+        if value is not None and not _scalar_matches(value, entry["type"]) and entry["type"] != "json":
+            raise PackageError(f"{where}: {migration}: backfill value does not match '{column}'")
+        _storage_value_ok(value, entry, where, f"backfill value for '{column}'")
+        return
+    raise PackageError(f"{where}: {migration}: unknown storage operation {kind!r}")
+
+
+def _check_app_storage(
+    contents: list[tuple[str, bytes]], where: str, app: str | None = None
+) -> None:
+    """Validate the app-storage descriptor and its raw-byte-checksummed plan.
+
+    Mirrors the AOS-384 wire contract offline: closed descriptor/migration
+    objects, contiguous versions through `schema_version`, a declared
+    default table, and every migration file present with the exact
+    declared sha256. A PASS is member/grammar integrity only — it never
+    proves that a host executes the plan.
+    """
+    mapping = dict(contents)
+    storage_paths = sorted(rel for rel in mapping if rel.startswith(f"{STORAGE_DIR}/"))
+    if STORAGE_DESCRIPTOR not in mapping:
+        if storage_paths:
+            raise PackageError(
+                f"{where}: storage/ migration files exist without {STORAGE_DESCRIPTOR} — "
+                "an undeclared plan can never install"
+            )
+        return
+    raw = mapping[STORAGE_DESCRIPTOR]
+    if len(raw) > MAX_STORAGE_DESCRIPTOR_BYTES:
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} exceeds {MAX_STORAGE_DESCRIPTOR_BYTES} bytes"
+        )
+    doc = _storage_json(raw, where, STORAGE_DESCRIPTOR)
+    if not isinstance(doc, dict):
+        raise PackageError(f"{where}: {STORAGE_DESCRIPTOR} is not a JSON object")
+    unknown = set(doc) - set(STORAGE_DESCRIPTOR_KEYS)
+    missing = set(STORAGE_DESCRIPTOR_KEYS) - set(doc) - set(OPTIONAL_DESCRIPTOR_KEYS)
+    if unknown or missing:
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} fields are closed — "
+            f"expected {sorted(set(STORAGE_DESCRIPTOR_KEYS) - set(OPTIONAL_DESCRIPTOR_KEYS))} "
+            f"and optional {sorted(OPTIONAL_DESCRIPTOR_KEYS)}"
+        )
+    if doc["contract"] != STORAGE_CONTRACT:
+        raise PackageError(
+            f'{where}: {STORAGE_DESCRIPTOR} contract must be "{STORAGE_CONTRACT}"'
+        )
+    descriptor_app = doc["app"]
+    if not isinstance(descriptor_app, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", descriptor_app):
+        raise PackageError(f"{where}: {STORAGE_DESCRIPTOR} app is not a tag")
+    if app is not None and descriptor_app != app:
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} declares app '{descriptor_app}' but "
+            f"the manifest installs '{app}'"
+        )
+    record_kind = doc["record_kind"]
+    if not isinstance(record_kind, str) or not RECORD_KIND_RE.fullmatch(record_kind):
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} record_kind is a lowercase bounded identifier"
+        )
+    if "record_write_schema" in doc:
+        _storage_json_schema(
+            doc["record_write_schema"],
+            where,
+            f"{STORAGE_DESCRIPTOR} record_write_schema",
+        )
+    schema_version = doc["schema_version"]
+    if not _is_int(schema_version) or not 1 <= schema_version <= MAX_MIGRATIONS:
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} schema_version is a positive integer "
+            f"(at most {MAX_MIGRATIONS})"
+        )
+    compatible = doc["compatible_schema_versions"]
+    if (
+        not isinstance(compatible, list)
+        or not 1 <= len(compatible) <= 16
+        or any(not _is_int(v) or not 1 <= v <= schema_version for v in compatible)
+        or len(set(compatible)) != len(compatible)
+        or schema_version not in compatible
+    ):
+        raise PackageError(
+            f"{where}: compatible_schema_versions lists unique versions up to and "
+            "including schema_version"
+        )
+    default_table = doc["default_table"]
+    if not isinstance(default_table, str) or not STORAGE_IDENT_RE.fullmatch(default_table):
+        raise PackageError(f"{where}: {STORAGE_DESCRIPTOR} default_table is not a lowercase identifier")
+
+    migrations = doc["migrations"]
+    if not isinstance(migrations, list) or len(migrations) != schema_version:
+        raise PackageError(
+            f"{where}: migrations list one contiguous file per version 1..{schema_version}"
+        )
+    declared_paths: list[str] = []
+    model: dict[str, dict] = {}
+    total_ops = 0
+    total_bytes = 0
+    for expected_version, entry in enumerate(migrations, start=1):
+        if not isinstance(entry, dict) or set(entry) != set(MIGRATION_KEYS):
+            raise PackageError(
+                f"{where}: {STORAGE_DESCRIPTOR} migration entries are closed "
+                "(version, path, sha256)"
+            )
+        version = entry["version"]
+        path = entry["path"]
+        digest = entry["sha256"]
+        if version != expected_version or not _is_int(version):
+            raise PackageError(
+                f"{where}: migration versions must be contiguous 1..{schema_version}"
+            )
+        if not isinstance(path, str) or not STORAGE_PATH_RE.fullmatch(path):
+            raise PackageError(
+                f"{where}: migration path {path!r} is not `storage/<tag>.json`"
+            )
+        if path in declared_paths:
+            raise PackageError(f"{where}: migration path '{path}' is declared twice")
+        declared_paths.append(path)
+        if path not in mapping:
+            raise PackageError(
+                f"{where}: migration '{path}' is declared but missing from the bundle"
+            )
+        data = mapping[path]
+        if len(data) > MAX_MIGRATION_BYTES:
+            raise PackageError(f"{where}: {path} exceeds {MAX_MIGRATION_BYTES} bytes")
+        total_bytes += len(data)
+        if total_bytes > MAX_STORAGE_BYTES:
+            raise PackageError(
+                f"{where}: migration files exceed {MAX_STORAGE_BYTES} combined bytes"
+            )
+        if (
+            not isinstance(digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest)
+            or digest != f"sha256:{sha256_hex(data)}"
+        ):
+            raise PackageError(
+                f"{where}: {path}: declared sha256 does not match its exact bytes "
+                "— a missing or altered migration refuses packaging"
+            )
+        migration = _storage_json(data, where, path)
+        if not isinstance(migration, dict) or set(migration) != {"version", "operations"}:
+            raise PackageError(
+                f"{where}: {path}: a migration is a closed {{version, operations}} object"
+            )
+        if migration["version"] != version:
+            raise PackageError(f"{where}: {path}: declared and in-file version differ")
+        operations = migration["operations"]
+        if not isinstance(operations, list) or len(operations) > MAX_MIGRATION_OPS:
+            raise PackageError(
+                f"{where}: {path}: at most {MAX_MIGRATION_OPS} operations per migration"
+            )
+        total_ops += len(operations)
+        if total_ops > MAX_PLAN_OPS:
+            raise PackageError(
+                f"{where}: the plan carries more than {MAX_PLAN_OPS} operations"
+            )
+        for op in operations:
+            _storage_apply_op(model, op, where, path)
+
+    if sorted(declared_paths) != storage_paths:
+        extra = sorted(set(storage_paths) - set(declared_paths))
+        raise PackageError(
+            f"{where}: undeclared storage member(s) {extra} — every migration "
+            f"is named by {STORAGE_DESCRIPTOR}"
+        )
+    if default_table not in model:
+        raise PackageError(
+            f"{where}: default_table '{default_table}' is not declared by the migration plan"
+        )
+    if "record_search_columns" in doc:
+        search = doc["record_search_columns"]
+        target = model[default_table]["columns"]
+        if not isinstance(search, list) or not 1 <= len(search) <= MAX_TABLE_COLUMNS:
+            raise PackageError(
+                f"{where}: record_search_columns is 1–{MAX_TABLE_COLUMNS} logical column names"
+            )
+        seen: list[str] = []
+        for name in search:
+            if not isinstance(name, str) or not STORAGE_IDENT_RE.fullmatch(name):
+                raise PackageError(
+                    f"{where}: record_search_columns names must be lowercase identifiers"
+                )
+            column = target.get(name)
+            if column is None:
+                raise PackageError(
+                    f"{where}: record_search_columns names undeclared column {name!r} "
+                    f"on '{default_table}'"
+                )
+            if column["type"] not in ("text", "json"):
+                raise PackageError(
+                    f"{where}: record_search_columns column '{name}' must be text or json"
+                )
+            if name in seen:
+                raise PackageError(f"{where}: record_search_columns repeats column '{name}'")
+            seen.append(name)
+
+
 def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
     """Descriptor/companion files pair with their manifest declarations —
     either alone refuses, both directions, same as the host. `files` is
@@ -752,6 +1412,27 @@ def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
             f"{where}: bindings/{BINDINGS_FILE} is present but app.md never declares "
             "`needs.bindings.contract`"
         )
+    storage_declared = [majors for name, majors in manifest.requires if name == "app-storage"]
+    if storage_declared and storage_declared != [(1,)]:
+        raise PackageError(
+            f"{where}: needs.requires.contracts must declare app-storage: [1]"
+        )
+    if STORAGE_DESCRIPTOR in present and not storage_declared:
+        raise PackageError(
+            f"{where}: {STORAGE_DESCRIPTOR} is present but app.md never declares "
+            "`needs.requires.contracts.app-storage: [1]` — an undeclared storage "
+            "plan can never install"
+        )
+    if storage_declared and STORAGE_DESCRIPTOR not in present:
+        raise PackageError(
+            f"{where}: app.md requires app-storage: [1] but the bundle carries no "
+            f"{STORAGE_DESCRIPTOR} — the contract and the descriptor install together "
+            "or not at all"
+        )
+    if any(f.startswith(f"{STORAGE_DIR}/") for f in files) and STORAGE_DESCRIPTOR not in present:
+        raise PackageError(
+            f"{where}: {STORAGE_DIR}/ members are present without {STORAGE_DESCRIPTOR}"
+        )
 
 
 def _check_descriptor_json(rel: str, text: str, where: str) -> None:
@@ -768,7 +1449,9 @@ def _check_descriptor_json(rel: str, text: str, where: str) -> None:
         )
 
 
-def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
+def check_file_bytes(
+    contents: list[tuple[str, bytes]], where: str, app: str | None = None
+) -> None:
     """Aggregate size + all-files-UTF-8 over already shape-checked bytes.
 
     An A1 bundle is UTF-8 text only — the host refuses any non-UTF-8
@@ -776,6 +1459,8 @@ def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
     aggregate bound and decodes every file so a non-UTF-8 byte never
     reaches the manifest/guide stage. `contents` is the in-memory
     (relpath, bytes) list; never call this on unbounded untrusted input.
+    `app` is the manifest identity, when known, so the storage descriptor
+    cannot claim a different app.
     """
     check_screen_bytes(contents, where)
     total = 0
@@ -795,6 +1480,7 @@ def check_file_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
             ) from e
         if rel in DESCRIPTOR_CONTRACTS:
             _check_descriptor_json(rel, text, where)
+    _check_app_storage(contents, where, app)
 
 
 def read_manifest(root: Path, files: list[str] | None = None) -> Manifest:
@@ -882,7 +1568,9 @@ def write_zip(dest: Path, prefix: str, contents: list[tuple[str, bytes]]) -> Non
                 zf.writestr(info, data[member[len(prefix):]])
 
 
-def read_contents(root: Path, files: list[str]) -> list[tuple[str, bytes]]:
+def read_contents(
+    root: Path, files: list[str], app: str | None = None
+) -> list[tuple[str, bytes]]:
     contents = []
     for rel in files:
         path = root / rel
@@ -892,7 +1580,7 @@ def read_contents(root: Path, files: list[str]) -> list[tuple[str, bytes]]:
         contents.append((rel, data))
     # A1 bundles are UTF-8 text; enforce the aggregate bound and decode
     # every file — not just app.md — so a non-UTF-8 byte never ships.
-    check_file_bytes(contents, str(root))
+    check_file_bytes(contents, str(root), app)
     return contents
 
 
@@ -1141,8 +1829,6 @@ def verify_archive(archive: Path) -> dict:
 
     # Aggregate bound + every file is UTF-8 text (same as the source
     # path's check_file_bytes) — not just the manifest.
-    check_file_bytes(rel_bytes, archive.name)
-
     manifest_bytes = dict(members)[manifest_member]
     try:
         manifest_text = manifest_bytes.decode("utf-8")
@@ -1153,6 +1839,10 @@ def verify_archive(archive: Path) -> dict:
     except PackageError as e:
         raise PackageError(f"{archive.name}: {e}") from e
     _check_version_semver(manifest.version)
+    # Aggregate bound, UTF-8 text and the app-storage plan/hashes; the
+    # manifest identity is known here so a descriptor cannot claim
+    # another app.
+    check_file_bytes(rel_bytes, archive.name, manifest.app)
     # Descriptor/companion files pair with their manifest declarations —
     # the same both-ways check the source path runs.
     check_pairing(manifest, rels, archive.name)
@@ -1209,8 +1899,9 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
             raise PackageError(f"{archive_name}: screen files belong only under screens/crm/")
         if top not in TOP_DIRS:
             raise PackageError(
-                f"{archive_name}: member {rel} — v0 knows app.md, workflows/, "
-                "rubrics/, templates/, views/, bindings/; everything else refuses"
+                f"{archive_name}: member {rel} — this package tool admits app.md, the known "
+                "root descriptors, workflows/, rubrics/, templates/, "
+                "views/, bindings/, screens/ and storage/; everything else refuses"
             )
         if name.startswith("."):
             raise PackageError(f"{archive_name}: member {rel} is a dotfile")
@@ -1225,6 +1916,13 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
             raise PackageError(f"{archive_name}: views/ holds exactly {VIEWS_FILE}")
         if top == "bindings" and name != BINDINGS_FILE:
             raise PackageError(f"{archive_name}: bindings/ holds exactly {BINDINGS_FILE}")
+        if top == "storage" and (
+            not name.endswith(".json") or not STORAGE_PATH_RE.fullmatch(rel)
+        ):
+            raise PackageError(
+                f"{archive_name}: member {rel} — storage holds flat "
+                "`storage/<tag>.json` migration files only"
+            )
         files.append(rel)
     if not manifest:
         raise PackageError(f"{archive_name}: bundle root has no {MANIFEST}")
@@ -1259,8 +1957,9 @@ def _check_member_dir(drel: str, archive_name: str, prefix: str, full: str) -> N
         raise PackageError(f"{archive_name}: dot-directory {full} refuses")
     if top not in TOP_DIRS:
         raise PackageError(
-            f"{archive_name}: directory member {full} — v0 knows workflows/, "
-            "rubrics/, templates/, views/, bindings/ under the bundle root"
+            f"{archive_name}: directory member {full} — this package tool admits "
+            "workflows/, rubrics/, templates/, views/, bindings/, screens/ and "
+            "storage/ under the bundle root"
         )
 
 
@@ -1276,7 +1975,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     files = bundle_files(source)
     manifest = read_manifest(source)
     _check_version_semver(manifest.version)
-    contents = read_contents(source, files)
+    contents = read_contents(source, files, manifest.app)
 
     archive_name = f"{manifest.app}-{manifest.version}.{args.format}"
     prefix = f"{manifest.app}-{manifest.version}/"
@@ -1315,7 +2014,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     """Offline shape check of the bundle source — not host validation."""
     files = bundle_files(args.source)
     manifest = read_manifest(args.source)
-    read_contents(args.source, files)
+    read_contents(args.source, files, manifest.app)
     print(
         json.dumps(
             {

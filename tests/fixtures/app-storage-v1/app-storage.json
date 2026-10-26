@@ -1,0 +1,193 @@
+{
+  "contract": "app-storage/v1",
+  "app": "crm",
+  "record_kind": "customer",
+  "schema_version": 1,
+  "compatible_schema_versions": [
+    1
+  ],
+  "default_table": "customers",
+  "migrations": [
+    {
+      "version": 1,
+      "path": "storage/001-initial.json",
+      "sha256": "sha256:105d4a927c227f6c4292e82bb33a2317efa8d7887bdb6117b831a23681259783"
+    }
+  ],
+  "record_search_columns": ["display_name", "email", "tags"],
+  "record_write_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "operation",
+      "before",
+      "after",
+      "provenance"
+    ],
+    "properties": {
+      "operation": {
+        "enum": [
+          "create",
+          "update"
+        ]
+      },
+      "before": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "after": {
+        "type": "object"
+      },
+      "provenance": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "method"
+            ],
+            "properties": {
+              "method": {
+                "enum": [
+                  "in_person",
+                  "web_form",
+                  "written",
+                  "imported",
+                  "other"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 280
+              }
+            }
+          }
+        ]
+      }
+    },
+    "if": {
+      "anyOf": [
+        {
+          "required": [
+            "operation",
+            "after"
+          ],
+          "properties": {
+            "operation": {
+              "const": "update"
+            },
+            "before": {
+              "properties": {
+                "consent": {
+                  "properties": {
+                    "email": {
+                      "not": {
+                        "const": "granted"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "after": {
+              "required": [
+                "consent"
+              ],
+              "properties": {
+                "consent": {
+                  "required": [
+                    "email"
+                  ],
+                  "properties": {
+                    "email": {
+                      "const": "granted"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "after"
+          ],
+          "properties": {
+            "operation": {
+              "const": "update"
+            },
+            "before": {
+              "properties": {
+                "consent": {
+                  "properties": {
+                    "sms": {
+                      "not": {
+                        "const": "granted"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "after": {
+              "required": [
+                "consent"
+              ],
+              "properties": {
+                "consent": {
+                  "required": [
+                    "sms"
+                  ],
+                  "properties": {
+                    "sms": {
+                      "const": "granted"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "then": {
+      "required": [
+        "provenance"
+      ],
+      "properties": {
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "enum": [
+                "in_person",
+                "web_form",
+                "written",
+                "imported",
+                "other"
+              ]
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 280
+            }
+          }
+        }
+      }
+    }
+  }
+}
