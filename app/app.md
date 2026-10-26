@@ -1,12 +1,12 @@
 ---
 app: crm
 title: CRM
-version: '0.2.1'
+version: '0.3.0'
 summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
 needs:
   connections: []
   requires:
-    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1], crm-campaign-work: [1]}
+    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1], crm-campaign-work: [1], app-storage: [1]}
 listing:
   tagline: Run customer records and campaigns with an agent you can audit
   category: customers
@@ -39,8 +39,9 @@ the pinned host-owned screen UI SDK. Backend domain execution, scoped
 data authority, credential custody, approval controls and sends stay
 host-owned; the CAD-811 domain/migration extraction is not complete.
 
-The package requires `app-screens`, `screen-records` and `screen-startup`
-v1. Its declaration orders two static inline scripts: `runtime.js` contains
+The package requires `app-screens`, `screen-records`, `screen-startup`,
+`crm-campaign-work` and `app-storage` v1. Its declaration orders two
+static inline scripts: `runtime.js` contains
 the existing production React/ReactDOM/JSX implementation; `client.js` uses
 that same app-local instance. No parent runtime or network loader is used.
 Older hosts must refuse the unknown startup capability, not run a client
@@ -184,6 +185,61 @@ of mounting a screen whose work operations would be inert; see
 `docs/campaign-work-contract.md` for the exact read/write request,
 response and refusal shapes.
 
+
+## App-owned storage schema (0.3.0, AOS-384)
+
+This package owns its logical storage schema. `app-storage.json` declares
+`app-storage/v1` at `schema_version` 2 with two ordered migrations under
+`storage/`; each migration's `sha256` is the exact raw-byte digest of that
+file. A host refuses this package if a migration is missing or its bytes
+differ from the declared hash, and `needs.requires.contracts` must list
+`app-storage: [1]` for the descriptor to install at all. The descriptor
+also declares `record_kind: "customer"`, the records bridge kind (native
+`kind: customer`), so no host heuristic infers it from the app or table
+name.
+
+Schema v1 creates the app tables `customers`, `segments`, `campaigns` and
+`proposals` with the fields the current CRM uses, including the
+`proposals.campaign_id` relation, its index and a `synthetic` flag that
+keeps seeded legacy rows distinguishable. Schema v2 adds persisted,
+nullable `phone` and `source` columns to `customers` plus a
+`customers_phone` index. The accepted customer form already collects both
+values, so they travel through the existing `records.create`/
+`records.update` profile — this release adds no new bridge operation, wire
+field or screen design. `campaigns` and `proposals` declare the host
+absolute `record_bytes` budget (262144) so existing large content is not
+refused; other tables keep the generic 16 KiB record default. The
+host-owned `id`, `context_id`, `revision`,
+`created_at` and `updated_at` columns stay host-allocated and are never
+declared here.
+
+Credentials and effect authority stay out of app-owned tables. SMTP
+credentials, approval gates, audience-freeze and send authority and actual
+sends remain host-owned; this bundle declares no send or SMTP operation.
+
+Blank optional customer fields are sent as explicit `null`, so an update
+clears `email`, `phone` or `source` instead of preserving an older value.
+Columns carry `format`/`json_schema` declarations and the root
+`record_write_schema` declares that an update which moves either consent
+channel from not granted to granted must report provenance; the host
+validates these server-side, so browser shaping is not authority. The
+customer timeline uses an explicit `consent_history` when present and
+otherwise projects the generic before/after journal (with reported
+provenance), because the host reports no derived consent semantics.
+`record_search_columns` names the text/json columns the host generic
+search may use — `display_name`, `email`, `tags`, `phone` and `source` —
+so tag-only queries do not silently become name-only queries; the host
+resolves them through the declared schema, never by CRM table-name logic.
+
+Native Cadence has no app-storage execution runtime: a native host refuses
+the syntactically valid `app-storage: [1]` contract instead of installing
+this package, and a host older than the contract refuses the requirement
+and the `app-storage.json`/`storage/` members. Only a hosted v2 runtime
+with the real app-storage adapter can install and execute this schema. The
+packaging checks in this repository validate member shape and exact
+migration hashes; they do not prove schema execution, installation,
+migration or update. See `docs/packaging.md` for the schema-v1 staging
+recipe used to exercise a package-only v1 → v2 upgrade.
 
 ## What a brief is, and is not
 

@@ -40,7 +40,8 @@ See [development-loop.md](docs/development-loop.md) for behavior and limits.
 ## Ownership and shipping
 
 - `src/` owns CRM screens and typed bridge clients; shared controls come from the versioned SDK.
-- `app/` is the installable package, including generated screen assets and app declarations.
+- `app/` is the installable package, including generated screen assets, app declarations and
+  the app-owned `app-storage.json` + `storage/*.json` schema plan.
 - `dev/preview/` is local-only tooling; it is not a production host or part of the screen build.
 - `scripts/build_screen.mjs` and `scripts/verify_screen.mjs` retain the existing SDK/provenance and authority checks.
 - Cadence retains shell/chat, authenticated scope, persistence, credential custody, approvals and effects.

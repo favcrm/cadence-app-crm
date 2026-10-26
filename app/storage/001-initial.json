@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "customers",
+      "columns": [
+        {"name": "schema", "type": "integer", "nullable": false, "default": 1, "enum": [1]},
+        {"name": "display_name", "type": "text", "nullable": false, "max_length": 200},
+        {"name": "email", "type": "text", "nullable": true, "max_length": 254, "format": "email"},
+        {
+          "name": "tags",
+          "type": "json",
+          "nullable": false,
+          "default": [],
+          "json_schema": {
+            "type": "array",
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "^[A-Za-z0-9_-]{1,40}$"
+            }
+          }
+        },
+        {
+          "name": "consent",
+          "type": "json",
+          "nullable": false,
+          "default": {"email": "unknown", "sms": "unknown"},
+          "json_schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["email", "sms"],
+            "properties": {
+              "email": {"enum": ["granted", "denied", "unknown", null]},
+              "sms": {"enum": ["granted", "denied", "unknown", null]}
+            }
+          }
+        },
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_table",
+      "table": "segments",
+      "columns": [
+        {"name": "name", "type": "text", "nullable": false, "max_length": 80},
+        {"name": "predicates", "type": "json", "nullable": false, "default": []},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_table",
+      "table": "campaigns",
+      "record_bytes": 262144,
+      "columns": [
+        {"name": "name", "type": "text", "nullable": true, "max_length": 240},
+        {"name": "subject", "type": "text", "nullable": false, "max_length": 150},
+        {"name": "preheader", "type": "text", "nullable": false, "default": "", "max_length": 200},
+        {"name": "blocks", "type": "json", "nullable": false, "default": []},
+        {"name": "mode", "type": "text", "nullable": false, "default": "blocks", "enum": ["blocks", "html"]},
+        {"name": "html", "type": "text", "nullable": true},
+        {"name": "text_override", "type": "text", "nullable": true},
+        {"name": "draft_audience", "type": "json", "nullable": true},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_table",
+      "table": "proposals",
+      "record_bytes": 262144,
+      "columns": [
+        {"name": "campaign_id", "type": "text", "nullable": false, "max_length": 64},
+        {"name": "source_revision", "type": "integer", "nullable": false, "default": 0},
+        {"name": "subject", "type": "text", "nullable": false, "max_length": 150},
+        {"name": "preheader", "type": "text", "nullable": false, "default": "", "max_length": 200},
+        {"name": "blocks", "type": "json", "nullable": false, "default": []},
+        {"name": "state", "type": "text", "nullable": false, "default": "pending", "enum": ["pending", "applied", "discarded"]},
+        {"name": "actor", "type": "text", "nullable": false, "default": "operator", "max_length": 64},
+        {"name": "origin", "type": "text", "nullable": false, "default": "operator-direct"},
+        {"name": "assistant_receipt", "type": "json", "nullable": true},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "proposals",
+      "name": "proposals_campaign",
+      "columns": ["campaign_id"],
+      "unique": false
+    }
+  ]
+}

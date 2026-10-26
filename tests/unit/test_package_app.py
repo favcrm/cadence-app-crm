@@ -293,8 +293,9 @@ class ManifestMetadataTests(unittest.TestCase):
     def test_real_app_md_parses_declared_fields(self):
         manifest = pkg.parse_manifest((REPO / "app" / "app.md").read_text(encoding="utf-8"))
         self.assertEqual(manifest.app, "crm")
-        self.assertEqual(manifest.version, "0.2.1")
+        self.assertEqual(manifest.version, "0.3.0")
         self.assertEqual(manifest.title, "CRM")
+        self.assertIn(("app-storage", (1,)), manifest.requires)
         self.assertEqual(manifest.connections, ())
         self.assertIsNone(manifest.view_contract)
         self.assertIsNone(manifest.binding_contract)
@@ -428,7 +429,7 @@ class BuildAndExclusionTests(unittest.TestCase):
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
-            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "workflows", "rubrics", "templates", "views", "bindings", "screens"})
+            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "app-storage.json", "workflows", "rubrics", "templates", "views", "bindings", "screens", "storage"})
             self.assertFalse(any(p.startswith(".") for p in rel.split("/")))
         self.assertIn(f"{root}/app.md", names)
         self.assertIn(f"{root}/workflows/email-brief.md", names)
@@ -436,6 +437,14 @@ class BuildAndExclusionTests(unittest.TestCase):
         self.assertIn(f"{root}/app-actions.json", names)
         self.assertIn(f"{root}/app-assistant.json", names)
         self.assertIn(f"{root}/app-chat.json", names)
+        self.assertIn(f"{root}/app-storage.json", names)
+        self.assertEqual(
+            {n for n in names if n.startswith(f"{root}/storage/")},
+            {
+                f"{root}/storage/001-initial.json",
+                f"{root}/storage/002-customer-phone-source.json",
+            },
+        )
         self.assertEqual(
             {n for n in names if n.startswith(f"{root}/screens/")},
             {
@@ -451,7 +460,7 @@ class BuildAndExclusionTests(unittest.TestCase):
         result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
         self.assertEqual(result["app"], "crm")
         self.assertEqual(result["version"], REAL_APP_VERSION)
-        self.assertEqual(result["files"], 10)
+        self.assertEqual(result["files"], 13)
 
 
 class VerifyParityTests(unittest.TestCase):
@@ -600,7 +609,476 @@ class VerifyParityTests(unittest.TestCase):
         # The real built archive carries explicit dir entries with a
         # trailing slash — canonicalization must not reject it.
         result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
-        self.assertEqual(result["files"], 10)
+        self.assertEqual(result["files"], 13)
+
+
+STORAGE_APP_MD = APP_MD.replace(
+    "  connections: []",
+    "  connections: []\n  requires:\n    contracts: {app-storage: [1]}",
+)
+
+
+def create_customers_ops() -> list[dict]:
+    return [
+        {
+            "op": "create_table",
+            "table": "customers",
+            "columns": [{"name": "display_name", "type": "text", "nullable": False}],
+        }
+    ]
+
+
+def write_storage_bundle(
+    root: Path,
+    migrations: list[dict],
+    *,
+    manifest: str = STORAGE_APP_MD,
+    app: str = "crm",
+    descriptor_overrides: dict | None = None,
+) -> Path:
+    """Write a bundle whose descriptor hashes the migration bytes it wrote."""
+    bundle = make_bundle(root, manifest)
+    (bundle / "storage").mkdir(exist_ok=True)
+    entries = []
+    for index, doc in enumerate(migrations, 1):
+        data = (json.dumps(doc, indent=2) + "\n").encode("utf-8")
+        rel = f"storage/{index:03d}-migration.json"
+        (bundle / rel).write_bytes(data)
+        entries.append(
+            {
+                "version": index,
+                "path": rel,
+                "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
+            }
+        )
+    descriptor = {
+        "contract": "app-storage/v1",
+        "app": app,
+        "record_kind": "customer",
+        "schema_version": len(migrations),
+        "compatible_schema_versions": list(range(1, len(migrations) + 1)),
+        "default_table": "customers",
+        "migrations": entries,
+    }
+    descriptor.update(descriptor_overrides or {})
+    (bundle / "app-storage.json").write_text(
+        json.dumps(descriptor, indent=2) + "\n", encoding="utf-8"
+    )
+    return bundle
+
+
+class StorageContractTests(unittest.TestCase):
+    """AOS-384: the package owns its logical schema and refuses a missing
+    or altered migration hash. Offline grammar/integrity only — a PASS
+    here is not host execution or install evidence."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+
+    def read(self, bundle: Path):
+        files = pkg.bundle_files(bundle)
+        manifest = pkg.read_manifest(bundle, files)
+        return pkg.read_contents(bundle, files, manifest.app)
+
+    def test_real_plan_has_two_migrations(self):
+        files = pkg.bundle_files(REPO / "app")
+        manifest = pkg.read_manifest(REPO / "app", files)
+        contents = pkg.read_contents(REPO / "app", files, manifest.app)
+        self.assertIn("app-storage.json", dict(contents))
+        doc = json.loads((REPO / "app" / "app-storage.json").read_text(encoding="utf-8"))
+        self.assertEqual(doc["contract"], "app-storage/v1")
+        self.assertEqual(doc["app"], "crm")
+        self.assertEqual(doc["record_kind"], "customer")
+        self.assertEqual(doc["schema_version"], 2)
+        self.assertEqual(doc["compatible_schema_versions"], [1, 2])
+        self.assertEqual(doc["default_table"], "customers")
+        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2])
+        self.assertIsInstance(doc["record_write_schema"], dict)
+        self.assertIn("if", doc["record_write_schema"])
+        self.assertEqual(
+            doc["record_search_columns"],
+            ["display_name", "email", "tags", "phone", "source"],
+        )
+
+    def test_real_columns_declare_formats_and_schemas(self):
+        v1 = json.loads((REPO / "app" / "storage/001-initial.json").read_text(encoding="utf-8"))
+        customers = next(
+            op
+            for op in v1["operations"]
+            if op["op"] == "create_table" and op["table"] == "customers"
+        )
+        columns = {column["name"]: column for column in customers["columns"]}
+        self.assertEqual(columns["schema"]["type"], "integer")
+        self.assertEqual(columns["schema"]["default"], 1)
+        self.assertEqual(columns["schema"]["enum"], [1])
+        self.assertEqual(columns["email"]["format"], "email")
+        self.assertEqual(columns["tags"]["json_schema"]["maxItems"], 16)
+        self.assertEqual(columns["tags"]["json_schema"]["items"]["maxLength"], 40)
+        self.assertEqual(
+            columns["tags"]["json_schema"]["items"]["pattern"], "^[A-Za-z0-9_-]{1,40}$"
+        )
+        consent = columns["consent"]["json_schema"]
+        self.assertFalse(consent["additionalProperties"])
+        self.assertEqual(consent["required"], ["email", "sms"])
+        self.assertEqual(columns["consent"]["default"], {"email": "unknown", "sms": "unknown"})
+        v2 = json.loads(
+            (REPO / "app" / "storage/002-customer-phone-source.json").read_text(encoding="utf-8")
+        )
+        formats = {
+            op["column"]["name"]: op["column"].get("format")
+            for op in v2["operations"]
+            if op["op"] == "add_column"
+        }
+        self.assertEqual(formats, {"phone": "phone", "source": "tag"})
+
+    def test_unsupported_json_schema_keyword_refuses(self):
+        bundle = write_storage_bundle(
+            self.dir / "badschema", [{"version": 1, "operations": create_customers_ops()}]
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        doc["record_write_schema"] = {"$ref": "https://example.test/schema.json"}
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "unsupported JSON Schema keyword"):
+            self.read(bundle)
+
+    def test_column_format_and_json_schema_are_type_bound(self):
+        bundle = write_storage_bundle(
+            self.dir / "badcolumn",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "customers",
+                            "columns": [
+                                {
+                                    "name": "tags",
+                                    "type": "json",
+                                    "nullable": False,
+                                    "format": "tag",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "format"):
+            self.read(bundle)
+
+        bundle = write_storage_bundle(
+            self.dir / "badschemalocation",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "customers",
+                            "columns": [
+                                {
+                                    "name": "display_name",
+                                    "type": "text",
+                                    "nullable": False,
+                                    "json_schema": {"type": "string"},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "json_schema"):
+            self.read(bundle)
+
+    def test_v2_is_a_real_change_not_a_noop_bump(self):
+        v1 = json.loads((REPO / "app" / "storage/001-initial.json").read_text(encoding="utf-8"))
+        v2 = json.loads(
+            (REPO / "app" / "storage/002-customer-phone-source.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual([op["op"] for op in v2["operations"]], ["add_column", "add_column", "create_index"])
+        self.assertEqual(
+            {op["column"]["name"] for op in v2["operations"] if op["op"] == "add_column"},
+            {"phone", "source"},
+        )
+        self.assertEqual(v1["version"], 1)
+        self.assertEqual(v2["version"], 2)
+        create_tables = [op for op in v1["operations"] if op["op"] == "create_table"]
+        for op in create_tables:
+            self.assertTrue(
+                any(column["name"] == "synthetic" for column in op["columns"]),
+                msg=op["table"],
+            )
+        customers = next(op for op in create_tables if op["table"] == "customers")
+        self.assertEqual(
+            next(c for c in customers["columns"] if c["name"] == "display_name")["max_length"],
+            200,
+        )
+        self.assertNotIn("record_bytes", customers)
+        record_bytes = {op["table"]: op.get("record_bytes") for op in create_tables}
+        self.assertEqual(record_bytes["campaigns"], 262144)
+        self.assertEqual(record_bytes["proposals"], 262144)
+        proposal_states = [
+            column
+            for op in v1["operations"]
+            if op["op"] == "create_table" and op["table"] == "proposals"
+            for column in op["columns"]
+            if column["name"] == "state"
+        ]
+        self.assertEqual(proposal_states[0]["enum"], ["pending", "applied", "discarded"])
+
+    def test_altered_migration_bytes_refuse(self):
+        bundle = self.dir / "altered"
+        shutil.copytree(REPO / "app", bundle)
+        target = bundle / "storage" / "002-customer-phone-source.json"
+        target.write_bytes(target.read_bytes() + b" ")
+        with self.assertRaisesRegex(pkg.PackageError, "sha256"):
+            self.read(bundle)
+
+    def test_missing_migration_refuses(self):
+        bundle = self.dir / "missing"
+        shutil.copytree(REPO / "app", bundle)
+        (bundle / "storage" / "002-customer-phone-source.json").unlink()
+        with self.assertRaisesRegex(pkg.PackageError, "missing"):
+            self.read(bundle)
+
+    def test_undeclared_storage_member_refuses(self):
+        bundle = self.dir / "extra"
+        shutil.copytree(REPO / "app", bundle)
+        (bundle / "storage" / "009-extra.json").write_text(
+            '{"version": 9, "operations": []}\n', encoding="utf-8"
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "undeclared storage"):
+            self.read(bundle)
+
+    def test_descriptor_needs_explicit_contract_declaration(self):
+        bundle = write_storage_bundle(
+            self.dir / "undeclared", [{"version": 1, "operations": create_customers_ops()}],
+            manifest=APP_MD,
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "app-storage"):
+            pkg.read_manifest(bundle)
+
+    def test_contract_declaration_needs_descriptor(self):
+        bundle = make_bundle(self.dir / "nodescriptor", STORAGE_APP_MD)
+        with self.assertRaisesRegex(pkg.PackageError, "app-storage"):
+            pkg.read_manifest(bundle)
+
+    def test_descriptor_app_must_match_manifest(self):
+        bundle = write_storage_bundle(
+            self.dir / "wrongapp",
+            [{"version": 1, "operations": create_customers_ops()}],
+            app="other",
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "declares app"):
+            self.read(bundle)
+
+    def test_record_bytes_accepts_host_limit(self):
+        bundle = write_storage_bundle(
+            self.dir / "recordlimit",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "campaigns",
+                            "record_bytes": 262144,
+                            "columns": [
+                                {"name": "subject", "type": "text", "nullable": False}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            descriptor_overrides={"default_table": "campaigns"},
+        )
+        self.read(bundle)
+
+    def test_record_bytes_over_host_limit_refuses(self):
+        bundle = write_storage_bundle(
+            self.dir / "recordtoobig",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "customers",
+                            "record_bytes": 262145,
+                            "columns": [{"name": "display_name", "type": "text", "nullable": False}],
+                        }
+                    ],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "record_bytes"):
+            self.read(bundle)
+
+    def test_record_bytes_only_on_create_table(self):
+        bundle = write_storage_bundle(
+            self.dir / "recordmisplaced",
+            [
+                {"version": 1, "operations": create_customers_ops()},
+                {
+                    "version": 2,
+                    "operations": [
+                        {
+                            "op": "add_column",
+                            "table": "customers",
+                            "record_bytes": 1024,
+                            "column": {"name": "phone", "type": "text", "nullable": True},
+                        }
+                    ],
+                },
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "add_column fields are closed"):
+            self.read(bundle)
+
+    def test_record_kind_required_and_bounded(self):
+        bundle = write_storage_bundle(
+            self.dir / "nokind", [{"version": 1, "operations": create_customers_ops()}]
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        del doc["record_kind"]
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "record_kind"):
+            self.read(bundle)
+
+        bundle = write_storage_bundle(
+            self.dir / "badkind", [{"version": 1, "operations": create_customers_ops()}]
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        doc["record_kind"] = "Customer"
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "record_kind"):
+            self.read(bundle)
+
+    def test_record_search_columns_validate_against_default_table_plan(self):
+        bundle = write_storage_bundle(
+            self.dir / "badsearch", [{"version": 1, "operations": create_customers_ops()}]
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        doc["record_search_columns"] = ["missing"]
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "undeclared column"):
+            self.read(bundle)
+
+        bundle = write_storage_bundle(
+            self.dir / "searchtype",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "customers",
+                            "columns": [
+                                {"name": "display_name", "type": "text", "nullable": False},
+                                {"name": "score", "type": "integer", "nullable": False, "default": 0},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        doc["record_search_columns"] = ["score"]
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "text or json"):
+            self.read(bundle)
+
+        bundle = write_storage_bundle(
+            self.dir / "searchdup", [{"version": 1, "operations": create_customers_ops()}]
+        )
+        doc = json.loads((bundle / "app-storage.json").read_text(encoding="utf-8"))
+        doc["record_search_columns"] = ["display_name", "display_name"]
+        (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
+        with self.assertRaisesRegex(pkg.PackageError, "repeats column"):
+            self.read(bundle)
+
+    def test_unknown_operation_refuses(self):
+        bundle = write_storage_bundle(
+            self.dir / "unknown",
+            [{"version": 1, "operations": [{"op": "drop_table", "table": "customers"}]}],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "unknown storage operation"):
+            self.read(bundle)
+
+    def test_non_null_added_column_needs_default(self):
+        bundle = write_storage_bundle(
+            self.dir / "nodefault",
+            [
+                {"version": 1, "operations": create_customers_ops()},
+                {
+                    "version": 2,
+                    "operations": [
+                        {
+                            "op": "add_column",
+                            "table": "customers",
+                            "column": {"name": "phone", "type": "text", "nullable": False},
+                        }
+                    ],
+                },
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "explicit default"):
+            self.read(bundle)
+
+    def test_host_columns_cannot_be_declared(self):
+        bundle = write_storage_bundle(
+            self.dir / "hostcolumn",
+            [
+                {
+                    "version": 1,
+                    "operations": [
+                        {
+                            "op": "create_table",
+                            "table": "customers",
+                            "columns": [{"name": "id", "type": "text", "nullable": False}],
+                        }
+                    ],
+                }
+            ],
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "host-owned"):
+            self.read(bundle)
+
+    def test_non_contiguous_versions_refuse(self):
+        bundle = write_storage_bundle(
+            self.dir / "gap",
+            [{"version": 1, "operations": create_customers_ops()}],
+            descriptor_overrides={
+                "schema_version": 2,
+                "compatible_schema_versions": [1, 2],
+            },
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "contiguous"):
+            self.read(bundle)
+
+    def test_v1_fixture_is_exact_initial_migration(self):
+        fixture = REPO / "tests" / "fixtures" / "app-storage-v1"
+        contents = [
+            ("app-storage.json", (fixture / "app-storage.json").read_bytes()),
+            (
+                "storage/001-initial.json",
+                (fixture / "storage" / "001-initial.json").read_bytes(),
+            ),
+        ]
+        pkg._check_app_storage(contents, "fixture", "crm")
+        self.assertEqual(
+            (fixture / "storage" / "001-initial.json").read_bytes(),
+            (REPO / "app" / "storage" / "001-initial.json").read_bytes(),
+        )
+        doc = json.loads((fixture / "app-storage.json").read_text(encoding="utf-8"))
+        self.assertEqual(doc["record_kind"], "customer")
+        self.assertEqual(doc["record_search_columns"], ["display_name", "email", "tags"])
+        self.assertEqual(doc["schema_version"], 1)
+        self.assertEqual(len(doc["migrations"]), 1)
 
 
 class CleanRefusalTests(unittest.TestCase):

@@ -4,6 +4,10 @@
 Run with the qualified host executable and extracted B package. The ticket
 requires exact reserved filenames, ordinary-file confinement and no consent
 fields. Packaging integrity is not approval; this check is not lifecycle QA.
+CRM 0.3.0 also carries `app-storage.json` and `storage/*.json`, so the host
+must implement the newer storage member grammar; a native host without it
+refuses this bundle by design (manager-owned lane), and this check should be
+run only with a host that accepts the current package.
 """
 import argparse
 import importlib.util
@@ -46,7 +50,7 @@ def main():
     verified = package.verify_archive(args.archive.resolve())
     bundle_version = package.read_manifest(args.bundle.resolve()).version
     assert verified["app"] == "crm" and verified["version"] == bundle_version
-    assert verified["files"] == 10
+    assert verified["files"] == 13
     package.bundle_files(args.bundle.resolve())
     host_check(args.bundle.resolve(), 0)
 
