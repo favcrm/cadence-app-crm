@@ -293,7 +293,7 @@ class ManifestMetadataTests(unittest.TestCase):
     def test_real_app_md_parses_declared_fields(self):
         manifest = pkg.parse_manifest((REPO / "app" / "app.md").read_text(encoding="utf-8"))
         self.assertEqual(manifest.app, "crm")
-        self.assertEqual(manifest.version, "0.2.1")
+        self.assertEqual(manifest.version, "0.2.2")
         self.assertEqual(manifest.title, "CRM")
         self.assertEqual(manifest.connections, ())
         self.assertIsNone(manifest.view_contract)
