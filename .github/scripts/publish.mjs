@@ -15,10 +15,12 @@
 // compatibility or native-install success. Identity, title, summary and
 // listing are parsed from the actual `app.md` with the pinned complete YAML
 // parser, not from a second metadata file or a regex.
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, parseDocument } from "yaml";
 
 const APP_DIR = process.env.APP_DIR ?? "app";
 const UPLOAD_JSON = process.env.APP_UPLOAD_JSON ?? "";
@@ -208,6 +210,62 @@ const upload = UPLOAD_JSON
   ? readFileSync(resolve(UPLOAD_JSON), "utf8")
   : JSON.stringify({ files }, null, 2) + "\n";
 if (Buffer.byteLength(upload) > 4 * 1024 * 1024) refuse("upload.json exceeds 4 MiB");
+
+// Inspect the exact payload, not just APP_DIR. Duplicate/ignored JSON members
+// could otherwise transfer bytes that no validator saw.
+let payload;
+try {
+  payload = JSON.parse(upload);
+  const document = parseDocument(upload, { uniqueKeys: true });
+  if (document.errors.length !== 0 || document.warnings.length !== 0)
+    refuse("upload.json contains ambiguous keys");
+} catch {
+  refuse("upload.json is not unambiguous JSON");
+}
+if (
+  !payload ||
+  typeof payload !== "object" ||
+  Array.isArray(payload) ||
+  Object.keys(payload).length !== 1 ||
+  !payload.files ||
+  typeof payload.files !== "object" ||
+  Array.isArray(payload.files) ||
+  Object.keys(payload.files).length !== paths.length ||
+  paths.some((path) => payload.files[path] !== files[path])
+)
+  refuse("upload.json does not contain exactly the inspected bundle members");
+
+// A Native content refusal can also mean a blocked credential. Its stage code
+// is not a safety receipt. Scan every exact uploaded member independently,
+// before either diagnostics or OIDC, with no inherited operator allowlist.
+const scannerState = mkdtempSync(join(tmpdir(), "crm-publish-secrets-"));
+let scanFailure = null;
+try {
+  for (const path of paths) {
+    const scan = spawnSync("cadence", ["--state-dir", scannerState, "secret", "scan"], {
+      input: payload.files[path],
+      encoding: "utf8",
+      timeout: 30_000,
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    let report = null;
+    try {
+      report = JSON.parse(scan.stdout ?? "");
+    } catch {
+      // A missing or malformed receipt never authorizes publication.
+    }
+    if (scan.status !== 0 || report?.blocking !== 0) {
+      scanFailure =
+        Number.isSafeInteger(report?.blocking) && report.blocking > 0
+          ? `credential-shaped text found in ${path}`
+          : `credential scanner unavailable or invalid for ${path}`;
+      break;
+    }
+  }
+} finally {
+  rmSync(scannerState, { recursive: true, force: true });
+}
+if (scanFailure !== null) refuse(scanFailure);
 const uploadSha256 = sha256(upload);
 
 const artifact = `marketplace/releases/${app}/${version}/upload.json`;

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,7 +28,7 @@ function fixture(t) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const files = {
     "app.md": MANIFEST,
-    "screens/shared.md": "screen\n",
+    "templates/shared.md": "template\n",
     "workflows/shared.md": "workflow\n",
   };
   for (const [path, content] of Object.entries(files)) {
@@ -78,17 +77,65 @@ function fixture(t) {
         encoding: "utf8",
       }),
     writeReport: (report) => writeFileSync(checkPath, JSON.stringify(report)),
+    inspect: () =>
+      spawnSync("cadence", ["--state-dir", join(root, "inspection-state"), "app", "check", "app"], {
+        cwd: root,
+        env,
+        encoding: "utf8",
+      }),
+    writeUpload: (content) => {
+      const path = join(root, "upload.json");
+      writeFileSync(path, content);
+      return path;
+    },
     writeManifest: (text) => writeFileSync(join(root, "app", "app.md"), text),
   };
 }
 
-test("nested package paths survive publication without basename collisions", (t) => {
+test("a supplied upload cannot replace the inspected members", (t) => {
   const f = fixture(t);
-  const result = f.run();
+  const path = f.writeUpload(JSON.stringify({
+    files: { ...f.files, "app.md": MANIFEST + "Different bytes.\n" },
+  }));
+  assert.notEqual(f.run({ APP_UPLOAD_JSON: path }).status, 0);
+});
+
+test("a supplied upload preserves normalized nested members without imposing JSON whitespace", (t) => {
+  const f = fixture(t);
+  const path = f.writeUpload(JSON.stringify({ files: f.files }));
+  const result = f.run({ APP_UPLOAD_JSON: path });
   assert.equal(result.status, 0, result.stderr);
-  const expected = JSON.stringify({ files: f.files }, null, 2) + "\n";
-  const digest = createHash("sha256").update(expected).digest("hex");
-  assert.equal(JSON.parse(result.stdout).uploadSha256, digest);
+});
+
+test("duplicate upload keys cannot hide uninspected credential-bearing bytes", (t) => {
+  const f = fixture(t);
+  const credential = ["gh", "p_", "a".repeat(36)].join("");
+  const path = f.writeUpload(
+    `{"files":{"app.md":${JSON.stringify(credential)}},"files":${JSON.stringify(f.files)}}`,
+  );
+  const result = f.run({ APP_UPLOAD_JSON: path });
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout.includes(credential), false);
+  assert.equal(result.stderr.includes(credential), false);
+});
+
+test("a real native content refusal cannot publish credential-bearing members", (t) => {
+  const f = fixture(t);
+  const credential = ["gh", "p_", "a".repeat(36)].join("");
+  f.writeManifest(MANIFEST + credential + "\n");
+  const inspected = f.inspect();
+  assert.equal(inspected.status, 3, inspected.stderr);
+  const report = JSON.parse(inspected.stdout);
+  assert.equal(report.refusal.code, "app_check_content");
+  f.writeReport(report);
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout.includes(credential), false);
+  assert.equal(result.stderr.includes(credential), false);
+});
+
+test("publication fails closed when its independent credential scanner is unavailable", (t) => {
+  assert.notEqual(fixture(t).run({ PATH: "" }).status, 0);
 });
 
 test("a hosted-only native refusal publishes identity/listing from app.md without a compatibility claim", (t) => {

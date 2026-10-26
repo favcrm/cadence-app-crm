@@ -81,7 +81,7 @@ jobs:
             exit 1
           fi
           if [ "$status" -eq 3 ]; then
-            echo "Native app check refused this hosted-only package; its digest/inventory are metadata only." >> "$GITHUB_STEP_SUMMARY"
+            echo "Native content admission refused; digest/inventory alone prove neither safety nor compatibility. The publisher independently scans the exact uploaded members." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Publish the candidate to the catalogue

@@ -75,6 +75,14 @@ metadata file. There is no native install-check or daemon step, no
 `compatible: true` claim, no `latest` fallback, no long-lived catalogue PAT and
 no Git/PR publisher fallback.
 
+That content-refusal code also wraps blocked credentials; it is not a safety
+receipt. Before diagnostics or OIDC, the publisher independently runs the real
+`cadence secret scan` on every exact uploaded member with isolated temporary
+state and no inherited operator allowlist. Missing tools, invalid receipts,
+scanner errors and blocking findings fail closed, including `DRY_RUN=1`.
+`APP_UPLOAD_JSON` must contain exactly the inspected files and bytes:
+duplicate keys, ignored fields and substitutions refuse before upload.
+
 The catalogue re-verifies the uploaded bytes, canonical digest and identity
 before storing an immutable **draft** at `/public/apps/candidates`. Deploy the
 prepared AgenticOS candidate API first; an old API or a configured legacy
@@ -91,6 +99,9 @@ observed Demo install unlocks publication; other hosted tenants update through
 the consent-aware app fleet workflow. Nothing here rolls out the Cadence host,
 performs customer/provider actions or Live Publishes today.
 
-Package CI also runs `node --test tests/unit/publish-candidate.test.mjs` for
-the publisher's immutable-path, endpoint, hosted-only-metadata and
-release-identity checks.
+Package CI also runs `node --test tests/unit/publish-candidate.test.mjs` with a
+checksum-pinned released Cadence v0.3.2 scanner for real credential rejection,
+upload binding, endpoint, hosted-only metadata and release-identity checks.
+Local publisher tests need the real CLI on `PATH`; no fake scanner is used.
+The v0.3.2 scanner pin does not qualify storage: actual publication still needs
+an exact released checker containing grammar v2 and the target hosted runtime.
