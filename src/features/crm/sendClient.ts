@@ -1,5 +1,6 @@
 import { ApiError } from "@cadence/screen-ui";
-import { serviceCall,serviceSlot } from "../../bridge/services";
+import { serviceCall,serviceSlot,type Base } from "../../bridge/services";
+import type { AudienceBaseInput } from "./audienceClient";
 import { type HostScope } from "./hostActions";
 import { APPROVAL_REQUIRED_TEXT,hostErrorText,isApprovalRequired } from "./hostErrors";
 
@@ -333,7 +334,19 @@ export const sendClient = {
   smtpRebind: (scope: SendScope): Promise<unknown> => serviceSlot(scope, "smtp.rebind", {}),
   smtpRevoke: (scope: SendScope): Promise<unknown> => serviceSlot(scope, "smtp.revoke", {}),
   smtpTestSend: (scope: SendScope, campaignId: string): Promise<unknown> => serviceSlot(scope, "smtp.test-send", { campaign_id: campaignId }),
-  sendPrepare: (scope: SendScope, campaignId: string, audienceFreezeId: string, requestId: string): Promise<unknown> => serviceCall(scope, "sends.prepare", { campaign_id: campaignId, audience_freeze_id: audienceFreezeId, request_id: requestId }),
+  sendPrepare: (scope: SendScope, campaignId: string, audienceFreezeId: string, requestId: string, selection?: SendSelection): Promise<unknown> =>
+    serviceCall(scope, "sends.prepare", {
+      campaign_id: campaignId,
+      audience_freeze_id: audienceFreezeId,
+      request_id: requestId,
+      ...(selection
+        ? {
+            base: wireBase(selection.base),
+            max_recipients: selection.maxRecipients,
+            ...(selection.exclusionListId ? { exclusion_list_id: selection.exclusionListId } : {}),
+          }
+        : {}),
+    }),
   sendApprove: (scope: SendScope, sendId: string): Promise<unknown> => serviceSlot(scope, "sends.approve", { send_id: sendId }).then(() => serviceCall(scope, "sends.show", { send_id: sendId })),
   sendResolve: (scope: SendScope, sendId: string, customerId: string): Promise<unknown> => serviceSlot(scope, "sends.resolve", { send_id: sendId, customer_id: customerId }),
   sendShow: (scope: SendScope, sendId: string): Promise<unknown> => serviceCall(scope, "sends.show", { send_id: sendId }),
@@ -341,6 +354,20 @@ export const sendClient = {
   sendOriginShow: (scope: SendScope): Promise<unknown> => serviceCall(scope, "origin.show", {}),
   sendOriginManage: (scope: SendScope): Promise<unknown> => serviceSlot(scope, "origin.manage", {}),
 };
+
+/** CAD-1836: the audience the send freezes as part of its one approval. */
+export interface SendSelection {
+  base: AudienceBaseInput;
+  exclusionListId: string | null;
+  maxRecipients: number;
+}
+
+/** The screen's camelCase pick as the host's snake_case base. */
+function wireBase(base: AudienceBaseInput): Base {
+  if (base.mode === "segment") return { mode: "segment", segment_id: base.segmentId };
+  if (base.mode === "custom") return { mode: "custom", customer_ids: base.customerIds };
+  return { mode: "all" };
+}
 
 /** Server refusals stay verbatim; transport failures name the retry. */
 export function friendlySendError(error: unknown): string {

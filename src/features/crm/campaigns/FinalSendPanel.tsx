@@ -26,6 +26,7 @@ parsePreparedSend,
 parseSendView,
 sendClient,
 type PreparedSend,
+type SendSelection,
 type SmtpBinding,
 type TestSendReceipt
 } from "../sendClient";
@@ -43,10 +44,8 @@ export default function FinalSendPanel({
   freezeId,
   freeze,
   freezeMissing,
-  freezePending,
   freezeError,
-  freezeWaiting,
-  onFreeze,
+  selection,
   binding,
   testEvidence,
   audienceLabel,
@@ -60,10 +59,9 @@ export default function FinalSendPanel({
   freezeId: string;
   freeze: { valid: boolean | null; finalCount?: number } | null;
   freezeMissing?: boolean;
-  freezePending?: boolean;
   freezeError?: string | null;
-  freezeWaiting?: boolean;
-  onFreeze?: () => void;
+  /** CAD-1836: the selection the send freezes with its one approval. */
+  selection: SendSelection | null;
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
   audienceLabel?: string;
@@ -81,7 +79,7 @@ export default function FinalSendPanel({
   const [approveOpen, setApproveOpen] = useState(false);
   const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
 
-  const readiness = sendReadiness({ doc, freezeId, freeze, binding, testEvidence });
+  const readiness = sendReadiness({ doc, freezeId, freeze, binding, testEvidence, selectionReady: selection !== null });
   const missing = missingReasons(readiness);
   const check = (key: "freeze" | "sender" | "test") =>
     readiness.find((row) => row.key === key)!;
@@ -104,7 +102,7 @@ export default function FinalSendPanel({
     setApprovedSendId(null);
     const commit = () => {
       void sendClient
-        .sendPrepare(scope, campaignId, freezeId.trim(), newAudienceId("send"))
+        .sendPrepare(scope, campaignId, freezeId.trim(), newAudienceId("send"), selection ?? undefined)
         .then((value) => setPrepared(parsePreparedSend(value)))
         .catch((err: unknown) => {
           if (isApprovalRequired(err)) {
@@ -171,18 +169,17 @@ export default function FinalSendPanel({
           <dd>
             {audienceLabel ?? "—"} ·{" "}
             {check("freeze").done
-              ? `${t("frozen")}${typeof freeze?.finalCount === "number" ? ` · ${formatNumber(freeze.finalCount)} ${t("recipients")}` : ""}`
+              ? `${selection !== null ? t("freezes with this send") : t("frozen")}${
+                  typeof freeze?.finalCount === "number"
+                    ? ` · ${formatNumber(freeze.finalCount)} ${t("recipients")}`
+                    : ""
+                }`
               : freezeMissing
-                ? t("not frozen yet")
+                ? t("no audience selection yet")
                 : freeze === null
                   ? t("checking the snapshot…")
-                  : t("needs a recheck")}
-            {!check("freeze").done && onFreeze !== undefined && canWrite && (
-              <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={onFreeze} disabled={freezePending}>
-                {freezePending ? t("Freezing…") : t("Freeze audience · asks the owner")}
-              </button></>
-            )}
-            {!check("freeze").done && onFreeze === undefined && onTab !== undefined && (
+                  : t("the audience changed since it was frozen")}
+            {!check("freeze").done && onTab !== undefined && (
               <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={() => onTab("audience")}>{t("Open audience")}</button></>
             )}
           </dd>
@@ -213,11 +210,6 @@ export default function FinalSendPanel({
           </dd>
         </div>
       </dl>
-      {freezeWaiting === true && (
-        <p className="text-label text-ink-200" role="status" data-freeze-waiting>
-          {t("Waiting for the owner to approve the audience snapshot. Nothing has been frozen.")}
-        </p>
-      )}
       {freezeError != null && freezeError !== "" && (
         <p className="text-label text-fail" role="alert">
           {t(freezeError)}

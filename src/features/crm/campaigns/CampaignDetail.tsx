@@ -18,7 +18,6 @@ parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import "../crm-campaign.css";
-import { isApprovalRequired } from "../hostErrors";
 import { friendlyAudienceError } from "../segmentGrammar";
 import { type AudiencePreview } from "../segments/Segments";
 import type { Viewer } from "../viewer";
@@ -43,7 +42,6 @@ export default function CampaignDetail({
   onCloned: (campaignId: string) => void;
 }) {
   const { t } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const queryState = useCrmQuery(scope, "content.show", { campaign_id: campaignId }, parseContentDoc);
   const proposalState = useCrmQuery(scope, "proposals.list", {}, parseProposalList);
@@ -109,12 +107,10 @@ export default function CampaignDetail({
     drift: string | null;
     currentCount: number | null;
   } | null>(null);
-  const [freezePending, setFreezePending] = useState(false);
   const [freezeError, setFreezeError] = useState<string | null>(null);
   // No freeze row for this derived id yet — the honest "not frozen" state,
   // distinct from an error.
   const [freezeMissing, setFreezeMissing] = useState(false);
-  const [freezeWaiting, setFreezeWaiting] = useState(false);
 
   const requestBack = () => {
     if (unsaved) setConfirmLeave(true);
@@ -140,7 +136,6 @@ export default function CampaignDetail({
 
   const checkFreeze = () => {
     const generation = (freezeGeneration.current += 1);
-    setFreezePending(true);
     setFreezeError(null);
     void audienceClient
       .freezeShow(scope, freezeId)
@@ -149,7 +144,6 @@ export default function CampaignDetail({
         const root = (value as Record<string, unknown> | null) ?? {};
         const row = (root.freeze as Record<string, unknown> | null) ?? {};
         setFreezeMissing(false);
-        setFreezeWaiting(false);
         setFreeze({
           finalCount: typeof row.final_count === "number" ? row.final_count : -1,
           digest: typeof row.digest === "string" ? row.digest : "",
@@ -169,7 +163,7 @@ export default function CampaignDetail({
         }
         setFreezeError(friendlyAudienceError(err));
       })
-      .finally(() => setFreezePending(false));
+;
   };
 
   // Auto-recheck on load and whenever the derived id changes (the audience
@@ -180,32 +174,17 @@ export default function CampaignDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freezeId]);
 
-  const freezeAudience = () => {
-    if (!canWrite || audiencePreview === null || audiencePreview.finalCount === 0) return;
-    setFreezePending(true);
-    setFreezeError(null);
-    // The ceiling is derived from the previewed size with headroom, never
-    // typed: it bounds an unexpected growth spurt without constraining the
-    // audience the operator just previewed.
-    const ceiling = Math.max(10, Math.ceil(audiencePreview.finalCount * 1.25) + 10);
-    void audienceClient
-      .prepare(scope, {
-        freezeId,
-        base: pick.base,
-        exclusionListId: pick.exclusionListId ?? undefined,
-        maxRecipients: ceiling,
-      })
-      .then(() => checkFreeze())
-      .catch((err: unknown) => {
-        if (isApprovalRequired(err)) {
-          setFreezeWaiting(true);
-          setFreezeError(null);
-          return;
+  // CAD-1836: the send freezes its audience. The ceiling rides with the
+  // selection so the approved prepare owns the whole snapshot; there is no
+  // separate freeze action to click.
+  const sendSelection =
+    audiencePreview !== null && audiencePreview.finalCount > 0
+      ? {
+          base: pick.base,
+          exclusionListId: pick.exclusionListId,
+          maxRecipients: Math.max(10, Math.ceil(audiencePreview.finalCount * 1.25) + 10),
         }
-        setFreezeError(friendlyAudienceError(err));
-      })
-      .finally(() => setFreezePending(false));
-  };
+      : null;
 
   return (
     <section aria-label={t("Campaign details")} className="grid gap-3">
@@ -259,10 +238,8 @@ export default function CampaignDetail({
             freezeId={freezeId}
             freeze={freeze}
             freezeMissing={freezeMissing}
-            freezePending={freezePending}
             freezeError={freezeError}
-            freezeWaiting={freezeWaiting}
-            onFreeze={freezeAudience}
+            selection={sendSelection}
             tab={tab}
             onTab={setTab}
             audienceLabel={audienceSummary(pick, audiencePreview)}

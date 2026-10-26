@@ -39,12 +39,15 @@ export interface ReadinessInput {
   /** `undefined` = still loading, `null` = none bound. */
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
+  /** CAD-1836: the send freezes its own audience, so a counted selection
+   *  satisfies the freeze gate before any snapshot exists. */
+  selectionReady: boolean;
 }
 
 export const TEST_ANCHOR = "cmp-test-section";
 
 export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
-  const { doc, freezeId, freeze, binding, testEvidence } = input;
+  const { doc, freezeId, freeze, binding, testEvidence, selectionReady } = input;
   const frozen = freezeId.trim();
 
   let freezeReason: string | null = null;
@@ -82,9 +85,9 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
     },
     {
       key: "freeze",
-      label: "Audience frozen and still valid",
-      done: freezeReason === null,
-      reason: freezeReason,
+      label: "Audience ready to freeze with the send",
+      done: selectionReady || freezeReason === null,
+      reason: selectionReady ? null : (freezeReason ?? "an audience selection for the send to freeze"),
       // The freeze action lives in the send panel, immediately before the
       // send it belongs to; the Audience tab only counts the audience.
       fix: { kind: "anchor", id: "cmp-final-send", label: "Fix" },

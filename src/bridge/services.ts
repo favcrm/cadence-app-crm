@@ -4,7 +4,7 @@ import { assertCurrentScope,requireOperation,type DisplayScope } from "./scope";
 
 type Bag = Record<string, unknown>;
 type CsvDecision = { row: number; action: string; expected_revision?: number };
-type Base = { mode: "all" } | { mode: "segment"; segment_id: string } | { mode: "custom"; customer_ids: string[] };
+export type Base = { mode: "all" } | { mode: "segment"; segment_id: string } | { mode: "custom"; customer_ids: string[] };
 export interface CallArgs {
   "records.list": { query?: string; limit?: number; cursor?: string };
   "records.show": { record_id: string };
@@ -35,7 +35,7 @@ export interface CallArgs {
   // or derived by the source and never travel from the frame.
   "campaign-work.show": { campaign_id: string };
   "campaign-work.save": { campaign_id: string; expected_revision: number; assignee?: string | null; due_at?: string | null; status?: string | null; blocked_reason?: string | null };
-  "sends.prepare": { campaign_id: string; audience_freeze_id: string; request_id: string };
+  "sends.prepare": { campaign_id: string; audience_freeze_id: string; request_id: string; base?: Base; exclusion_list_id?: string; max_recipients?: number };
   "sends.show": { send_id: string }; "sends.list": { campaign_id?: string };
   "smtp.show": Bag; "origin.show": Bag;
   "screen.route.patch": { section?: "customers" | "segments" | "campaigns"; view?: "list" | "new"; record_id?: string | null; segment_id?: string | null; replace?: boolean };
@@ -69,7 +69,7 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
   "sender-bindings.list": [], "sender-bindings.show": ["binding_id"], "sender-bindings.save": ["binding_id", "sender_name", "sender_address", "unsubscribe_base", "expected_revision"],
   "content.test-prepare": ["campaign_id", "to_email", "binding_id"], "content.send-prepare": ["campaign_id", "binding_id", "audience_freeze_id"],
   "campaign-work.show": ["campaign_id"], "campaign-work.save": ["campaign_id", "expected_revision", "assignee", "due_at", "status", "blocked_reason"],
-  "sends.prepare": ["campaign_id", "audience_freeze_id", "request_id"], "sends.show": ["send_id"], "sends.list": ["campaign_id"], "smtp.show": [], "origin.show": [],
+  "sends.prepare": ["campaign_id", "audience_freeze_id", "request_id", "base", "exclusion_list_id", "max_recipients"], "sends.show": ["send_id"], "sends.list": ["campaign_id"], "smtp.show": [], "origin.show": [],
   "screen.route.patch": ["section", "view", "record_id", "segment_id", "replace"], "screen.preview.show": ["preview_id", "document", "anchor", "mode"], "screen.preview.clear": ["preview_id"],
 };
 export const SLOT_FIELDS: Record<keyof SlotArgs, readonly string[]> = {
