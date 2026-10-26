@@ -1,14 +1,24 @@
+# AOS-376 / AOS-390: publish one CRM release as an immutable catalogue candidate.
+#
+# Tag-driven and OIDC-only. The catalogue binds this repository, this workflow
+# file and `refs/tags/v<version>` to the CRM app id, stores the bundle as a
+# draft, and refuses anything else. Publishing is not releasing: the candidate
+# becomes recommended only after the demo company's owner installs exactly it
+# and the platform records that result.
+#
+# The Cadence host used for qualification is an exact version, never "latest":
+# an unpinned qualification target can move between the check and the claim.
 name: publish
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       cadence_version:
-        description: "Cadence release to validate against (for example 0.2.6). Empty uses the latest release."
+        description: "Exact Cadence release to qualify against, e.g. 0.2.6 (no 'latest')"
         required: false
         type: string
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: read
@@ -17,31 +27,38 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
-      - name: Install the cadence CLI
+
+      - name: Install the exact pinned Cadence CLI
         env:
-          GH_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
           CADENCE_VERSION: ${{ inputs.cadence_version || vars.CADENCE_TARGET_VERSION }}
         run: |
-          if [ -n "$CADENCE_VERSION" ]; then
-            tag="v${CADENCE_VERSION#v}"
-          else
-            tag=$(gh release view --repo favcrm/cadence --json tagName -q .tagName)
+          set -euo pipefail
+          if [ -z "${CADENCE_VERSION:-}" ]; then
+            echo "Set the cadence_version input or the CADENCE_TARGET_VERSION repository variable." >&2
+            echo "A qualification against 'the latest release' is not reproducible; pin the target." >&2
+            exit 1
           fi
-          version=${tag#v}
-          gh release download "$tag" --repo favcrm/cadence \
-            --pattern "cadence-v${version}-x86_64-linux.tar.gz" --output /tmp/cadence.tgz
+          version="${CADENCE_VERSION#v}"
+          archive="cadence-v${version}-x86_64-linux.tar.gz"
+          curl --fail --location --retry 3 \
+            "https://github.com/favcrm/cadence/releases/download/v${version}/${archive}" \
+            --output /tmp/cadence.tgz
           mkdir -p /tmp/cadence-bin
           tar -xzf /tmp/cadence.tgz -C /tmp/cadence-bin
           bin=$(dirname "$(find /tmp/cadence-bin -name cadence -type f | head -1)")
           chmod +x "$bin/cadence"
           echo "$bin" >> "$GITHUB_PATH"
+          echo "Qualifying against Cadence ${version}" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Validate the bundle
         run: cadence app check app > /tmp/app-check.json
+
       - name: Host install-check
         run: |
           set -euo pipefail
@@ -50,9 +67,11 @@ jobs:
           cadence daemon start --state-dir "$STATE" >/dev/null
           trap 'cadence daemon stop --state-dir "$STATE" >/dev/null 2>&1 || true' EXIT
           cadence app catalog install-check app --state-dir "$STATE" > /tmp/app-install-check.json
-      - name: Publish the release to the marketplace
+
+      - name: Publish the candidate to the catalogue
         env:
-          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
           APP_CHECK_JSON: /tmp/app-check.json
           APP_INSTALL_CHECK_JSON: /tmp/app-install-check.json
+          APP_DIR: app
+          EXPECTED_REPOSITORY: favcrm/cadence-app-crm
         run: node .github/scripts/publish.mjs
