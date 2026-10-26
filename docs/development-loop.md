@@ -32,8 +32,8 @@ The real app action buttons operate on browser-memory fixtures:
   drafts without copying live sender/audience state. Saving never creates an
   approval; **Send N emails** approves the current revision when the send is
   confirmed, and the campaign UI has no separate content-approval step. The
-  audience snapshot is frozen from the send panel, immediately before the send
-  it belongs to.
+  send freezes its audience as part of that one approval: there is no separate
+  snapshot action anywhere in the campaign UI.
   Subject/preheader validation is shared with the real editor in both modes,
   including direct local saves; it is not host authorization.
 - **Reset local data** asks before discarding all local changes and the chat draft.
@@ -140,9 +140,7 @@ from their content and confirmations, not tinted chrome.
 Single-line CRM fields (`.crm .field:not(textarea)`) share the Select
 trigger's 2rem height, 12px label scale and 0.75rem inline inset; list
 toolbars keep their 1.75rem controls and textareas keep their multi-line
-height. The Freeze card takes its own height instead of stretching its rows
-across the taller audience picker, and it orders status → action → refusal
-with Create snapshot / Refresh snapshot as the action.
+height.
 
 The Email tab keeps one editing surface: the visual canvas. The saved host
 render is no longer shown in the tab — the test send remains the real check.

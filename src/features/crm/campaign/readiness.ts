@@ -34,8 +34,6 @@ export interface ReadinessItem {
 
 export interface ReadinessInput {
   doc: ContentDoc | null;
-  freezeId: string;
-  freeze: { valid: boolean | null } | null;
   /** `undefined` = still loading, `null` = none bound. */
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
@@ -47,15 +45,7 @@ export interface ReadinessInput {
 export const TEST_ANCHOR = "cmp-test-section";
 
 export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
-  const { doc, freezeId, freeze, binding, testEvidence, selectionReady } = input;
-  const frozen = freezeId.trim();
-
-  let freezeReason: string | null = null;
-  // CAD-1178: the reasons name the state, never the freeze id — the id is an
-  // address, not a fact the operator needs to read.
-  if (frozen === "") freezeReason = "a frozen audience";
-  else if (freeze === null) freezeReason = "the audience frozen and rechecked (its validity is unverified)";
-  else if (freeze.valid !== true) freezeReason = "the audience frozen and reporting valid";
+  const { doc, binding, testEvidence, selectionReady } = input;
 
   let senderReason: string | null = null;
   if (binding === undefined) senderReason = "the sender binding read (still loading)";
@@ -86,8 +76,8 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
     {
       key: "freeze",
       label: "Audience ready to freeze with the send",
-      done: selectionReady || freezeReason === null,
-      reason: selectionReady ? null : (freezeReason ?? "an audience selection for the send to freeze"),
+      done: selectionReady,
+      reason: selectionReady ? null : "an audience selection for the send to freeze",
       // The freeze action lives in the send panel, immediately before the
       // send it belongs to; the Audience tab only counts the audience.
       fix: { kind: "anchor", id: "cmp-final-send", label: "Fix" },

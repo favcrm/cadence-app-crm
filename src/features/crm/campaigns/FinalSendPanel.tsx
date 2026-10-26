@@ -79,7 +79,7 @@ export default function FinalSendPanel({
   const [approveOpen, setApproveOpen] = useState(false);
   const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
 
-  const readiness = sendReadiness({ doc, freezeId, freeze, binding, testEvidence, selectionReady: selection !== null });
+  const readiness = sendReadiness({ doc, binding, testEvidence, selectionReady: selection !== null });
   const missing = missingReasons(readiness);
   const check = (key: "freeze" | "sender" | "test") =>
     readiness.find((row) => row.key === key)!;

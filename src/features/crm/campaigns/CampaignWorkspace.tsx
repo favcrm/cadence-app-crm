@@ -765,8 +765,6 @@ export default function CampaignWorkspace({
   const setTab = onTab ?? (() => {});
   const readiness = sendReadiness({
     doc,
-    freezeId: freezeId ?? "",
-    freeze: freeze ?? null,
     binding,
     testEvidence: testReceipt,
     selectionReady: (selection ?? null) !== null,
