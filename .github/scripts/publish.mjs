@@ -12,7 +12,7 @@
 // the enforcement point now, and CI only moves bytes to the OIDC endpoint.
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 const APP_DIR = process.env.APP_DIR ?? "app";
 const UPLOAD_JSON = process.env.APP_UPLOAD_JSON ?? "";
@@ -49,7 +49,7 @@ function bundleFiles(dir, out = {}, root = dir) {
   for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) bundleFiles(full, out, root);
-    else out[relative(root, full)] = readFileSync(full, "utf8");
+    else out[relative(root, full).split(sep).join("/")] = readFileSync(full, "utf8");
   }
   return out;
 }

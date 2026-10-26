@@ -71,7 +71,8 @@ catalogue PAT or Git/PR publisher fallback.
 
 Deploy the prepared AgenticOS candidate API before enabling this publisher.
 An old API or a configured legacy publication URL fails closed, before stable
-publication. The package's nested paths are preserved in its upload.
+publication. Nested files retain root-relative, forward-slash upload keys on
+every platform. Publisher checkout credentials are not persisted.
 
 The Demo owner then qualifies the exact candidate using AgenticOS's
 `tools/tenant-board/app-candidate.mjs` (`plan`, `release`, or observation-only
@@ -79,3 +80,6 @@ The Demo owner then qualifies the exact candidate using AgenticOS's
 observed Demo install unlocks publication; other hosted tenants update through
 the consent-aware app fleet workflow. Nothing here rolls out the Cadence host
 or performs customer/provider actions.
+
+Package CI also runs `node --test tests/unit/publish-candidate.test.mjs` for
+the publisher's immutable-path, endpoint and release-identity checks.

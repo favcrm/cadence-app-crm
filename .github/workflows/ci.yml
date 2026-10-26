@@ -134,7 +134,9 @@ jobs:
         run: python3 scripts/package_app.py check --source app
 
       - name: Unit tests
-        run: python3 -m unittest discover -s tests/unit -v
+        run: |
+          python3 -m unittest discover -s tests/unit -v
+          node --test tests/unit/publish-candidate.test.mjs
 
       - name: Build archive twice — byte-identical required
         run: |
