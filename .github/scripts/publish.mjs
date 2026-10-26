@@ -1,67 +1,97 @@
-// AOS-376: turn a version release into a reviewed-by-CI marketplace PR.
-// The tenant's install/approve is the product gate; this script only moves bytes.
-import { execFileSync } from "node:child_process";
+// AOS-376 / AOS-390: publish one immutable catalogue candidate from a tag.
+//
+// OIDC is the only publication path. GitHub proves this repository, workflow
+// and tag; the catalogue then checks them against the reviewed publisher for
+// its app id and stores the bundle as a DRAFT candidate. Nothing here can
+// recommend, install or canary a release — that takes the demo owner's install
+// and an operator promotion on the platform side.
+//
+// Removed with that contract: the MARKETPLACE_TOKEN clone/PR/auto-merge
+// fallback. It wrote bytes before comparing them and gave one long-lived token
+// the ability to change the catalogue; the API's version + digest checks are
+// the enforcement point now, and CI only moves bytes to the OIDC endpoint.
 import { createHash } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 
-const APP_DIR = "app";
-const REPO = process.env.GITHUB_REPOSITORY ?? "favcrm/cadence-app-works";
-const ISSUE = process.env.PUBLISH_ISSUE ?? "AOS-376";
-const MARKETPLACE = "agenticos-stack/agenticos-v2";
-const token = process.env.MARKETPLACE_TOKEN;
-const dryRun = process.env.DRY_RUN === "1";
-const localMarketplace = process.env.MARKETPLACE_DIR;
+const APP_DIR = process.env.APP_DIR ?? "app";
+const UPLOAD_JSON = process.env.APP_UPLOAD_JSON ?? "";
+const EXPECTED_REPOSITORY = process.env.EXPECTED_REPOSITORY ?? "";
+const PUBLISH_URL =
+  process.env.CATALOGUE_PUBLISH_URL ?? "https://api-v2.agenticos.hk/public/apps/candidates";
 
-function sh(cmd, args, cwd, env = {}) {
-  return execFileSync(cmd, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "inherit"] }).toString();
+function refuse(message) {
+  console.error("publish refused: " + message);
+  process.exit(1);
 }
 
-function walk(dir, out = []) {
-  for (const name of readdirSync(dir)) {
+let destination;
+try {
+  destination = new URL(PUBLISH_URL);
+} catch {
+  refuse("a candidate endpoint URL is required");
+}
+if (
+  destination.protocol !== "https:" ||
+  destination.pathname !== "/public/apps/candidates" ||
+  destination.username ||
+  destination.password ||
+  destination.search ||
+  destination.hash
+)
+  refuse("only the HTTPS candidate endpoint is supported; legacy publication is unsafe");
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function bundleFiles(dir, out = {}, root = dir) {
+  for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else out.push(full);
+    if (statSync(full).isDirectory()) bundleFiles(full, out, root);
+    else out[relative(root, full).split(sep).join("/")] = readFileSync(full, "utf8");
   }
   return out;
 }
 
-function sha256(buf) {
-  return createHash("sha256").update(buf).digest("hex");
+function readJson(path, label) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return refuse(`${label} is missing or not JSON`);
+  }
 }
 
-const check = JSON.parse(readFileSync(process.env.APP_CHECK_JSON ?? "/tmp/app-check.json", "utf8"));
-if (!check.ok) throw new Error("app check refused: " + JSON.stringify(check.refusal ?? check));
+// --- Released bundle identity -------------------------------------------------
+const check = readJson(process.env.APP_CHECK_JSON ?? "/tmp/app-check.json", "app check report");
+if (check.ok !== true) refuse("app check did not pass: " + JSON.stringify(check.refusal ?? check));
 const digest = check.digest;
 const version = check.version;
 const app = check.name;
-if (!digest || !version || !app || !check.title || !check.summary || !check.listing) {
-  throw new Error(
-    "app check did not report the manifest identity and listing; " +
-      "add `listing:` to app.md and run a Cadence build that reports it",
+if (!digest || !version || !app || !check.title || !check.summary || !check.listing)
+  refuse("app check did not report manifest identity and listing; add `listing:` to app.md");
+
+// The catalogue binds a publication to the exact tag of the version it
+// carries. A branch or a moved dispatch ref is not a reviewed release.
+const tag = "v" + version;
+if (process.env.GITHUB_REF !== "refs/tags/" + tag)
+  refuse(`this release must be published from refs/tags/${tag}`);
+if (!process.env.GITHUB_REPOSITORY) refuse("GITHUB_REPOSITORY is required");
+if (EXPECTED_REPOSITORY && process.env.GITHUB_REPOSITORY !== EXPECTED_REPOSITORY)
+  refuse(`this publisher belongs to ${EXPECTED_REPOSITORY}, not ${process.env.GITHUB_REPOSITORY}`);
+
+// The workflow's host install-check must describe the same bytes.
+const installCheck = readJson(
+  process.env.APP_INSTALL_CHECK_JSON ?? "/tmp/app-install-check.json",
+  "install-check report",
+);
+if (installCheck.error || installCheck.compatibility?.compatible !== true)
+  refuse(
+    "install-check did not pass: " +
+      JSON.stringify(installCheck.error ?? installCheck.compatibility),
   );
-}
-// The workflow runs the target host's install-check before this step. Keep
-// the two reports honest when both are supplied: the same bytes, the same
-// digest, and an explicit compatible result.
-const installCheckPath = process.env.APP_INSTALL_CHECK_JSON;
-if (!installCheckPath) {
-  throw new Error(
-    "install-check report is required; run `cadence app catalog install-check` " +
-      "against the target host before publishing",
-  );
-}
-const installCheck = JSON.parse(readFileSync(installCheckPath, "utf8"));
-if (installCheck.error || installCheck.compatibility?.compatible !== true) {
-  throw new Error(
-    "install-check refused: " +
-      JSON.stringify(installCheck.error ?? installCheck.compatibility ?? installCheck),
-  );
-}
-if (installCheck.digest !== digest) {
-  throw new Error("install-check digest does not match app check");
-}
+if (installCheck.digest !== digest) refuse("install-check digest does not match app check");
+
 const compatibility = {
   host:
     typeof installCheck.compatibility?.host?.core === "string"
@@ -75,9 +105,15 @@ const compatibility = {
     : {}),
 };
 
-const files = {};
-for (const full of walk(APP_DIR).sort()) files[relative(APP_DIR, full)] = readFileSync(full, "utf8");
-const upload = JSON.stringify({ files }, null, 2) + "\n";
+// --- Upload bytes -------------------------------------------------------------
+// `APP_UPLOAD_JSON` publishes a bundle another checked script already built;
+// otherwise the app directory itself is the bundle, exactly as reviewed.
+const upload = UPLOAD_JSON
+  ? readFileSync(resolve(UPLOAD_JSON), "utf8")
+  : JSON.stringify({ files: bundleFiles(APP_DIR) }, null, 2) + "\n";
+if (Buffer.byteLength(upload) > 4 * 1024 * 1024) refuse("upload.json exceeds 4 MiB");
+const uploadSha256 = sha256(upload);
+
 const artifact = `marketplace/releases/${app}/${version}/upload.json`;
 const entry = {
   id: app,
@@ -86,82 +122,51 @@ const entry = {
   summary: check.summary,
   version,
   listing: check.listing,
-  source: { repo: REPO, commit: process.env.GITHUB_SHA, path: APP_DIR },
-  artifact: { path: artifact, sha256: sha256(upload) },
+  // Overwritten by the catalogue with the token's own repository/commit; never
+  // trusted from here.
+  source: { repo: process.env.GITHUB_REPOSITORY, commit: process.env.GITHUB_SHA, path: APP_DIR },
+  artifact: { path: artifact, sha256: uploadSha256 },
   digest,
   compatibility,
 };
 
-function applyTo(dir) {
-  mkdirSync(join(dir, "marketplace/releases", app, version), { recursive: true });
-  writeFileSync(join(dir, artifact), upload);
-  const manifestPath = join(dir, "marketplace/apps.json");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const index = manifest.apps.findIndex((a) => a.id === app);
-  const current = index >= 0 ? manifest.apps[index] : null;
-  const artifactPath = join(dir, artifact);
-  const sameBytes = statSync(artifactPath, { throwIfNoEntry: false }) && sha256(readFileSync(artifactPath)) === sha256(upload);
-  if (current && current.version === version && current.digest === digest && current.artifact?.sha256 === sha256(upload) && sameBytes) {
-    console.log("marketplace already carries this version, digest and artifact; nothing to do");
-    return false;
-  }
-  const json = JSON.stringify(entry, null, 2) + "\n";
-  if (index >= 0) manifest.apps[index] = entry;
-  else manifest.apps.push(entry);
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  return true;
-}
-
-if (dryRun) {
-  console.log(JSON.stringify({ entry, artifactSha256: sha256(upload), files: Object.keys(files) }, null, 2));
+if (process.env.DRY_RUN === "1") {
+  console.log(JSON.stringify({ entry, uploadSha256, ref: process.env.GITHUB_REF }, null, 2));
   process.exit(0);
 }
 
-if (localMarketplace) {
-  if (applyTo(localMarketplace)) console.log("wrote the marketplace files under " + localMarketplace);
-  process.exit(0);
-}
+// --- Trusted publication -------------------------------------------------------
+if (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL || !process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+  refuse("GitHub OIDC is required; this repository has no long-lived catalogue token");
 
-// npm-style trusted publishing: GitHub proves the repository/commit with a
-// short-lived OIDC token; the catalogue needs no PAT and derives the source.
-if (process.env.ACTIONS_ID_TOKEN_REQUEST_URL) {
-  const requestUrl = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
-  requestUrl.searchParams.set("audience", "agenticos-catalogue");
-  const tokenResponse = await fetch(requestUrl, {
-    headers: { authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-  });
-  if (!tokenResponse.ok) throw new Error("OIDC token request failed: " + tokenResponse.status);
-  const { value } = await tokenResponse.json();
-  const response = await fetch(
-    process.env.CATALOGUE_PUBLISH_URL ?? "https://api-v2.agenticos.hk/public/apps/publish",
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${value}` },
-      body: JSON.stringify({ upload, entry }),
-    },
-  );
-  const result = await response.json();
-  if (!response.ok) throw new Error("publish refused: " + JSON.stringify(result));
-  console.log(JSON.stringify(result));
-  process.exit(0);
-}
+const requestUrl = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+requestUrl.searchParams.set("audience", "agenticos-catalogue");
+const tokenResponse = await fetch(requestUrl, {
+  headers: { authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+});
+if (!tokenResponse.ok) refuse("OIDC token request failed: " + tokenResponse.status);
+const { value } = await tokenResponse.json();
+if (typeof value !== "string" || value.length === 0) refuse("OIDC token request returned no token");
 
-if (!token) throw new Error("MARKETPLACE_TOKEN is required (contents + pull-requests on " + MARKETPLACE + ")");
-const dir = mkdtempSync(join(tmpdir(), "marketplace-"));
-const url = `https://x-access-token:${token}@github.com/${MARKETPLACE}.git`;
-sh("git", ["clone", "--depth=1", "--branch", "staging", url, dir], process.cwd());
-if (!applyTo(dir)) process.exit(0);
-sh("git", ["-c", "user.name=cadence-release-bot", "-c", "user.email=release-bot@favcrm.local", "checkout", "-b", `publish/${app}-${version}`], dir);
-sh("git", ["add", "-A"], dir);
-sh("git", ["-c", "user.name=cadence-release-bot", "-c", "user.email=release-bot@favcrm.local", "commit", "-m", `Publish ${app} ${version}`], dir);
-sh("git", ["push", "origin", `publish/${app}-${version}`], dir, { GH_TOKEN: token });
-const title = `Publish ${app} ${version}`;
-const body = `Automated release from ${REPO}@${process.env.GITHUB_SHA}.\n\n- Bundle: ${artifact} (sha256:${entry.artifact.sha256})\n- Digest: ${digest}\n- Review is the tenant install/approve; the marketplace CI gates the merge.\n\nIssue: ${ISSUE}`;
-const pr = sh("gh", ["pr", "create", "--repo", MARKETPLACE, "--base", "staging", "--head", `publish/${app}-${version}`, "--title", title, "--body", body], dir, { GH_TOKEN: token }).trim();
-console.log(pr);
-try {
-  sh("gh", ["pr", "merge", pr, "--repo", MARKETPLACE, "--auto", "--merge"], dir, { GH_TOKEN: token });
-  console.log("auto-merge enabled");
-} catch (error) {
-  console.log("auto-merge unavailable; the PR is open for CI and normal merge: " + error.message);
-}
+const response = await fetch(PUBLISH_URL, {
+  method: "POST",
+  redirect: "error",
+  headers: { "content-type": "application/json", authorization: `Bearer ${value}` },
+  body: JSON.stringify({ upload, entry }),
+});
+const result = await response.json().catch(() => null);
+if (!response.ok || !result || result.ok !== true)
+  refuse("catalogue refused the candidate: " + JSON.stringify(result));
+
+console.log(JSON.stringify(result, null, 2));
+if (result.data?.publication !== "draft")
+  refuse("the catalogue did not store this release as an unrecommended candidate");
+console.log(
+  [
+    `Published ${app} ${version} as an immutable draft candidate.`,
+    `Digest ${digest}; upload sha256 ${uploadSha256}.`,
+    "It is not recommended or installable until the demo company's owner",
+    "installs exactly this release and the platform records that result, then",
+    "an operator promotes it. No token here can do either step.",
+  ].join("\n"),
+);

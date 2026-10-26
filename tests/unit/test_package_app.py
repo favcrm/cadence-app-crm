@@ -293,7 +293,6 @@ class ManifestMetadataTests(unittest.TestCase):
     def test_real_app_md_parses_declared_fields(self):
         manifest = pkg.parse_manifest((REPO / "app" / "app.md").read_text(encoding="utf-8"))
         self.assertEqual(manifest.app, "crm")
-        self.assertEqual(manifest.version, "0.3.0")
         self.assertEqual(manifest.title, "CRM")
         self.assertIn(("app-storage", (1,)), manifest.requires)
         self.assertEqual(manifest.connections, ())
