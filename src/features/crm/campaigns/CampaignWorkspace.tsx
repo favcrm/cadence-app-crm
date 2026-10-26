@@ -35,6 +35,7 @@ friendlySendError,
 parseTestSendReceipt,
 readSmtpBinding,
 sendClient,
+type SendSelection,
 type SmtpBinding,
 type TestSendReceipt
 } from "../sendClient";
@@ -65,10 +66,8 @@ export default function CampaignWorkspace({
   freezeId,
   freeze,
   freezeMissing,
-  freezePending,
   freezeError,
-  freezeWaiting,
-  onFreeze,
+  selection,
   audienceSlot,
   activitySlot,
   audienceLabel,
@@ -90,10 +89,9 @@ export default function CampaignWorkspace({
   /** The detail page's freeze action, surfaced in the send panel so the
    *  snapshot sits immediately before the send it belongs to. */
   freezeMissing?: boolean;
-  freezePending?: boolean;
   freezeError?: string | null;
-  freezeWaiting?: boolean;
-  onFreeze?: () => void;
+  /** CAD-1836: the audience the send freezes with its one approval. */
+  selection?: SendSelection | null;
   /** CAD-1008: the saved campaign's audience/freeze panel, supplied by
    *  the owning page so the task order renders Content+Preview →
    *  Audience → Sender → Test → Proposals → Final send; prepare approves the
@@ -685,10 +683,8 @@ export default function CampaignWorkspace({
       freezeId={freezeId}
       freeze={freeze ?? null}
       freezeMissing={freezeMissing}
-      freezePending={freezePending}
       freezeError={freezeError}
-      freezeWaiting={freezeWaiting}
-      onFreeze={onFreeze}
+      selection={selection ?? null}
       binding={binding}
       testEvidence={testReceipt}
       audienceLabel={audienceLabel ?? "—"}
@@ -769,10 +765,9 @@ export default function CampaignWorkspace({
   const setTab = onTab ?? (() => {});
   const readiness = sendReadiness({
     doc,
-    freezeId: freezeId ?? "",
-    freeze: freeze ?? null,
     binding,
     testEvidence: testReceipt,
+    selectionReady: (selection ?? null) !== null,
   });
   const pendingProposals = proposals.filter((row) => row.state === "pending");
   const emailBadge = pendingProposals.length > 0 ? t("{count} draft").replace("{count}", () => formatNumber(pendingProposals.length)) : null;
