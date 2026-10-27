@@ -50,6 +50,7 @@ export interface SlotArgs {
   "smtp.manage": Bag; "smtp.bind": Bag; "smtp.rebind": Bag; "smtp.revoke": Bag;
   "smtp.test-send": { campaign_id: string };
   "sends.approve": { send_id: string };
+  "sends.cancel": { send_id: string };
   "sends.resolve": { send_id: string; customer_id: string };
   "origin.manage": Bag;
   "chat.campaign.open": { campaign_id: string };
@@ -75,7 +76,7 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
 export const SLOT_FIELDS: Record<keyof SlotArgs, readonly string[]> = {
   "records.csv.import": ["csv_text", "preview_token", "request_id", "decisions"], "records.csv.confirm": ["csv_text", "preview_token", "request_id", "decisions"],
   "content.approve": ["campaign_id", "expected_revision"], "smtp.manage": [], "smtp.bind": [], "smtp.rebind": [], "smtp.revoke": [], "smtp.test-send": ["campaign_id"],
-  "sends.approve": ["send_id"], "sends.resolve": ["send_id", "customer_id"], "origin.manage": [], "chat.campaign.open": ["campaign_id"], "chat.campaign.brief": ["campaign_id", "brief"],
+  "sends.approve": ["send_id"], "sends.cancel": ["send_id"], "sends.resolve": ["send_id", "customer_id"], "origin.manage": [], "chat.campaign.open": ["campaign_id"], "chat.campaign.brief": ["campaign_id", "brief"],
 };
 export const OPERATIONS = [...Object.keys(CALL_FIELDS), ...Object.keys(SLOT_FIELDS)];
 export function cleanArgs(verb: string, args: Bag, slot: boolean): Bag {
