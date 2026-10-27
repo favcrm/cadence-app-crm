@@ -1,7 +1,7 @@
 ---
 app: crm
 title: CRM
-version: '0.2.3'
+version: '0.2.4'
 summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
 needs:
   connections: []
