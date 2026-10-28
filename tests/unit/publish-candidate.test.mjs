@@ -1,12 +1,39 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const script = fileURLToPath(new URL("../../.github/scripts/publish.mjs", import.meta.url));
+const COMMIT = "b".repeat(40);
+
+// The publisher is a top-level script, so publication responses are exercised
+// by preloading this stub into the spawned process. It replaces global fetch
+// only; OIDC, endpoint, upload and scanner checks still run for real.
+const FETCH_STUB = `
+import { appendFileSync, readFileSync } from "node:fs";
+
+const queue = JSON.parse(readFileSync(process.env.STUB_RESPONSES, "utf8"));
+globalThis.fetch = async (input, init = {}) => {
+  const next = queue.shift();
+  if (!next) throw new Error("unexpected fetch: " + String(input));
+  appendFileSync(
+    process.env.STUB_REQUEST_LOG,
+    JSON.stringify({
+      url: String(input),
+      method: init.method ?? "GET",
+      authorization: init.headers?.authorization ?? null,
+      body: typeof init.body === "string" ? init.body : null,
+    }) + "\\n",
+  );
+  return new Response(JSON.stringify(next.body), {
+    status: next.status ?? 200,
+    headers: { "content-type": "application/json" },
+  });
+};
+`;
 
 const MANIFEST = [
   "---",
@@ -63,6 +90,7 @@ function fixture(t) {
     APP_CHECK_JSON: checkPath,
     GITHUB_REF: "refs/tags/v1.2.3",
     GITHUB_REPOSITORY: "synthetic/app",
+    GITHUB_SHA: COMMIT,
     EXPECTED_REPOSITORY: "synthetic/app",
   };
   delete env.CATALOGUE_PUBLISH_URL;
@@ -89,6 +117,34 @@ function fixture(t) {
       return path;
     },
     writeManifest: (text) => writeFileSync(join(root, "app", "app.md"), text),
+    // Runs the real publisher past DRY_RUN with a stubbed fetch, so the
+    // catalogue's answer decides the exit status and console output.
+    runPublication: (responses) => {
+      const stub = join(root, "fetch-stub.mjs");
+      writeFileSync(stub, FETCH_STUB);
+      const responsesPath = join(root, "responses.json");
+      writeFileSync(responsesPath, JSON.stringify(responses));
+      const log = join(root, "requests.ndjson");
+      writeFileSync(log, "");
+      return spawnSync(process.execPath, [script], {
+        cwd: root,
+        env: {
+          ...env,
+          DRY_RUN: "",
+          ACTIONS_ID_TOKEN_REQUEST_URL: "https://token.actions.example/oidc",
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token",
+          NODE_OPTIONS: `--import=${pathToFileURL(stub).href}`,
+          STUB_RESPONSES: responsesPath,
+          STUB_REQUEST_LOG: log,
+        },
+        encoding: "utf8",
+      });
+    },
+    requests: () =>
+      readFileSync(join(root, "requests.ndjson"), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
   };
 }
 
@@ -213,4 +269,146 @@ test("a configured legacy endpoint cannot publish stable before draft verificati
 
 test("a branch cannot substitute for the matching version tag", (t) => {
   assert.notEqual(fixture(t).run({ GITHUB_REF: "refs/heads/main" }).status, 0);
+});
+
+const OIDC = { body: { value: "oidc-token" } };
+
+function published(f, extra = {}) {
+  return {
+    body: {
+      ok: true,
+      data: {
+        id: "test-app",
+        version: "1.2.3",
+        digest: f.report.digest,
+        publication: "published",
+        repository: "synthetic/app",
+        commit: COMMIT,
+        status: "published",
+        ...extra,
+      },
+    },
+  };
+}
+
+test("trusted publication reports the listed version only after a published confirmation", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f)]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /publication: published/);
+  assert.match(result.stdout, /listed this exact version/);
+  assert.doesNotMatch(result.stdout, /draft/i);
+  const requests = f.requests();
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].url, "https://api-v2.agenticos.hk/public/apps/candidates");
+  assert.equal(requests[1].method, "POST");
+  assert.equal(requests[1].authorization, "Bearer oidc-token");
+  const body = JSON.parse(requests[1].body);
+  assert.equal(body.entry.id, "test-app");
+  assert.equal(body.entry.version, "1.2.3");
+  assert.equal(body.entry.digest, f.report.digest);
+  assert.equal(body.entry.source.commit, COMMIT);
+  assert.equal(Object.hasOwn(body.entry, "compatibility"), false);
+});
+
+test("an idempotent replay is reported as already listed, not as a fresh publication", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f, { status: "unchanged" })]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /already listed/);
+  assert.doesNotMatch(result.stdout, /Published test-app/);
+  assert.doesNotMatch(result.stdout, /draft/i);
+});
+
+test("an older API that stores an unlisted draft cannot report a completed publication", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([
+    OIDC,
+    {
+      body: {
+        ok: true,
+        data: {
+          id: "test-app",
+          version: "1.2.3",
+          digest: f.report.digest,
+          publication: "draft",
+        },
+      },
+    },
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /Published test-app/);
+  assert.doesNotMatch(result.stdout, /publication: published/);
+  assert.match(result.stderr, /unlisted draft/);
+  assert.match(result.stderr, /deploy the candidate API/);
+});
+
+test("a success body without a published state cannot report a completed publication", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([
+    OIDC,
+    {
+      body: {
+        ok: true,
+        data: { id: "test-app", version: "1.2.3", digest: f.report.digest },
+      },
+    },
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /Published test-app/);
+  assert.match(result.stderr, /did not confirm a listed publication/);
+});
+
+test("a published confirmation for a different release cannot report success", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f, { version: "1.2.4" })]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /Published test-app/);
+  assert.match(result.stderr, /different release/);
+});
+
+test("a terminal catalogue refusal is not reported as a published release", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([
+    OIDC,
+    { status: 409, body: { ok: false, error: { code: "immutable_release" } } },
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /Published test-app/);
+  assert.match(result.stderr, /\(409\)/);
+  assert.match(result.stderr, /immutable_release/);
+});
+
+test("a confirmation from a different repository cannot claim this workflow's provenance", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f, { repository: "other/app" })]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /published to the catalogue directory/);
+  assert.match(result.stderr, /different repository or commit/);
+});
+
+test("a confirmation from a different commit cannot claim this workflow's provenance", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f, { commit: "c".repeat(40) })]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /published to the catalogue directory/);
+  assert.match(result.stderr, /different repository or commit/);
+});
+
+test("a confirmation without a publication status cannot report a fresh publication", (t) => {
+  const f = fixture(t);
+  const response = published(f);
+  delete response.body.data.status;
+  const result = f.runPublication([OIDC, response]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /published to the catalogue directory/);
+  assert.match(result.stderr, /did not confirm a publication status/);
+});
+
+test("an unrecognized publication status cannot report a fresh publication", (t) => {
+  const f = fixture(t);
+  const result = f.runPublication([OIDC, published(f, { status: "queued" })]);
+  assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /published to the catalogue directory/);
+  assert.match(result.stderr, /did not confirm a publication status/);
 });

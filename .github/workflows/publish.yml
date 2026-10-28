@@ -1,12 +1,18 @@
-# AOS-376 / AOS-390 / AOS-384: publish one CRM release as an immutable
-# catalogue candidate.
+# AOS-376 / AOS-390 / AOS-384 / AOS-431: publish one CRM release as a verified
+# catalogue listing.
 #
 # Tag-driven and OIDC-only. The catalogue binds this repository, this workflow
 # file and `refs/tags/v<version>` to the CRM app id, re-verifies the uploaded
-# bytes/digest/identity, and stores the bundle as a draft. Publishing is not
-# releasing: the candidate becomes recommended only after the demo company's
-# owner installs exactly it on a hosted host and the platform records that
-# result.
+# bytes/digest/identity, and lists that exact version as `published`
+# immediately. There is no draft review or promotion step. Listing is not
+# installation: a hosted tenant installs exactly this digest through its own
+# owner's consent path, and this workflow performs no install, host rollout or
+# customer/provider action.
+#
+# Staged rollout: an older deployed API still answers `publication: "draft"`,
+# which means the release is unlisted. The publisher then fails with a
+# deploy-the-candidate-API message instead of reporting a successful publish;
+# deploy that API before tagging the next version.
 #
 # The pinned native CLI supplies the canonical bundle digest and inventory from
 # `app check`. A hosted-only package such as CRM 0.3.0 (`app-storage: [1]`) is
@@ -84,7 +90,7 @@ jobs:
             echo "Native content admission refused; digest/inventory alone prove neither safety nor compatibility. The publisher independently scans the exact uploaded members." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Publish the candidate to the catalogue
+      - name: Publish the release to the catalogue directory
         env:
           APP_CHECK_JSON: /tmp/app-check.json
           APP_DIR: app
