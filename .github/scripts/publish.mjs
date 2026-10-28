@@ -1,12 +1,21 @@
-// AOS-376 / AOS-390 / AOS-384: publish one immutable catalogue candidate
+// AOS-376 / AOS-390 / AOS-384 / AOS-431: publish one verified catalogue release
 // from a tag.
 //
 // OIDC is the only publication path. GitHub proves this repository, workflow
 // and tag; the catalogue then checks them against the reviewed publisher for
-// its app id, re-verifies the uploaded bytes/digest/identity, and stores the
-// bundle as a DRAFT candidate. Nothing here can recommend, install or canary a
-// release — that takes the demo owner's install and an operator promotion on
-// the platform side.
+// its app id, re-verifies the uploaded bytes/digest/identity, and lists that
+// exact version as `published` immediately. There is no draft review or
+// promotion step, and nothing here can install, roll out a Cadence host or
+// perform a customer/provider action — publication is not installation.
+//
+// Staged rollout: an older deployed API still stores the bundle as an unlisted
+// `draft` and answers with that state. This publisher then refuses (nonzero)
+// and says the candidate API must be deployed first; it never prints or
+// implies a completed publication for a draft.
+//
+// A success receipt must echo this verified release, this workflow's repository
+// and commit, and a `published` or `unchanged` status; anything else is refused
+// rather than reported as a completed publication.
 //
 // The native `app check` report supplies only the canonical bundle digest and
 // inventory. A hosted-only package (for example, one declaring
@@ -201,6 +210,7 @@ const tag = "v" + version;
 if (process.env.GITHUB_REF !== "refs/tags/" + tag)
   refuse(`this release must be published from refs/tags/${tag}`);
 if (!process.env.GITHUB_REPOSITORY) refuse("GITHUB_REPOSITORY is required");
+if (!process.env.GITHUB_SHA) refuse("GITHUB_SHA is required");
 if (EXPECTED_REPOSITORY && process.env.GITHUB_REPOSITORY !== EXPECTED_REPOSITORY)
   refuse(`this publisher belongs to ${EXPECTED_REPOSITORY}, not ${process.env.GITHUB_REPOSITORY}`);
 
@@ -283,7 +293,7 @@ const entry = {
   digest,
   // Deliberately absent: this publisher makes no host-compatibility claim.
   // A native refusal (including unsupported `app-storage`) is metadata-only;
-  // the catalogue re-verifies the actual bundle before the immutable draft.
+  // the catalogue re-verifies the actual bundle before it lists the version.
 };
 
 if (process.env.DRY_RUN === "1") {
@@ -323,18 +333,48 @@ const response = await fetch(PUBLISH_URL, {
 });
 const result = await response.json().catch(() => null);
 if (!response.ok || !result || result.ok !== true)
-  refuse("catalogue refused the candidate: " + JSON.stringify(result));
+  refuse("catalogue refused the release (" + response.status + "): " + JSON.stringify(result));
+
+// The catalogue lists a verified release as `published`; anything else is not
+// a completed publication. An older deployed API still answers `draft` and
+// stored the bundle unlisted, so the rollout gate is an explicit refusal, not
+// a warning on a green workflow.
+const data = result.data;
+const publication = data?.publication;
+if (publication === "draft")
+  refuse(
+    "the deployed catalogue API stored this release as an unlisted draft; " +
+      "deploy the candidate API that lists verified releases, then publish again",
+  );
+if (publication !== "published")
+  refuse(
+    "the catalogue did not confirm a listed publication: " +
+      JSON.stringify(publication ?? null),
+  );
+if (data.id !== app || data.version !== version || data.digest !== digest)
+  refuse("the catalogue confirmed a different release than this verified bundle");
+// The success message claims this workflow's provenance, so the catalogue must
+// echo the repository and commit it derived from the OIDC token.
+if (data.repository !== process.env.GITHUB_REPOSITORY || data.commit !== process.env.GITHUB_SHA)
+  refuse("the catalogue confirmed a different repository or commit than this workflow");
+// Only a fresh listing or an exact idempotent replay is a completed
+// publication; an absent or unknown status is not.
+if (data.status !== "published" && data.status !== "unchanged")
+  refuse("the catalogue did not confirm a publication status: " + JSON.stringify(data.status ?? null));
 
 console.log(JSON.stringify(result, null, 2));
-if (result.data?.publication !== "draft")
-  refuse("the catalogue did not store this release as an unrecommended candidate");
+const listed =
+  data.status === "unchanged"
+    ? "already listed from this exact repository, commit and digest"
+    : "published to the catalogue directory";
 console.log(
   [
-    `Published ${app} ${version} as an immutable draft candidate.`,
+    `${app} ${version} is ${listed} (publication: published).`,
     `Digest ${digest}; upload sha256 ${uploadSha256}.`,
+    "The catalogue listed this exact version after re-verifying the uploaded bytes, digest and identity.",
     "No native execution or host-compatibility claim was made.",
-    "It is not recommended or installable until the demo company's owner",
-    "installs exactly this release on a hosted host and the platform records",
-    "that result, then an operator promotes it. No token here can do either step.",
+    "Listing is not installation: a hosted tenant installs exactly this digest",
+    "through its owner's consent-aware install or update path. No token here",
+    "rolls out a Cadence host or performs a customer/provider action.",
   ].join("\n"),
 );

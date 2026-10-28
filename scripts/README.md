@@ -13,6 +13,7 @@ Release tooling for the `app/` bundle (CAD-962):
 The sidecar SHA256 is transport-integrity evidence only — never the
 Cadence host bundle digest, a signature or an approval. Install is via
 the extracted bundle root (`cadence app install <bundle-dir>`); see
-`docs/packaging.md`. No release/publication pipeline exists yet, and
-the app execution toolchain remains unchosen pending the CAD-811
-boundary plan.
+`docs/packaging.md`. No release/publication pipeline exists in this directory,
+and the app execution toolchain remains unchosen pending the CAD-811 boundary
+plan. Catalogue publication itself runs from `.github/workflows/publish.yml`;
+see `README.md`.

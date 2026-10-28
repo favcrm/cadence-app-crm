@@ -83,25 +83,31 @@ scanner errors and blocking findings fail closed, including `DRY_RUN=1`.
 `APP_UPLOAD_JSON` must contain exactly the inspected files and bytes:
 duplicate keys, ignored fields and substitutions refuse before upload.
 
-The catalogue re-verifies the uploaded bytes, canonical digest and identity
-before storing an immutable **draft** at `/public/apps/candidates`. Deploy the
-prepared AgenticOS candidate API first; an old API or a configured legacy
+The catalogue re-verifies the uploaded bytes, canonical digest and identity,
+then lists that exact version immediately: a successful publish records it as
+`published` in the directory, with no separate review or promotion step. The
+publisher requires that confirmation — `publication: published`, a `published`
+or `unchanged` status, and the exact id, version, digest, repository and commit
+it sent — and prints an idempotent replay as already listed. A
+staged rollout is handled honestly: an older deployed API still stores the
+bundle as an unlisted `draft`, so the publisher exits nonzero and says to
+deploy the candidate API first rather than reporting a green workflow for a
+draft. Deploy that API before tagging; an old API or a configured legacy
 publication URL fails closed. Nested files retain root-relative, forward-slash
 upload keys on every platform, and publisher checkout credentials are not
 persisted.
 
-The Demo owner then qualifies the exact candidate using AgenticOS's
-`tools/tenant-board/app-candidate.mjs` (`plan`, `release`, or observation-only
-`resume`). Owner CLI credentials stay outside publisher CI. A published draft
-is not recommended and not installable; the owner must install exactly that
-release on a hosted host deployed under separate authority. Only an exact
-observed Demo install unlocks publication; other hosted tenants update through
-the consent-aware app fleet workflow. Nothing here rolls out the Cadence host,
+Listing is not installation. Each hosted tenant installs or updates to exactly
+that release through its own owner's consent-aware path with the exact digest;
+a published catalogue version by itself grants no host, tenant, customer or
+provider action. Nothing here rolls out the Cadence host, installs on a tenant,
 performs customer/provider actions or Live Publishes today.
 
 Package CI also runs `node --test tests/unit/publish-candidate.test.mjs` with a
 checksum-pinned released Cadence v0.3.2 scanner for real credential rejection,
-upload binding, endpoint, hosted-only metadata and release-identity checks.
-Local publisher tests need the real CLI on `PATH`; no fake scanner is used.
+upload binding, endpoint, hosted-only metadata, release-identity and
+publication-response checks (listed `published` versus an older API's unlisted
+`draft`, with the exact echoed id/version/digest). Local publisher tests need
+the real CLI on `PATH`; no fake scanner is used.
 The v0.3.2 scanner pin does not qualify storage: actual publication still needs
 an exact released checker containing grammar v2 and the target hosted runtime.
