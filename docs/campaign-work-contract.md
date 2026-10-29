@@ -9,6 +9,10 @@ the same shapes before a caller can read them (see **Host pairing**).
 
 ## Source discovery
 
+> As of CRM 0.3.4 the manifest no longer declares `crm-campaign-work`; the
+> text below describes the earlier declaration and the contract a host would
+> serve if the operations return.
+
 Discovery is declarative, never an app-name branch. `app/app.md` requires
 the `crm-campaign-work` v1 contract:
 

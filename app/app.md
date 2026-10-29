@@ -1,12 +1,12 @@
 ---
 app: crm
 title: CRM
-version: '0.3.3'
+version: '0.3.4'
 summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
 needs:
   connections: []
   requires:
-    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1], crm-campaign-work: [1], app-storage: [1]}
+    contracts: {app-screens: [1], screen-records: [1], screen-startup: [1], app-storage: [1]}
 listing:
   tagline: Run customer records and campaigns with an agent you can audit
   category: customers
@@ -39,8 +39,7 @@ the pinned host-owned screen UI SDK. Backend domain execution, scoped
 data authority, credential custody, approval controls and sends stay
 host-owned; the CAD-811 domain/migration extraction is not complete.
 
-The package requires `app-screens`, `screen-records`, `screen-startup`,
-`crm-campaign-work` and `app-storage` v1. Its declaration orders two
+The package requires `app-screens`, `screen-records`, `screen-startup` and `app-storage` v1. Its declaration orders two
 static inline scripts: `runtime.js` contains
 the existing production React/ReactDOM/JSX implementation; `client.js` uses
 that same app-local instance. No parent runtime or network loader is used.
@@ -176,14 +175,10 @@ never stored, so the checklist and the decision cannot drift apart.
 reason. Neither grants approval, send or publish authority; the final
 test and send stay guarded host actions.
 
-The package requires the `crm-campaign-work` v1 host contract and
-declares it in `needs.requires.contracts`. That declaration is the source
-discovery key: a host finds campaign-work sources by this contract and
-the installation/context scope it already owns, not by branching on the
-app name `crm`. A host without the contract refuses this package instead
-of mounting a screen whose work operations would be inert; see
-`docs/campaign-work-contract.md` for the exact read/write request,
-response and refusal shapes.
+Since 0.3.4 the package no longer requires the `crm-campaign-work` v1
+host contract: the campaign Work card is gone, so the screen does not use
+campaign work. The two operations stay declared (removing them is a
+separate coordinated change); see `docs/campaign-work-contract.md`.
 
 
 ## App-owned storage schema (0.3.0, AOS-384)
