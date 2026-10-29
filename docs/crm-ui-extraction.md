@@ -79,8 +79,9 @@ The shared UI export now pins genuine committed candidate source in paired host 
 The CRM screen now records campaign work metadata (assignee, assignment
 provenance, due date, lifecycle status, blocked reason) and derives the
 next decision from the existing readiness chain. `screens/crm/screens.json`
-declares `campaign-work.show` and `campaign-work.save`, and `app.md`
-requires the `crm-campaign-work` v1 host contract.
+declared `campaign-work.show` and `campaign-work.save`, and `app.md` required
+the `crm-campaign-work` v1 host contract. (Since 0.3.4 neither is declared; the
+CRM UI no longer uses campaign work.)
 
 Those declarations are a paired change. The current host's screenOperation
 registry and closed verb tables do not include the two operations, so an

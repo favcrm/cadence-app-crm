@@ -2,14 +2,6 @@ import { ApiError } from "@cadence/screen-ui";
 import { buildCustomerProfile, formFromProfile } from "../../src/features/crm/customerProfile";
 import { checkPredicate, checkSegmentName } from "../../src/features/crm/segmentGrammar";
 import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, type CampaignBlock } from "../../src/features/crm/campaignGrammar";
-import {
-  WORK_APP,
-  WORK_CONTRACT,
-  applyWorkWrite,
-  assertWorkRevision,
-  type WorkRecord,
-  type WorkWritePatch,
-} from "../../src/domain/campaignWork";
 
 export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
@@ -18,7 +10,6 @@ export const fixtureActions = [
   "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list",
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
-  "campaign-work.show", "campaign-work.save",
 ];
 type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string; consent: { email: string; sms: string } };
 type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
@@ -37,7 +28,6 @@ const fixtureSenderBindings = [{ binding_id: "fixture-sender", revision: 1, dige
 /** CRM-12 browser-memory work rows. No entry is seeded: the fixture campaign
  *  starts unassigned, so the "no recorded work" path is what the preview
  *  exercises by default. */
-const works = new Map<string, WorkRecord>();
 const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixture draft", revision: 1, subject: "Welcome to the community", preheader: "A synthetic local-development email.", blocks: [{ type: "heading", text: "Welcome" }, { type: "paragraph", text: "This is synthetic preview content. No email can be sent." }], mode: "blocks", html: null, text_override: null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } }];
 
 function requireId(value: unknown): asserts value is string {
@@ -73,26 +63,6 @@ export function inertHtml(raw: string) {
 }
 /** The same contract shape the paired host serves: recorded facts only.
  *  `next_decision` is never serialized — the app derives it. */
-function workView(content: Content) {
-  const work = works.get(content.campaign_id) ?? null;
-  return {
-    contract: WORK_CONTRACT,
-    source: { app: WORK_APP, install_id: fixtureInstallId, context_id: null },
-    campaign_id: content.campaign_id,
-    work: work === null ? null : {
-      revision: work.revision,
-      content_revision: work.contentRevision,
-      assignee: work.assignee,
-      assigned_by: work.assignedBy,
-      assigned_at: work.assignedAt,
-      due_at: work.dueAt,
-      status: work.status,
-      blocked_reason: work.blockedReason,
-      updated_at: work.updatedAt,
-    },
-    content: { revision: content.revision, digest: content.content_digest },
-  };
-}
 
 export function fixtureCall(verb: string, args: Record<string, unknown>): unknown {
   switch (verb) {
@@ -195,26 +165,6 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const rendered = html.replace(/\{\{first_name\|([^}]+)\}\}/g, (_match, fallback: string) => escapeHtml(typeof args.sample_first_name === "string" && args.sample_first_name ? args.sample_first_name : fallback));
       const template = document.createElement("template"); template.innerHTML = rendered;
       return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
-    }
-    case "campaign-work.show": {
-      const content = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
-      return workView(content);
-    }
-    case "campaign-work.save": {
-      if (typeof args.campaign_id !== "string") throw new ApiError("A campaign ID is required.", 400);
-      checkCampaignId(args.campaign_id);
-      const content = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
-      const existing = works.get(args.campaign_id) ?? null;
-      assertWorkRevision(existing, args.expected_revision as number);
-      const patch: WorkWritePatch = {};
-      if (args.assignee !== undefined) patch.assignee = args.assignee as string | null;
-      if (args.due_at !== undefined) patch.dueAt = args.due_at as string | null;
-      if (args.status !== undefined) patch.status = args.status as WorkRecord["status"];
-      if (args.blocked_reason !== undefined) patch.blockedReason = args.blocked_reason as string | null;
-      const next = applyWorkWrite(existing, patch, { actor: "Operator (local fixture)", at: new Date().toISOString() }, content.revision);
-      works.set(args.campaign_id, next);
-      changed("Campaign work details saved locally.");
-      return workView(content);
     }
     case "proposals.list": return { proposals: [] };
     case "sends.list": return { sends: [] };
