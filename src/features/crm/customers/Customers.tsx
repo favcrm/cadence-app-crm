@@ -1,8 +1,8 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DataTable,Detail,DrawerShell,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
+import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
+import FrameDrawer from "../FrameDrawer";
 import { onScopeRetired } from "../../../bridge/scope";
-import { useSurface } from "../../../bridge/presentation";
 import { readCustomerList,useListMemory } from "../listMemory";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import {
@@ -62,15 +62,12 @@ export default function Customers({
   onRecordCreated?: (recordId: string) => void;
 }) {
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  // While the host's independent overlay is modal the list behind it is
-  // inert, not merely covered, so keyboard focus stays in the detail.
-  const hostModal = useSurface().modal;
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
-      <div className="crm-surface" inert={hostModal}>
+      <div className="crm-surface">
         {view === "list" && (
           <CustomerList
             scope={scope}
@@ -965,9 +962,9 @@ export function CustomerDrawer({
   };
 
   return (
-    <DrawerShell
-      geometry={{ left: 0 }}
+    <FrameDrawer
       kind="customer"
+      kicker={t("Customer")}
       label={t("Customer details")}
       title={loading ? t("Customer details") : (view?.displayName ?? t("Customer details"))}
       avatar={initials || undefined}
