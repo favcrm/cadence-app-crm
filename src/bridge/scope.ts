@@ -1,12 +1,11 @@
 import { ApiError } from "@cadence/screen-ui";
 import { useSyncExternalStore } from "react";
 import { admitted,exact } from "./channel";
-import { drawerAdvertised, drawerClosable, isDrawerVerb } from "./presentation";
 import { CALL_FIELDS,OPERATIONS } from "./services";
 export interface DisplayScope { installId: string; digest: string }
 export interface Route { section: "customers" | "segments" | "campaigns"; view: "list" | "new"; record_id: string | null; segment_id: string | null }
 export interface ReadObservation { operation: string; args: Record<string, unknown>; data: unknown }
-export interface ScopeSnapshot { presentationLocale: "en" | "zh-TW"; scope: DisplayScope; digest: string; actions: string[]; drawerOpen: boolean; drawerClose: boolean; route: Route; observations: ReadObservation[] }
+export interface ScopeSnapshot { presentationLocale: "en" | "zh-TW"; scope: DisplayScope; digest: string; actions: string[]; route: Route; observations: ReadObservation[] }
 let snapshot: ScopeSnapshot | null = null;
 let error: string | null = null;
 const listeners = new Set<() => void>();
@@ -27,18 +26,11 @@ export function parseRoute(v: unknown): Route {
   return v as unknown as Route;
 }
 export function acceptPush(p: Record<string, unknown>): void {
-  if (!exact(p, ["v", "op", "install_id", "context_id", "digest", "tag", "installation", "contexts", "runs", "outbox", "publish_intents", "sources", "defaults", "readiness", "actions", "now", "resume", "route", "read_observations", "presentation_locale"]) || p.tag !== "crm" || !id(p.install_id) || !(p.context_id === undefined || p.context_id === "" || id(p.context_id)) || !digest(p.digest) || !Array.isArray(p.actions) || !p.actions.every(a => typeof a === "string" && (OPERATIONS.includes(a) || isDrawerVerb(a))) || new Set(p.actions).size !== p.actions.length) invalid();
+  if (!exact(p, ["v", "op", "install_id", "context_id", "digest", "tag", "installation", "contexts", "runs", "outbox", "publish_intents", "sources", "defaults", "readiness", "actions", "now", "resume", "route", "read_observations", "presentation_locale"]) || p.tag !== "crm" || !id(p.install_id) || !(p.context_id === undefined || p.context_id === "" || id(p.context_id)) || !digest(p.digest) || !Array.isArray(p.actions) || !p.actions.every(a => typeof a === "string" && OPERATIONS.includes(a)) || new Set(p.actions).size !== p.actions.length) invalid();
   if ("presentation_locale" in p && p.presentation_locale !== "en" && p.presentation_locale !== "zh-TW") invalid();
   if (!obj(p.installation) || !exact(p.installation, ["install_id", "name", "title", "version", "digest", "summary"]) || p.installation.install_id !== p.install_id || p.installation.digest !== p.digest || p.installation.name !== "crm" || !["title", "version", "summary"].every(k => typeof (p.installation as Record<string, unknown>)[k] === "string") || ("contexts" in p && (!Array.isArray(p.contexts) || !p.contexts.every(c => obj(c) && exact(c, ["id", "label"]) && id(c.id) && typeof c.label === "string")))) invalid();
   if (snapshot && (snapshot.scope.installId !== p.install_id || snapshot.digest !== p.digest)) invalid();
-  const advertised = p.actions as string[];
-  // Drawer verbs are host-local UI state: they never enter the records
-  // operation list, so no service call can be derived from them. Opening
-  // needs both verbs (a panel we cannot close is not a capability); a child
-  // mount may advertise only close, which is still usable.
-  const drawerOpen = drawerAdvertised(advertised);
-  const drawerClose = drawerClosable(advertised);
-  const actions = advertised.filter(a => !isDrawerVerb(a));
+  const actions = p.actions as string[];
   const observations: ReadObservation[] = [];
   if (p.read_observations !== undefined) {
     if (!Array.isArray(p.read_observations) || p.read_observations.length > 16) invalid();
@@ -47,7 +39,7 @@ export function acceptPush(p: Record<string, unknown>): void {
       observations.push(row as unknown as ReadObservation);
     }
   }
-  snapshot = { presentationLocale: p.presentation_locale === "zh-TW" ? "zh-TW" : "en", scope: { installId: p.install_id as string, digest: p.digest as string }, digest: p.digest as string, actions, drawerOpen, drawerClose, route: parseRoute(p.route), observations };
+  snapshot = { presentationLocale: p.presentation_locale === "zh-TW" ? "zh-TW" : "en", scope: { installId: p.install_id as string, digest: p.digest as string }, digest: p.digest as string, actions, route: parseRoute(p.route), observations };
   error = null; notify();
 }
 export function assertCurrentScope(scope: DisplayScope): void {

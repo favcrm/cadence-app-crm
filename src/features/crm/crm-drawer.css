@@ -278,26 +278,24 @@ button.chip:focus-visible {
   }
 }
 
-/* CAD-1777 — a host-owned drawer frame (`screen-surfaces.v1` role "drawer")
-   renders ONLY the existing detail module. The core owns the window-wide
-   scrim, the trusted close control and the panel bounds, so the detail shell
-   fills this frame, draws no second scrim and hides its own close X: there is
-   exactly one trusted close, and it survives even if this frame fails. */
-.app-outlet[data-surface="drawer"] .crm-drawer-scrim {
-  display: none;
+/* CRM-14 — Customer and Segment details are always drawn in this frame:
+   a frame-wide scrim and a right drawer spanning the full frame height,
+   min(30rem, 100vw) wide, so a narrow frame gets a full-width sheet. The
+   header and footer stay put and only the body scrolls. */
+.crm-frame-drawer {
+  display: contents;
 }
-.app-outlet[data-surface="drawer"] .crm-drawer.crm-drawer-shell {
+.crm .crm-drawer.crm-drawer-shell {
   top: 0;
   right: 0;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  max-width: none;
-  border-left: 0;
-  box-shadow: none;
+  bottom: auto;
+  height: 100vh;
+  width: min(30rem, 100vw);
 }
-.app-outlet[data-surface="drawer"] .crm-drawer-id .btn-icon {
-  display: none;
+@media (max-width: 30rem) {
+  .crm .crm-drawer.crm-drawer-shell {
+    border-left: 0;
+  }
 }
 
 /* Long record names in the consent warning must wrap inside the drawer
@@ -306,21 +304,6 @@ button.chip:focus-visible {
   overflow-wrap: anywhere;
 }
 
-/* The non-interactive title receives dialog-entry focus, not field styling. */
-.app-outlet[data-surface="drawer"] .crm-drawer-title:focus {
-  outline: none;
-}
-
-/* The drawer frame owns no page flow: the fixed shell covers the viewport, so
-   the document itself must not add padding/scroll under it. */
-body:has(.app-outlet.crm[data-surface="drawer"]) {
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-/* The list wrapper is modal only while the host overlay is open, so nothing
-   behind the detail can take focus. */
 .crm-surface {
   min-width: 0;
 }

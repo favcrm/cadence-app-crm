@@ -17,6 +17,7 @@ export const zhTW: Record<string, string> = {
   "Activity": "活動歷程",
   "Details": "詳細資料",
   "Customers": "客戶",
+  "Customer": "客戶",
   "Segments": "客群",
   "Campaigns": "行銷活動",
   "Assistant": "助理",

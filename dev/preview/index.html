@@ -42,19 +42,6 @@
       </div>
     </div>
   </div>
-  <!-- The synthetic host owns one independent fixed overlay. The primary
-       workspace frame above never leaves its normal layout box; only this
-       child frame is fixed, and the trusted close below survives its failure. -->
-  <div class="screen-drawer" id="screen-drawer" hidden>
-    <button class="screen-scrim" id="screen-scrim" type="button" aria-label="Close details"></button>
-    <section class="screen-drawer-panel" id="screen-drawer-panel" role="dialog" aria-modal="true" aria-label="CRM details">
-      <header class="screen-drawer-bar">
-        <span class="screen-drawer-bar-title">Details</span>
-        <button class="screen-drawer-close" id="screen-drawer-close" type="button" aria-label="Close details">✕</button>
-      </header>
-      <div class="screen-drawer-slot" id="screen-drawer-slot"></div>
-    </section>
-  </div>
   <script type="module" src="./host.ts"></script>
 </body>
 </html>

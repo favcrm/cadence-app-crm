@@ -84,37 +84,17 @@ These are reusable CRM compositions, not a second SDK. Publishing a common
 list-density API for other apps belongs in the shared SDK source and release
 process; do not edit `node_modules` or copy primitives into the preview.
 
-## Core-hosted detail drawers
+## Detail drawers
 
-Customer and Segment details negotiate `screen-surfaces.v1`. Core assigns the
-frame role before its first projection: `primary` renders the normal workspace,
-`drawer` renders only the existing detail module. Drawer UI verbs remain
-separate from records operations. Hosts without this capability retain the
-ordinary embedded detail; no blind host request is sent.
-
-The primary frame never moves, resizes or remounts when a drawer opens. Core
-mounts a separate child in its fixed overlay, with one scrim and a trusted close
-control. Native admission binds that child to the live parent through the
-host-held `parent_action_token`; it never enters either child port. A child
-cannot open another child. Closing retires only the detail frame; replacing or
-revoking the parent invalidates its children. The extension is tracked in
-CAD-1777 and needs its normal security review/approval before release.
-
-CRM reuses `CustomerDrawer` and `SegmentDrawer` inside the child, suppressing
-their local scrim and duplicate close X. The list stays in normal flow, visible
-under the overlay, with its dimensions, pagination, search and scroll intact.
-There is no parent-document access, table copy, geometry freeze or cross-frame
-React portal. Core's portal stays in its own trusted document.
-
-Direct routes, detail-to-detail navigation and Back use the verified host
-route. Escape keeps menu/edit/detail ordering. Host dismissal clears only the
-current detail and restores the opener or heading without reopening. Closing a
-child invalidates primary queries in place so saved profile/rule changes appear
-without replacing the list frame.
-
-The fixture host models two independent ports/frames over one browser-memory
-store. It does not simulate native authority or forward live APIs. Build/verify
-the app artifact normally; preview evidence is not installation on a live board.
+Customer and Segment details always open inside the CRM frame (CRM-14), the
+same way Social Content draws its drawers: a frame-wide scrim and a right-hand
+`DrawerShell` from `@cadence/screen-ui` that spans the full frame height,
+`min(30rem, 100vw)` wide, so a narrow frame gets a full-width sheet. The header
+(kicker, title, close) and the footer stay put; only the body scrolls. While a
+drawer is open the document behind it does not scroll and Tab stays inside it.
+Escape keeps menu/edit/detail ordering; Escape, the scrim and the close control
+return to the list and restore focus to the opener row. Opening a row sets the
+record route, so direct routes and Back work. CRM sends no host drawer request.
 
 ## Compact CRM polish
 

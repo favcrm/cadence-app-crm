@@ -1,9 +1,9 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DrawerShell,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
+import { ApiError,Button,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
 import { useEffect,useMemo,useRef,useState } from "react";
+import FrameDrawer from "../FrameDrawer";
 import { patchRoute } from "../../../bridge/route";
 import { onScopeRetired } from "../../../bridge/scope";
-import { useSurface } from "../../../bridge/presentation";
 import {
 audienceClient,
 type AudienceScope,
@@ -219,12 +219,9 @@ export default function CrmSegments({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
-  // While the host's independent overlay is modal the list behind it is
-  // inert, not merely covered, so keyboard focus stays in the detail.
-  const hostModal = useSurface().modal;
   return (
     <div className="crm-list" data-section="segments">
-      <div className="crm-surface" inert={hostModal}>
+      <div className="crm-surface">
         {view === "list" && (
           <SegmentList
             scope={scope}
@@ -923,9 +920,9 @@ export function SegmentDrawer({
   };
 
   return (
-    <DrawerShell
-      geometry={{ left: 0 }}
+    <FrameDrawer
       kind="segment"
+      kicker={t("Segment")}
       label={t("Segment details")}
       title={loading ? t("Segment details") : (segment?.name ?? t("Segment details"))}
       avatar="◎"

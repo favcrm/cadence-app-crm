@@ -52,7 +52,6 @@ import HostPreview from "../../../bridge/HostPreview";
 import FinalSendPanel from "./FinalSendPanel";
 import ProposalRow from "./ProposalRow";
 import SenderPanel from "./SenderPanel";
-import CampaignWorkPanel from "./CampaignWorkPanel";
 
 export default function CampaignWorkspace({
   scope,
@@ -803,15 +802,6 @@ export default function CampaignWorkspace({
           </div>
         </form>
       </dialog>
-      {/* CRM-12: assignment, due date, status and the app-computed next
-          decision sit above the tabs so they are visible on every tab and
-          never depend on the email editor's unsaved state. */}
-      <CampaignWorkPanel
-        scope={scope}
-        campaignId={campaignId}
-        canWrite={canWrite}
-        readiness={readiness}
-      />
       <CampaignTabs
       tabs={[
         { id: "overview", label: "Overview" },
