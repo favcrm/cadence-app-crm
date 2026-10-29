@@ -33,8 +33,6 @@ export interface CallArgs {
   // id only; the write carries the revision it was read at. Attribution,
   // record revisions, the content revision and next_decision are recorded
   // or derived by the source and never travel from the frame.
-  "campaign-work.show": { campaign_id: string };
-  "campaign-work.save": { campaign_id: string; expected_revision: number; assignee?: string | null; due_at?: string | null; status?: string | null; blocked_reason?: string | null };
   "sends.prepare": { campaign_id: string; audience_freeze_id: string; request_id: string; base?: Base; exclusion_list_id?: string; max_recipients?: number };
   "sends.show": { send_id: string }; "sends.list": { campaign_id?: string };
   "smtp.show": Bag; "origin.show": Bag;
@@ -69,7 +67,6 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
   "proposals.list": ["campaign_id"], "proposals.show": ["proposal_id"], "proposals.render": ["proposal_id"], "proposals.apply": ["proposal_id", "expected_revision"], "proposals.discard": ["proposal_id"],
   "sender-bindings.list": [], "sender-bindings.show": ["binding_id"], "sender-bindings.save": ["binding_id", "sender_name", "sender_address", "unsubscribe_base", "expected_revision"],
   "content.test-prepare": ["campaign_id", "to_email", "binding_id"], "content.send-prepare": ["campaign_id", "binding_id", "audience_freeze_id"],
-  "campaign-work.show": ["campaign_id"], "campaign-work.save": ["campaign_id", "expected_revision", "assignee", "due_at", "status", "blocked_reason"],
   "sends.prepare": ["campaign_id", "audience_freeze_id", "request_id", "base", "exclusion_list_id", "max_recipients"], "sends.show": ["send_id"], "sends.list": ["campaign_id"], "smtp.show": [], "origin.show": [],
   "screen.route.patch": ["section", "view", "record_id", "segment_id", "replace"], "screen.preview.show": ["preview_id", "document", "anchor", "mode"], "screen.preview.clear": ["preview_id"],
 };
@@ -94,7 +91,7 @@ const written = () => writeListeners.forEach(f => f());
 export async function serviceCall<T = unknown, K extends keyof CallArgs = keyof CallArgs>(scope: DisplayScope, verb: K, args: CallArgs[K]): Promise<T> {
   assertCurrentScope(scope); requireOperation(verb);
   const result = await channel.request("call", verb, cleanArgs(verb, args as Bag, false)) as T;
-  if (["records.create", "records.update", "segments.save", "exclusions.save", "suppressions.add", "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard", "sender-bindings.save", "campaign-work.save"].includes(verb)) written();
+  if (["records.create", "records.update", "segments.save", "exclusions.save", "suppressions.add", "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard", "sender-bindings.save"].includes(verb)) written();
   return result;
 }
 export async function serviceSlot<T = unknown, K extends keyof SlotArgs = keyof SlotArgs>(scope: DisplayScope, verb: K, args: SlotArgs[K]): Promise<T> {

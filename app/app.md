@@ -169,16 +169,11 @@ The app computes `next_decision` from its existing send-readiness chain
 plus the recorded lifecycle — blocked and closed states win first. It is
 never stored, so the checklist and the decision cannot drift apart.
 
-`app/screens/crm/screens.json` declares two operations for this:
-`campaign-work.show` reads the recorded facts for one campaign, and
-`campaign-work.save` records assignment, due date, status and blocked
-reason. Neither grants approval, send or publish authority; the final
-test and send stay guarded host actions.
-
-Since 0.3.4 the package no longer requires the `crm-campaign-work` v1
-host contract: the campaign Work card is gone, so the screen does not use
-campaign work. The two operations stay declared (removing them is a
-separate coordinated change); see `docs/campaign-work-contract.md`.
+Since 0.3.4 the package neither requires the `crm-campaign-work` v1 host
+contract nor declares `campaign-work.show` / `campaign-work.save`: the
+campaign Work card is gone, so the screen does not use campaign work.
+`docs/campaign-work-contract.md` keeps the contract shapes for a future
+return of the operations.
 
 
 ## App-owned storage schema (0.3.0, AOS-384)
