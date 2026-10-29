@@ -15,6 +15,12 @@ const HOST_PUSH_TIMEOUT_MS = 15000;
 export default function CrmScreen() {
   const snapshot = useScope();
   const [unreachable, setUnreachable] = useState(false);
+  // A closed detail unmounts here at once, so its scroll lock and focus trap
+  // never outlive the close even when the host refuses the route patch. The
+  // host route is not assumed to have changed; a new route clears the mark.
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const routeRecord = snapshot?.route.record_id ?? null;
+  useEffect(() => { setDismissed(null); }, [routeRecord]);
   useEffect(() => {
     if (snapshot) return;
     const timer = setTimeout(() => setUnreachable(true), HOST_PUSH_TIMEOUT_MS);
@@ -32,9 +38,12 @@ export default function CrmScreen() {
   // Customer and Segment details are always the in-frame drawer: the route
   // selects the record, and the drawer shell returns focus to the opener row.
   const props = {
-    scope, viewer, view: current.view, recordId: current.record_id,
+    scope, viewer, view: current.view, recordId: current.record_id === dismissed ? null : current.record_id,
     onView: (view: "list" | "new") => { void patchRoute({ view, record_id: null }).catch(() => undefined); },
-    onSelect: (id: string | null) => { void patchRoute({ view: "list", record_id: id }).catch(() => undefined); },
+    onSelect: (id: string | null) => {
+      setDismissed(id === null ? current.record_id : null);
+      void patchRoute({ view: "list", record_id: id }).catch(() => undefined);
+    },
     onRecordCreated: (id: string) => { void patchRoute({ view: "list", record_id: id, segment_id: null }).catch(() => undefined); },
   };
   // Scope retirement destroys every draft/cache; section navigation doesn't
