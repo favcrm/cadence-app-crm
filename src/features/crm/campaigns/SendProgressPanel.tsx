@@ -22,7 +22,9 @@ import DeliveryRows from "./DeliveryRows";
  *  the most this app ever claims — never inbox delivery. */
 function headline(view: SendView): { text: string; tone: "fail" | "normal" } {
   const status = sendStatus({ state: view.send.state, counts: view.counts });
-  if (status.key === "sending") return { text: "Sending. You can leave this page; it continues.", tone: "normal" };
+  if (status.key === "sending") return { text: "Sending. The result appears here when it finishes.", tone: "normal" };
+  if (status.key === "failed") return { text: "Nothing was sent. The mail server accepted none of these.", tone: "fail" };
+  if (status.key === "nothing") return { text: "Nothing was sent. Everyone in this audience was skipped.", tone: "normal" };
   if (status.key === "partial") return { text: "Sent, but {count} weren't accepted. They aren't retried automatically.", tone: "normal" };
   if (status.key === "uncertain") return { text: "This send stopped before it finished. Check the list below before doing anything else.", tone: "fail" };
   return { text: "Sent. The mail server accepted these, which doesn't confirm inbox delivery.", tone: "normal" };

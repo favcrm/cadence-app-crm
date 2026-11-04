@@ -109,20 +109,9 @@ export default function NewCampaignDialog({
                   { type: "paragraph" as const, text: "Write your message here." },
                 ],
               };
-        const draft = { campaignId, name: trimmed, subject: trimmed, ...body };
-        const chosen = segmentId === "" ? null : ({ mode: "segment", segmentId } as const);
-        try {
-          await contentClient.save(scope, chosen === null ? draft : { ...draft, draftAudience: chosen });
-        } catch (e) {
-          // A board that predates saved audiences (hosted: validation_failed;
-          // native: an unknown-field refusal) refuses the argument and creates nothing: create without it. The
-          // choice then lives in memory only, and the Audience tab says so.
-          if (chosen !== null && e instanceof ApiError && e.status === 400) {
-            await contentClient.save(scope, draft);
-          } else {
-            throw e;
-          }
-        }
+        // The chosen segment rides the landing hand-off and is saved from
+        // the campaign page once the board reports it can keep one.
+        await contentClient.save(scope, { campaignId, name: trimmed, subject: trimmed, ...body });
         setSaved(true);
       }
       if (start === "ai") {

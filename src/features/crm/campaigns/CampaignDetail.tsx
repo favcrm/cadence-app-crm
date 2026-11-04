@@ -12,6 +12,7 @@ type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
 import { blockingReason } from "../campaign/EligibilityFunnel";
+import { type ChainPhase } from "../campaign/sendChain";
 import { campaignStatus } from "../campaign/sendStatus";
 import { useAudiencePreview } from "../campaign/useAudiencePreview";
 import {
@@ -98,6 +99,12 @@ export default function CampaignDetail({
   });
   const segmentState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
   const segments = segmentState.data ?? [];
+  // Exclusions are not saved with the campaign, so an active one is named on
+  // the Review row: the owner sees exactly who is being left out.
+  const exclusionState = useCrmQuery(scope, "exclusions.list", {}, (value): { id: string; name: string }[] => {
+    const rows = (value as { exclusions?: unknown } | null)?.exclusions;
+    return Array.isArray(rows) ? rows.flatMap((row: { id?: unknown; name?: unknown }) => typeof row?.id === "string" && typeof row.name === "string" ? [{ id: row.id, name: row.name }] : []) : [];
+  });
   const count = useAudiencePreview(scope, viewer, pick);
   const sendsState = useCampaignSends(scope, viewer.operator === true, campaignId);
   const status = campaignStatus(sendsState.sends);
@@ -111,7 +118,10 @@ export default function CampaignDetail({
     currentCount: number | null;
   } | null>(null);
 
+  // Lifted here, above the tabs, so a running send survives tab changes.
+  const [sendPhase, setSendPhase] = useState<ChainPhase | null>(null);
   const requestBack = () => {
+    if (sendPhase !== null) return;
     if (unsaved) setConfirmLeave(true);
     else onBack();
   };
@@ -192,23 +202,26 @@ export default function CampaignDetail({
       : null;
   const audienceState: AudienceState =
     pick.base === null || (pick.base.mode === "custom" && pick.base.customerIds.length === 0) ? { state: "unchosen" }
-    : draftAudience.keeping === "saving" || draftAudience.keeping === "waiting" || draftAudience.keeping === "typing" ? { state: "saving" }
+    : draftAudience.keeping === "waiting" ? { state: "email-unsaved" }
+    : draftAudience.keeping === "saving" || draftAudience.keeping === "typing" ? { state: "saving" }
     : draftAudience.keeping === "failed" || draftAudience.keeping === "mismatch" ? { state: "unsaved" }
     : count.error !== null ? { state: "error" }
     : preview === null ? { state: "counting" }
     : preview.finalCount === 0 ? { state: "empty", reason: blockingReason(preview, t) }
     : { state: "ready", count: preview.finalCount };
   const segmentName = pick.base?.mode === "segment" ? (segments.find((row) => row.id === (pick.base as { segmentId: string }).segmentId)?.name ?? null) : null;
-  const audienceTitle =
+  const exclusionName = pick.exclusionListId === null ? null : (exclusionState.data?.find((row) => row.id === pick.exclusionListId)?.name ?? pick.exclusionListId);
+  const baseTitle =
     pick.base === null ? null
     : pick.base.mode === "all" ? t("Everyone who can be emailed")
     : pick.base.mode === "segment" ? (segmentName ?? t("Saved segment"))
     : t("{count} chosen customers").replace("{count}", String(pick.base.customerIds.length));
+  const audienceTitle = baseTitle === null || exclusionName === null ? baseTitle : `${baseTitle} ${t("excluding {name}").replace("{name}", exclusionName)}`;
 
   return (
     <section aria-label={t("Campaign details")} className="grid gap-3">
       <div className="crm-chead">
-        <button type="button" className="lnk crm-chead-back" onClick={requestBack}>
+        <button type="button" className="lnk crm-chead-back" disabled={sendPhase !== null} onClick={requestBack}>
           ← {t("Campaigns")}
         </button>
         <h3 ref={headRef} className="text-cardtitle font-medium text-ink-100" tabIndex={-1} data-outlet-heading>
@@ -266,6 +279,8 @@ export default function CampaignDetail({
             sends={sendsState.sends}
             sendsError={sendsState.error}
             onSendsChanged={sendsState.refresh}
+            sendPhase={sendPhase}
+            onSendPhase={setSendPhase}
             tab={tab}
             onTab={setTab}
             activitySlot={<CampaignSends scope={scope} viewer={viewer} sends={sendsState.sends} error={sendsState.error} onChanged={sendsState.refresh} />}
@@ -283,6 +298,7 @@ export default function CampaignDetail({
                 keeping={draftAudience.keeping}
                 onRetrySave={draftAudience.retry}
                 onTyping={setTypingIds}
+                locked={sendPhase !== null}
               />
             }
           />

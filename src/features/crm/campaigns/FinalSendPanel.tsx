@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { Button,Link } from "@cadence/screen-ui";
-import { useState } from "react";
+import { useRef,useState } from "react";
 import {
 type AudienceScope
 } from "../audienceClient";
@@ -11,7 +11,8 @@ testState,
 type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
-import { latestSend } from "../campaign/sendStatus";
+import { audienceChanged,canStart,countChanged,isCancelled,type ChainPhase } from "../campaign/sendChain";
+import { latestSend,sendStatus } from "../campaign/sendStatus";
 import { useSendingSetup } from "../campaign/sendingSetup";
 import {
 friendlyCampaignError,
@@ -40,7 +41,10 @@ import { newAudienceId } from "../segmentGrammar";
 
 import SendProgressPanel from "./SendProgressPanel";
 
-type Phase = "approving" | "preparing" | "confirming";
+type Phase = ChainPhase;
+
+/** The chain stopped itself before a host card: nothing was asked, nothing sent. */
+class ChainStop extends Error {}
 
 /**
  * Review and send. One card of facts, one primary button that names the
@@ -69,6 +73,8 @@ export default function FinalSendPanel({
   onSendsChanged,
   onTab,
   onDoc,
+  sendPhase: phase,
+  onSendPhase: setPhase,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
@@ -88,37 +94,55 @@ export default function FinalSendPanel({
   onSendsChanged: () => void;
   onTab: (tab: CampaignTab) => void;
   onDoc: (doc: ContentDoc) => void;
+  /** Lifted above the tabs so leaving this tab can neither re-arm Send nor
+   *  start a second chain. */
+  sendPhase: ChainPhase | null;
+  onSendPhase: (phase: ChainPhase | null) => void;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const setup = useSendingSetup();
-  const [phase, setPhase] = useState<Phase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
   const [again, setAgain] = useState(false);
   const [errorStep, setErrorStep] = useState<Phase | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  const live = useRef({ freezeId });
+  live.current = { freezeId };
   const [testPending, setTestPending] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
 
   const items = sendReadiness({ doc, binding, testEvidence, audience });
   // While earlier sends are unknown the page cannot tell whether this
   // campaign was already sent, so sending waits.
-  const why = firstBlocker(items) ?? (sends === null ? "Checking earlier sends…" : null);
+  const why = firstBlocker(items)
+    ?? (sendsError !== null ? "Couldn't check earlier sends." : sends === null ? "Checking earlier sends…" : null);
   const test = testState(doc, binding, testEvidence);
   const people = (n: number) => t(n === 1 ? "1 person" : "{count} people").replace("{count}", formatNumber(n));
   const count = audience.state === "ready" ? audience.count : null;
-  const canSend = canWrite && why === null && selection !== null && freezeId !== null && phase === null;
+  const canSend = canWrite && why === null && selection !== null && freezeId !== null && canStart(phase);
   const latest = sends === null ? null : latestSend(sends);
   const resultId = approvedSendId ?? latest?.sendId ?? null;
 
   const send = async () => {
     if (!canSend || selection === null || freezeId === null) return;
+    const captured = freezeId;
+    const expected = count;
     setError(null);
     setWaiting(false);
+    setCancelled(false);
     let step: Phase = "approving";
     setPhase(step);
+    // The audience on screen at each host card must be the one this press
+    // started with; the button's count is what the owner agreed to.
+    const stillSame = () => {
+      if (audienceChanged(captured, live.current.freezeId)) {
+        throw new ChainStop(t("The audience changed while sending was starting."));
+      }
+    };
     try {
+      stillSame();
       // The daemon requires the current revision to be approved before it
       // prepares; the host's content card is that approval.
       if (!(doc.approval.valid && doc.approval.revision === doc.revision)) {
@@ -126,9 +150,18 @@ export default function FinalSendPanel({
       }
       step = "preparing";
       setPhase(step);
+      stillSame();
       const prepared = parsePreparedSend(
         await sendClient.sendPrepare(scope, campaignId, freezeId, newAudienceId("send"), selection),
       );
+      stillSame();
+      if (countChanged(expected, prepared.counts.final)) {
+        throw new ChainStop(
+          t("The number of people changed from {before} to {after}.")
+            .replace("{before}", expected === null ? "?" : formatNumber(expected))
+            .replace("{after}", formatNumber(prepared.counts.final)),
+        );
+      }
       step = "confirming";
       setPhase(step);
       // The host freshly reads the prepared send and draws its own
@@ -138,7 +171,11 @@ export default function FinalSendPanel({
       setAgain(false);
     } catch (err: unknown) {
       if (isApprovalRequired(err)) setWaiting(true);
-      else {
+      else if (isCancelled(err)) setCancelled(true);
+      else if (err instanceof ChainStop) {
+        setError(err.message);
+        setErrorStep("preparing");
+      } else {
         setError(step === "approving" ? friendlyCampaignError(err) : friendlySendError(err));
         setErrorStep(step);
       }
@@ -180,7 +217,7 @@ export default function FinalSendPanel({
           <dt>{t("Email")}</dt>
           <dd>
             {summarySubject(doc.subject)}{" "}
-            <button type="button" className="lnk crm-confirm-go" onClick={() => onTab("email")}>{t("Edit")}</button>
+            <button type="button" className="lnk crm-confirm-go" disabled={!canStart(phase)} onClick={() => onTab("email")}>{t("Edit")}</button>
           </dd>
         </div>
         <div>
@@ -192,7 +229,7 @@ export default function FinalSendPanel({
                 {count !== null && <> · {people(count)}</>}
               </>
             )}{" "}
-            <button type="button" className="lnk crm-confirm-go" onClick={() => onTab("audience")}>
+            <button type="button" className="lnk crm-confirm-go" disabled={!canStart(phase)} onClick={() => onTab("audience")}>
               {t(audienceTitle === null ? "Choose" : "Change")}
             </button>
           </dd>
@@ -213,7 +250,7 @@ export default function FinalSendPanel({
               <>{" "}<button
                 type="button"
                 className="lnk crm-confirm-go"
-                disabled={testPending || phase !== null || binding === undefined || binding === null || binding.state !== "live"}
+                disabled={testPending || !canStart(phase) || binding === undefined || binding === null || binding.state !== "live"}
                 onClick={sendTest}
               >{t(testPending ? "Sending test…" : test === "none" ? "Send test" : "Send again")}</button></>
             )}
@@ -223,7 +260,9 @@ export default function FinalSendPanel({
       <p className="text-label text-ink-400">
         {t("A test email goes to one address you enter when you confirm. The mail server's acceptance doesn't confirm inbox delivery, so check that inbox yourself.")}
       </p>
-      {sends === null && sendsError !== null && (
+      {sendsError !== null && (
+        // Shown whether or not an older list is on screen: a failed refresh
+        // after a send must not leave a stale "no earlier sends" behind.
         <p className="text-label text-fail" role="alert" data-sends-error>
           {t(sendsError)}{" "}
           <button type="button" className="lnk" onClick={onSendsChanged}>{t("Retry")}</button>
@@ -236,6 +275,11 @@ export default function FinalSendPanel({
         <p className="text-label text-ink-200" role="status" data-approval-waiting>
           {t(WAITING_APPROVAL_TEXT)}.{" "}
           {t("Nothing has been sent — the request is in the owner's approvals inbox.")}
+        </p>
+      )}
+      {cancelled && (
+        <p className="text-label text-ink-300" role="status" data-send-cancelled>
+          {t("Cancelled. Nothing was sent.")}
         </p>
       )}
       {error !== null && (
@@ -287,13 +331,16 @@ export default function FinalSendPanel({
   );
 
   if (resultId === null) return review;
-  const running = latest !== null && approvedSendId === null && latest.state === "sending";
+  // Another send is offered only once this one has clearly finished: not
+  // while it runs, and not while its result still needs checking.
+  const shown = sends?.find((row) => row.sendId === resultId) ?? null;
+  const finished = shown !== null && ["sent", "partial", "failed", "nothing"].includes(sendStatus(shown).key);
   return (
     <>
       <section aria-label={t("Send result card")} className="card px-4 py-4 grid gap-3" data-send-result>
         <h4 className="text-cardtitle font-medium text-ink-100">{t("Send result")}</h4>
         <SendProgressPanel scope={scope} viewer={viewer} sendId={resultId} onChanged={onSendsChanged} />
-        {canWrite && !again && !running && (
+        {canWrite && !again && finished && canStart(phase) && (
           <div>
             <button type="button" className="lnk text-label" onClick={() => setAgain(true)}>{t("Prepare another send")}</button>
           </div>

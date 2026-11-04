@@ -75,7 +75,8 @@ export function useDraftAudience(
 
   let keeping: AudienceKeeping;
   if (htmlMode) keeping = "html";
-  else if (doc === null || !supported || !keepable) keeping = same ? "saved" : "memory";
+  else if (supported && !keepable && !same) keeping = "limit";
+  else if (doc === null || !supported) keeping = same ? "saved" : "memory";
   else if (same) keeping = "saved";
   else if (settled !== null) keeping = settled;
   else if (emailDirty) keeping = "waiting";

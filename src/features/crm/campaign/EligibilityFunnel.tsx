@@ -70,16 +70,15 @@ export default function EligibilityFunnel({
   return (
     <div className="grid gap-2" aria-label={t("Eligibility")} data-funnel data-final-count={preview.finalCount}>
       <p className="text-label text-ink-100" role="status">
-        {t("{final} of {base} customers can be emailed")
-          .replace("{final}", () => formatNumber(preview.finalCount))
-          .replace("{base}", () => formatNumber(preview.baseCount))}
+        {t(preview.finalCount === 1 ? "1 person will receive this" : "{count} people will receive this")
+          .replace("{count}", () => formatNumber(preview.finalCount))}
       </p>
       <span className="crm-funnel-bar" aria-hidden="true">
         <i style={{ width: `${share}%` }} />
       </span>
       {excluded.length > 0 && (
         <p className="text-micro text-ink-500" data-excluded-count={preview.baseCount - preview.finalCount}>
-          {t("Excluded:")} {excluded.join(" · ")}
+          {t("Left out:")} {excluded.join(" · ")}
         </p>
       )}
       {reason !== null && (

@@ -26,6 +26,8 @@ export type AudienceState =
    *  saving after a freeze would make that freeze stale at once. */
   | { state: "saving" }
   | { state: "unsaved" }
+  /** A new audience is waiting for unsaved email edits to be saved or discarded. */
+  | { state: "email-unsaved" }
   | { state: "error" }
   | { state: "empty"; reason: string | null }
   | { state: "ready"; count: number };
@@ -67,6 +69,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
     audience.state === "unchosen" ? "Choose an audience first."
     : audience.state === "counting" ? "Counting who can receive this…"
     : audience.state === "saving" ? "Saving your audience choice…"
+    : audience.state === "email-unsaved" ? "Save or discard your email changes first."
     : audience.state === "unsaved" ? "Your audience choice wasn't saved. Open Audience and retry."
     : audience.state === "error" ? "The audience couldn't be counted. Open Audience and retry."
     : audience.state === "empty" ? (audience.reason ?? "Nobody in this audience can be emailed.")

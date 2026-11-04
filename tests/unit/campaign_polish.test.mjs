@@ -5,12 +5,14 @@ import { sdkMock } from "../support/sdk-mock.mjs";
 
 mock.module("@cadence/screen-ui", sdkMock);
 
-let g, status, ready, model;
+let g, status, ready, model, chain, sdk;
 beforeAll(async () => {
   g = await import("../../src/features/crm/campaignGrammar.ts");
   status = await import("../../src/features/crm/campaign/sendStatus.ts");
   ready = await import("../../src/features/crm/campaign/readiness.ts");
   model = await import("../../src/features/crm/campaigns/audienceModel.ts");
+  chain = await import("../../src/features/crm/campaign/sendChain.ts");
+  sdk = await import("@cadence/screen-ui");
 });
 
 const row = (extra = {}) => ({ content: { campaign_id: "c1", revision: 2, subject: "s", preheader: "", blocks: [], content_digest: "d", ...extra } });
@@ -92,4 +94,35 @@ test("a send waits while the audience choice is still being saved", () => {
   expect(ready.firstBlocker(items)).toBe("Saving your audience choice…");
   const failed = ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "unsaved" } });
   expect(ready.firstBlocker(failed)).toBe("Your audience choice wasn't saved. Open Audience and retry.");
+});
+
+test("a send in which nothing was accepted is never called sent", () => {
+  expect(status.campaignStatus([send("completed", { failed: 124 })]).label).toBe("Not sent, all failed");
+  expect(status.campaignStatus([send("completed", { failed: 124 })]).key).toBe("failed");
+  expect(status.campaignStatus([send("completed", { suppressed: 5 })]).label).toBe("Nothing sent");
+  expect(status.campaignStatus([send("completed", {})]).label).toBe("Nothing sent");
+  expect(status.campaignStatus([send("completed", { failed: 3, suppressed: 2 })]).key).toBe("failed");
+  // still sent / partial once anything was accepted
+  expect(status.campaignStatus([send("completed", { accepted: 1, failed: 123 })]).label).toBe("Sent, some failed");
+  expect(status.campaignStatus([send("completed", { accepted: 1 })]).label).toBe("Sent");
+});
+
+test("send chain guards", () => {
+  expect(chain.audienceChanged("c-freeze-1", "c-freeze-1")).toBe(false);
+  expect(chain.audienceChanged("c-freeze-1", "c-freeze-2")).toBe(true);
+  expect(chain.audienceChanged("c-freeze-1", null)).toBe(true);
+  expect(chain.audienceChanged(null, null)).toBe(true);
+  expect(chain.countChanged(124, 124)).toBe(false);
+  expect(chain.countChanged(124, 120)).toBe(true);
+  expect(chain.countChanged(null, 5)).toBe(true);
+  expect(chain.canStart(null)).toBe(true);
+  for (const phase of ["approving", "preparing", "confirming"]) expect(chain.canStart(phase)).toBe(false);
+  expect(chain.isCancelled(new sdk.ApiError("Cancelled.", 400, { code: "cancelled" }))).toBe(true);
+  expect(chain.isCancelled(new sdk.ApiError("Refused.", 400, { code: "failed" }))).toBe(false);
+  expect(chain.isCancelled(new Error("cancelled"))).toBe(false);
+});
+
+test("a send waits for unsaved email edits when a new audience is pending", () => {
+  const items = ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "email-unsaved" } });
+  expect(ready.firstBlocker(items)).toBe("Save or discard your email changes first.");
 });

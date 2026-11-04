@@ -28,7 +28,7 @@ const MODES: { mode: Mode; title: string; hint: string }[] = [
 ];
 
 /** How the choice is kept, said without implying more than is true. */
-export type AudienceKeeping = "saved" | "saving" | "waiting" | "typing" | "memory" | "html" | "failed" | "mismatch";
+export type AudienceKeeping = "saved" | "saving" | "waiting" | "typing" | "limit" | "memory" | "html" | "failed" | "mismatch";
 
 export default function AudienceSection({
   scope,
@@ -40,6 +40,7 @@ export default function AudienceSection({
   keeping,
   onRetrySave,
   onTyping,
+  locked,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
@@ -50,9 +51,11 @@ export default function AudienceSection({
   keeping: AudienceKeeping;
   onRetrySave: () => void;
   onTyping: (typing: boolean) => void;
+  /** A send is running: the audience it was started for must not change. */
+  locked: boolean;
 }) {
   const { t } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
+  const canWrite = viewer.operator === true && !viewer.readOnly && !locked;
   const [exclusions, setExclusions] = useState<{ id: string; name: string }[]>([]);
   const [customIds, setCustomIds] = useState(() => (pick.base?.mode === "custom" ? pick.base.customerIds.join(", ") : ""));
   const [exclusionsError, setListsError] = useState<string | null>(null);
@@ -162,14 +165,15 @@ export default function AudienceSection({
     radios.current[next.mode]?.focus();
   };
   const keepingLine: Record<AudienceKeeping, string> = {
-    saved: "Your choice stays with this campaign.",
+    saved: "Your audience choice stays with this campaign.",
     saving: "Saving your choice…",
-    waiting: "Your choice will be saved once the email changes are saved or discarded.",
+    waiting: "Your email has unsaved changes. Save or discard them, then your audience choice is saved.",
+    limit: "Add 1 to 100 customer IDs to keep this choice with the campaign.",
     memory: "This version of Cadence can't keep the audience with the campaign. Your choice is kept on this screen only.",
     html: "This campaign uses pasted HTML, so its audience is kept on this screen only.",
     typing: "Your choice is saved when you leave this box.",
     failed: "Your choice wasn't saved.",
-    mismatch: "Cadence kept a different audience than the one you chose. Choose it again to retry.",
+    mismatch: "Cadence kept a different audience than the one you chose.",
   };
 
   return (
@@ -261,6 +265,7 @@ export default function AudienceSection({
       {pick.base !== null && (
         <p className="text-micro text-ink-500" role="status" data-keeping={keeping}>
           {t(keepingLine[keeping])}{" "}
+          {pick.exclusionListId !== null && keeping === "saved" && t("The exclusion list applies to this send but isn't saved with the campaign.")}{" "}
           {(keeping === "failed" || keeping === "mismatch") && (
             <button type="button" className="lnk" onClick={onRetrySave}>{t("Retry")}</button>
           )}

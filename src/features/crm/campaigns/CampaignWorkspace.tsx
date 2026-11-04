@@ -10,6 +10,7 @@ import ActivityPane from "../campaign/ActivityPane";
 import CampaignTabs from "../campaign/CampaignTabs";
 import EmailPane from "../campaign/EmailPane";
 import { setLanding } from "../campaign/landing";
+import { type ChainPhase } from "../campaign/sendChain";
 import {
 type AudienceState,
 type CampaignTab
@@ -58,6 +59,8 @@ export default function CampaignWorkspace({
   sends,
   sendsError,
   onSendsChanged,
+  sendPhase,
+  onSendPhase,
   audienceSlot,
   activitySlot,
   tab,
@@ -82,6 +85,8 @@ export default function CampaignWorkspace({
   sends: SendListEntry[] | null;
   sendsError: string | null;
   onSendsChanged: () => void;
+  sendPhase: ChainPhase | null;
+  onSendPhase: (phase: ChainPhase | null) => void;
   audienceSlot: React.ReactNode;
   activitySlot: React.ReactNode;
   tab: CampaignTab;
@@ -363,10 +368,11 @@ export default function CampaignWorkspace({
       ]}
       active={tab}
       onChange={onTab}
+      disabled={sendPhase !== null}
       actions={onCloned !== undefined && doc !== null ? (
         <Button
           size="sm"
-          disabled={!canWrite}
+          disabled={!canWrite || sendPhase !== null}
           title={t("Copy this campaign's saved version into a new draft")}
           onClick={() => {
             setCloneName(`${campaignTitle(doc)} — Copy`);
@@ -436,6 +442,8 @@ export default function CampaignWorkspace({
             onSendsChanged={onSendsChanged}
             onTab={onTab}
             onDoc={onDoc}
+            sendPhase={sendPhase}
+            onSendPhase={onSendPhase}
           />
         </>
       ))}
