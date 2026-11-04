@@ -3,33 +3,37 @@ import type { SmtpBinding,TestSendReceipt } from "../sendClient";
 import { EMAIL_SENDING_HREF } from "../sendingView";
 
 /**
- * The send prerequisites as data (CAD-1055). One list feeds both the
- * Overview "Ready to send" checklist and the Final send panel's gate,
- * so the two can never disagree. `reason` is the long-standing
- * "Prepare stays unavailable — missing" sentence; the daemon still
- * re-verifies every input at prepare and approve. Content approval is
- * not a row: prepare approves the current revision as part of the send
- * confirmation, so the campaign has no separate approval step.
+ * The send prerequisites as data. One list feeds the Review and send
+ * rows, the button and the line that says why it is blocked, so they can
+ * never disagree. The daemon still re-verifies every input at prepare and
+ * approve. Content approval is not a row: pressing send asks the host to
+ * approve the current revision as the first step of the send.
  */
 
-export type CampaignTab = "overview" | "email" | "audience" | "activity";
+export type CampaignTab = "email" | "audience" | "review" | "activity";
 
-/** Where an unmet item is fixed: another tab, or a panel on Overview. */
+/** Where an unmet item is fixed. */
 export type FixTarget =
   | { kind: "tab"; tab: CampaignTab; label: string }
-  | { kind: "anchor"; id: string; label: string }
-  | { kind: "href"; href: string; label: string };
+  | { kind: "href"; href: string; label: string }
+  | { kind: "test"; label: string };
+
+/** What is known about the chosen audience's size. */
+export type AudienceState =
+  | { state: "unchosen" }
+  | { state: "counting" }
+  | { state: "error" }
+  | { state: "empty"; reason: string | null }
+  | { state: "ready"; count: number };
+
+export type TestState = "none" | "content-changed" | "sender-changed" | "ok";
 
 export interface ReadinessItem {
-  key: "draft" | "freeze" | "sender" | "test";
-  /** Plain-language checklist line. */
-  label: string;
+  key: "draft" | "audience" | "sender" | "test";
   done: boolean;
-  /** Why it is unmet; null for the draft row (not a prepare gate). */
-  reason: string | null;
+  /** Plain-English line saying what is missing; null when done. */
+  blocker: string | null;
   fix: FixTarget | null;
-  /** False for checks shown in the send confirmation instead of the checklist. */
-  checklist: boolean;
 }
 
 export interface ReadinessInput {
@@ -37,72 +41,63 @@ export interface ReadinessInput {
   /** `undefined` = still loading, `null` = none bound. */
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
-  /** CAD-1836: the send freezes its own audience, so a counted selection
-   *  satisfies the freeze gate before any snapshot exists. */
-  selectionReady: boolean;
+  audience: AudienceState;
 }
 
-export const TEST_ANCHOR = "cmp-test-section";
+/** Whether a test of this exact version and sender is on record. */
+export function testState(
+  doc: ContentDoc | null,
+  binding: SmtpBinding | null | undefined,
+  evidence: TestSendReceipt | null,
+): TestState {
+  if (evidence === null || doc === null || binding === null || binding === undefined) return "none";
+  if (evidence.contentRevision !== doc.revision || evidence.contentDigest !== doc.contentDigest) return "content-changed";
+  if (evidence.linkDigest !== binding.digest) return "sender-changed";
+  return "ok";
+}
 
 export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
-  const { doc, binding, testEvidence, selectionReady } = input;
-
-  let senderReason: string | null = null;
-  if (binding === undefined) senderReason = "the sender binding read (still loading)";
-  else if (binding === null || binding.state !== "live") senderReason = "a live SMTP sender binding";
-
-  let testReason: string | null = null;
-  if (testEvidence === null) testReason = "an accepted test send of this content and binding";
-  else if (
-    doc !== null &&
-    binding !== null &&
-    binding !== undefined &&
-    (testEvidence.contentRevision !== doc.revision ||
-      testEvidence.contentDigest !== doc.contentDigest ||
-      testEvidence.linkDigest !== binding.digest)
-  ) {
-    testReason = "a test send accepted against this exact content revision and binding";
-  }
-
+  const { doc, binding, testEvidence, audience } = input;
+  const test = testState(doc, binding, testEvidence);
+  const audienceBlocker =
+    audience.state === "unchosen" ? "Choose an audience first."
+    : audience.state === "counting" ? "Counting who can receive this…"
+    : audience.state === "error" ? "The audience couldn't be counted. Open Audience and retry."
+    : audience.state === "empty" ? (audience.reason ?? "Nobody in this audience can be emailed.")
+    : null;
   return [
     {
       key: "draft",
-      label: "Email drafted",
       done: doc !== null,
-      reason: null,
-      fix: { kind: "tab", tab: "email", label: "Review" },
-      checklist: true,
+      blocker: doc === null ? "Write the email first." : null,
+      fix: { kind: "tab", tab: "email", label: "Edit" },
     },
     {
-      key: "freeze",
-      label: "Audience ready to freeze with the send",
-      done: selectionReady,
-      reason: selectionReady ? null : "an audience selection for the send to freeze",
-      // The freeze action lives in the send panel, immediately before the
-      // send it belongs to; the Audience tab only counts the audience.
-      fix: { kind: "anchor", id: "cmp-final-send", label: "Fix" },
-      checklist: false,
+      key: "audience",
+      done: audience.state === "ready",
+      blocker: audienceBlocker,
+      fix: { kind: "tab", tab: "audience", label: audience.state === "unchosen" ? "Choose" : "Change" },
     },
     {
       key: "sender",
-      label: "Email sender connected",
-      done: senderReason === null,
-      reason: senderReason,
+      done: binding !== undefined && binding !== null && binding.state === "live",
+      blocker: binding === undefined ? "Checking the sender…" : binding === null || binding.state !== "live" ? "Connect a sender first." : null,
       fix: { kind: "href", href: EMAIL_SENDING_HREF, label: "Set up sending" },
-      checklist: true,
     },
     {
       key: "test",
-      label: "Test email accepted",
-      done: testReason === null,
-      reason: testReason,
-      fix: { kind: "anchor", id: TEST_ANCHOR, label: "Send a test" },
-      checklist: true,
+      done: test === "ok",
+      blocker:
+        test === "ok" ? null
+        : test === "sender-changed" ? "The sender changed. Send a new test, then send."
+        : test === "content-changed" ? "The email changed since the last test. Send a new test, then send."
+        : "Send a test email first.",
+      fix: { kind: "test", label: test === "none" ? "Send test" : "Send again" },
     },
   ];
 }
 
-/** The unmet prepare gates, in checklist order. */
-export function missingReasons(items: ReadinessItem[]): string[] {
-  return items.flatMap((item) => (!item.done && item.reason !== null ? [item.reason] : []));
+/** The first unmet item's line — why the send button is disabled. */
+export function firstBlocker(items: ReadinessItem[]): string | null {
+  return items.find((item) => !item.done)?.blocker ?? null;
 }

@@ -1,14 +1,19 @@
 import type { AudienceBaseInput } from "../audienceClient";
+
+/** `base: null` is "the owner has not chosen": no freeze id, no send
+ *  selection, no prepare. It is never read as everyone. */
 export interface AudiencePick {
-  base: AudienceBaseInput;
+  base: AudienceBaseInput | null;
   exclusionListId: string | null;
 }
 
 /** CAD-1178: the freeze id is derived from the audience, never typed. The
  *  same base + exclusions maps to the same freeze (stable across reloads);
  *  a changed audience maps to a new id — exactly when a refreeze is due —
- *  and re-freezing the same audience replays the same id server-side. */
-export function audienceFreezeId(campaignId: string, pick: AudiencePick): string {
+ *  and re-freezing the same audience replays the same id server-side.
+ *  No chosen audience has no freeze id. */
+export function audienceFreezeId(campaignId: string, pick: AudiencePick): string | null {
+  if (pick.base === null) return null;
   const base =
     pick.base.mode === "segment"
       ? `segment:${pick.base.segmentId}`

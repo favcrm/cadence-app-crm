@@ -20,7 +20,7 @@ export interface CallArgs {
   "audience.prepare": { freeze_id: string; base: Base; exclusion_list_id?: string; max_recipients: number };
   "audience.show": { freeze_id: string };
   "content.list": Bag; "content.show": { campaign_id: string };
-  "content.save": { campaign_id: string; subject: string; name?: string; preheader?: string; blocks?: unknown[]; html?: string; text?: string; expected_revision?: number };
+  "content.save": { campaign_id: string; subject: string; name?: string; preheader?: string; blocks?: unknown[]; html?: string; text?: string; expected_revision?: number; draft_audience?: Base | null };
   "content.clone": { campaign_id: string; expected_revision: number; name: string; copy_audience: boolean; copy_sender: boolean; source_freeze_id?: string; source_binding_id?: string };
   "content.render": { campaign_id: string; revision?: number; sample_first_name?: string; binding_id?: string };
   "proposals.list": { campaign_id?: string }; "proposals.show": { proposal_id: string }; "proposals.render": { proposal_id: string };
@@ -62,7 +62,7 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
   "exclusions.list": [], "exclusions.show": ["list_id"], "exclusions.save": ["list_id", "name", "member_ids", "expected_revision"],
   "suppressions.list": [], "suppressions.add": ["email", "customer_id", "reason"],
   "audience.preview": ["base", "exclusion_list_id"], "audience.prepare": ["freeze_id", "base", "exclusion_list_id", "max_recipients"], "audience.show": ["freeze_id"],
-  "content.list": [], "content.show": ["campaign_id"], "content.save": ["campaign_id", "name", "subject", "preheader", "blocks", "html", "text", "expected_revision"],
+  "content.list": [], "content.show": ["campaign_id"], "content.save": ["campaign_id", "name", "subject", "preheader", "blocks", "html", "text", "expected_revision", "draft_audience"],
   "content.clone": ["campaign_id", "expected_revision", "name", "copy_audience", "copy_sender", "source_freeze_id", "source_binding_id"], "content.render": ["campaign_id", "revision", "sample_first_name", "binding_id"],
   "proposals.list": ["campaign_id"], "proposals.show": ["proposal_id"], "proposals.render": ["proposal_id"], "proposals.apply": ["proposal_id", "expected_revision"], "proposals.discard": ["proposal_id"],
   "sender-bindings.list": [], "sender-bindings.show": ["binding_id"], "sender-bindings.save": ["binding_id", "sender_name", "sender_address", "unsubscribe_base", "expected_revision"],
