@@ -65,6 +65,7 @@ export default function FinalSendPanel({
   audience,
   audienceTitle,
   sends,
+  sendsError,
   onSendsChanged,
   onTab,
   onDoc,
@@ -82,6 +83,8 @@ export default function FinalSendPanel({
   audience: AudienceState;
   audienceTitle: string | null;
   sends: SendListEntry[] | null;
+  /** Why the send list is unknown, when a read failed. */
+  sendsError: string | null;
   onSendsChanged: () => void;
   onTab: (tab: CampaignTab) => void;
   onDoc: (doc: ContentDoc) => void;
@@ -99,7 +102,9 @@ export default function FinalSendPanel({
   const [testError, setTestError] = useState<string | null>(null);
 
   const items = sendReadiness({ doc, binding, testEvidence, audience });
-  const why = firstBlocker(items);
+  // While earlier sends are unknown the page cannot tell whether this
+  // campaign was already sent, so sending waits.
+  const why = firstBlocker(items) ?? (sends === null ? "Checking earlier sends…" : null);
   const test = testState(doc, binding, testEvidence);
   const people = (n: number) => t(n === 1 ? "1 person" : "{count} people").replace("{count}", formatNumber(n));
   const count = audience.state === "ready" ? audience.count : null;
@@ -218,6 +223,12 @@ export default function FinalSendPanel({
       <p className="text-label text-ink-400">
         {t("A test email goes to one address you enter when you confirm. The mail server's acceptance doesn't confirm inbox delivery, so check that inbox yourself.")}
       </p>
+      {sends === null && sendsError !== null && (
+        <p className="text-label text-fail" role="alert" data-sends-error>
+          {t(sendsError)}{" "}
+          <button type="button" className="lnk" onClick={onSendsChanged}>{t("Retry")}</button>
+        </p>
+      )}
       {testError !== null && (
         <p className="text-label text-fail" role="alert">{t(testError)}</p>
       )}

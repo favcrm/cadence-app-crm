@@ -28,7 +28,7 @@ const MODES: { mode: Mode; title: string; hint: string }[] = [
 ];
 
 /** How the choice is kept, said without implying more than is true. */
-export type AudienceKeeping = "saved" | "saving" | "waiting" | "memory" | "html" | "failed";
+export type AudienceKeeping = "saved" | "saving" | "waiting" | "typing" | "memory" | "html" | "failed" | "mismatch";
 
 export default function AudienceSection({
   scope,
@@ -39,6 +39,7 @@ export default function AudienceSection({
   count,
   keeping,
   onRetrySave,
+  onTyping,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
@@ -48,6 +49,7 @@ export default function AudienceSection({
   count: ReturnType<typeof useAudiencePreview>;
   keeping: AudienceKeeping;
   onRetrySave: () => void;
+  onTyping: (typing: boolean) => void;
 }) {
   const { t } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
@@ -165,7 +167,9 @@ export default function AudienceSection({
     waiting: "Your choice will be saved once the email changes are saved or discarded.",
     memory: "This version of Cadence can't keep the audience with the campaign. Your choice is kept on this screen only.",
     html: "This campaign uses pasted HTML, so its audience is kept on this screen only.",
+    typing: "Your choice is saved when you leave this box.",
     failed: "Your choice wasn't saved.",
+    mismatch: "Cadence kept a different audience than the one you chose. Choose it again to retry.",
   };
 
   return (
@@ -232,6 +236,8 @@ export default function AudienceSection({
             rows={2}
             value={customIds}
             disabled={!canWrite}
+            onFocus={() => onTyping(true)}
+            onBlur={() => onTyping(false)}
             onChange={(e) => {
               setCustomIds(e.target.value);
               onPick({ ...pick, base: { mode: "custom", customerIds: parseIds(e.target.value) } });
@@ -255,7 +261,7 @@ export default function AudienceSection({
       {pick.base !== null && (
         <p className="text-micro text-ink-500" role="status" data-keeping={keeping}>
           {t(keepingLine[keeping])}{" "}
-          {keeping === "failed" && (
+          {(keeping === "failed" || keeping === "mismatch") && (
             <button type="button" className="lnk" onClick={onRetrySave}>{t("Retry")}</button>
           )}
         </p>

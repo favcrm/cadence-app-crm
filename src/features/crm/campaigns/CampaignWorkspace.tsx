@@ -56,6 +56,7 @@ export default function CampaignWorkspace({
   audience,
   audienceTitle,
   sends,
+  sendsError,
   onSendsChanged,
   audienceSlot,
   activitySlot,
@@ -79,6 +80,7 @@ export default function CampaignWorkspace({
   audience: AudienceState;
   audienceTitle: string | null;
   sends: SendListEntry[] | null;
+  sendsError: string | null;
   onSendsChanged: () => void;
   audienceSlot: React.ReactNode;
   activitySlot: React.ReactNode;
@@ -430,6 +432,7 @@ export default function CampaignWorkspace({
             audience={audience}
             audienceTitle={audienceTitle}
             sends={sends}
+            sendsError={sendsError}
             onSendsChanged={onSendsChanged}
             onTab={onTab}
             onDoc={onDoc}

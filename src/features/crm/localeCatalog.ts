@@ -659,7 +659,7 @@ export const zhTW: Record<string, string> = {
   "Copy the audience": "複製受眾",
   "(none chosen yet)": "（尚未選擇）",
   "Copy the sender preview": "複製寄件者預覽",
-  "There's no saved email yet. Ask the assistant to draft one, then apply it on the Email tab.": "尚無已儲存的郵件。請請助理草擬，並在「電子郵件」分頁套用。",
+  "There's no saved email yet. Ask the assistant to draft one, then apply it on the Email tab.": "尚無已儲存的郵件。請助理草擬，並在「電子郵件」分頁套用。",
   "Recipients — scroll horizontally to reach every column": "收件人——可左右捲動查看所有欄位",
   "Resolve": "處理",
   "Check on host…": "在主機上確認…",
@@ -717,4 +717,8 @@ export const zhTW: Record<string, string> = {
   "Saving your audience choice…": "正在儲存你的受眾選擇…",
   "Your audience choice wasn't saved. Open Audience and retry.": "你的受眾選擇未能儲存。請開啟「受眾」分頁後重試。",
   "This campaign uses pasted HTML, so its audience is kept on this screen only.": "此行銷活動使用貼上的 HTML，因此受眾只會保留在此畫面。",
+  "{accepted} of {total} accepted": "已接受 {accepted}／{total}",
+  "Checking earlier sends…": "正在檢查先前的寄送…",
+  "Your choice is saved when you leave this box.": "離開此欄位時會儲存你的選擇。",
+  "Cadence kept a different audience than the one you chose. Choose it again to retry.": "Cadence 保留的受眾與你選擇的不同。請再選擇一次以重試。",
 };

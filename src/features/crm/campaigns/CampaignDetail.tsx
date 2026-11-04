@@ -134,7 +134,8 @@ export default function CampaignDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.campaignId, JSON.stringify(kept), legacySegment]);
 
-  const draftAudience = useDraftAudience(scope, campaignId, doc, setDoc, pick, unsaved);
+  const [typingIds, setTypingIds] = useState(false);
+  const draftAudience = useDraftAudience(scope, campaignId, doc, setDoc, pick, unsaved, typingIds);
 
   // Every check carries a generation: an older lookup resolving after a
   // newer one (audience changed mid-flight) can never paint its row.
@@ -191,8 +192,8 @@ export default function CampaignDetail({
       : null;
   const audienceState: AudienceState =
     pick.base === null || (pick.base.mode === "custom" && pick.base.customerIds.length === 0) ? { state: "unchosen" }
-    : draftAudience.keeping === "saving" || draftAudience.keeping === "waiting" ? { state: "saving" }
-    : draftAudience.keeping === "failed" ? { state: "unsaved" }
+    : draftAudience.keeping === "saving" || draftAudience.keeping === "waiting" || draftAudience.keeping === "typing" ? { state: "saving" }
+    : draftAudience.keeping === "failed" || draftAudience.keeping === "mismatch" ? { state: "unsaved" }
     : count.error !== null ? { state: "error" }
     : preview === null ? { state: "counting" }
     : preview.finalCount === 0 ? { state: "empty", reason: blockingReason(preview, t) }
@@ -263,6 +264,7 @@ export default function CampaignDetail({
             audience={audienceState}
             audienceTitle={audienceTitle}
             sends={sendsState.sends}
+            sendsError={sendsState.error}
             onSendsChanged={sendsState.refresh}
             tab={tab}
             onTab={setTab}
@@ -280,6 +282,7 @@ export default function CampaignDetail({
                 count={count}
                 keeping={draftAudience.keeping}
                 onRetrySave={draftAudience.retry}
+                onTyping={setTypingIds}
               />
             }
           />

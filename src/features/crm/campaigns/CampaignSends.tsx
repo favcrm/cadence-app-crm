@@ -54,7 +54,7 @@ export default function CampaignSends({
                 <p className="text-label text-ink-200">
                   <span className="chip crm-send-chip" data-state={status.chip ?? undefined}>{t(status.label)}</span>{" "}
                   <span className="text-ink-400">
-                    {formatNumber(row.counts.accepted)} {t("accepted")} {t("of")} {formatNumber(total)}
+                    {t("{accepted} of {total} accepted").replace("{accepted}", formatNumber(row.counts.accepted)).replace("{total}", formatNumber(total))}
                   </span>{" "}
                   <button
                     type="button"
