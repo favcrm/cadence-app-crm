@@ -11,7 +11,7 @@ testState,
 type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
-import { canStart } from "../campaign/sendChain";
+import { canStart, visibleResultId } from "../campaign/sendChain";
 import { runSendChain,settleSend } from "../campaign/runSendChain";
 import type { ChainRecord } from "../campaign/sendChainStore";
 import { latestSend,sendStatus } from "../campaign/sendStatus";
@@ -95,7 +95,6 @@ export default function FinalSendPanel({
   const [again, setAgain] = useState(false);
   const phase = chain.phase;
   const notice = chain.notice;
-  const approvedSendId = chain.approvedSendId ?? chain.pendingSendId;
   useEffect(() => { if (chain.approvedSendId !== null) setAgain(false); }, [chain.approvedSendId]);
   const [testPending, setTestPending] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
@@ -104,7 +103,7 @@ export default function FinalSendPanel({
   // While earlier sends are unknown the page cannot tell whether this
   // campaign was already sent, so sending waits.
   const why = firstBlocker(items)
-    ?? (chain.pendingSendId !== null ? "Check result first." : sendsError !== null ? "Couldn't check earlier sends." : sends === null ? "Checking earlier sends…" : null);
+    ?? (chain.settling ? "Checking whether this send went out…" : chain.pendingSendId !== null ? "Check result first." : sendsError !== null ? "Couldn't check earlier sends." : sends === null ? "Checking earlier sends…" : null);
   const test = testState(doc, binding, testEvidence);
   const people = (n: number) => t(n === 1 ? "1 person" : "{count} people").replace("{count}", formatNumber(n));
   const count = audience.state === "ready" ? audience.count : null;
@@ -112,7 +111,10 @@ export default function FinalSendPanel({
   const latest = sends === null ? null : latestSend(sends);
   // While a card is open, or while a lost answer is being settled, the page
   // shows the review (locked, with the Check result line), not a result.
-  const resultId = phase !== null || notice?.kind === "unknown" ? null : (approvedSendId ?? latest?.sendId ?? null);
+  const resultId = visibleResultId(
+    { phase, settling: chain.settling, pendingSendId: chain.pendingSendId, approvedSendId: chain.approvedSendId, noticeKind: notice?.kind ?? null },
+    latest?.sendId ?? null,
+  );
 
   const send = () => {
     if (!canSend || selection === null || freezeId === null) return;

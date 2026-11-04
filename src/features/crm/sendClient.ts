@@ -284,8 +284,8 @@ export interface SendListEntry {
   created: number;
   approvedAt: number | null;
   counts: SendCounts;
-  /** False when the host's list row carries no counts at all (hosted rows
-   *  do not): zeros then mean "not reported", never "nothing accepted". */
+  /** False when a row carries no counts at all, which current hosts don't do:
+   *  zeros then mean "not reported", never "nothing accepted". */
   countsKnown: boolean;
   deliveryClaim: string;
 }

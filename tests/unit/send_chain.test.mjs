@@ -223,7 +223,7 @@ test("a cancelled card is quiet and an expired one says nothing was sent", async
   expect(store.getChain(KEY).pendingSendId).toBeNull();
 });
 
-test("hosted list rows carry no counts: they read as finished, never as nothing sent", async () => {
+test("a row with no counts reads as finished, never as nothing sent", async () => {
   host.shape = "hosted";
   host.sends.push({ send_id: "s9", request_id: "r", state: "completed", freeze: "f", n: 9 });
   const rows = client.parseSendList({ sends: host.sends.map(listRow) });
@@ -233,4 +233,15 @@ test("hosted list rows carry no counts: they read as finished, never as nothing 
   host.shape = "native";
   host.sends[0].accepted = 0;
   expect(status.sendStatus(client.parseSendList({ sends: host.sends.map(listRow) })[0]).label).toBe("Nothing sent");
+});
+
+test("no result shows while a lost answer is being settled", () => {
+  const base = { phase: null, settling: false, pendingSendId: null, approvedSendId: null, noticeKind: null };
+  expect(chain.visibleResultId({ ...base, settling: true, pendingSendId: "s1" }, "s0")).toBeNull();
+  expect(chain.visibleResultId({ ...base, pendingSendId: "s1" }, "s0")).toBeNull();
+  expect(chain.visibleResultId({ ...base, phase: "confirming" }, "s0")).toBeNull();
+  expect(chain.visibleResultId({ ...base, noticeKind: "unknown" }, "s0")).toBeNull();
+  expect(chain.visibleResultId({ ...base, pendingSendId: "s1", approvedSendId: "s1" }, "s0")).toBe("s1");
+  expect(chain.visibleResultId(base, "s0")).toBe("s0");
+  expect(chain.visibleResultId(base, null)).toBeNull();
 });

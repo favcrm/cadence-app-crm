@@ -737,6 +737,7 @@ export const zhTW: Record<string, string> = {
   "This send stopped before it finished. Some people may not have been emailed.": "此次寄送在完成前中止，部分人可能未收到郵件。",
   "Check result.": "請檢查結果。",
   "Check result first.": "請先檢查結果。",
+  "Checking whether this send went out…": "正在確認此次傳送是否已發出…",
   "We couldn't confirm whether this send went out.": "無法確認這次寄送是否已寄出。",
   "The send wasn't confirmed.": "寄送未獲確認。",
   "This campaign was sent from somewhere else. Check Activity before sending again.": "此行銷活動已在其他地方寄出。再次寄送前，請先查看「活動歷程」。",

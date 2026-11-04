@@ -35,3 +35,17 @@ export const HOST_LOCAL_REFUSALS: readonly string[] = ["cancelled", "expired", "
 export function isHostLocalRefusal(error: unknown): boolean {
   return error instanceof ApiError && error.code !== undefined && HOST_LOCAL_REFUSALS.includes(error.code);
 }
+
+/**
+ * Which send's result the page may show. While a card is open, or a lost answer
+ * is still being settled, there is no result yet: a first `prepared` read must
+ * not read as "nothing was sent" while the board may be claiming the send.
+ */
+export function visibleResultId(
+  chain: { phase: unknown; settling: boolean; pendingSendId: string | null; approvedSendId: string | null; noticeKind: string | null },
+  latestSendId: string | null,
+): string | null {
+  const unsettled = chain.phase !== null || chain.settling || chain.noticeKind === "unknown"
+    || (chain.pendingSendId !== null && chain.approvedSendId === null);
+  return unsettled ? null : chain.approvedSendId ?? latestSendId;
+}
