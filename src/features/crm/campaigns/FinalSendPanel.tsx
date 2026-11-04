@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { Button,Link } from "@cadence/screen-ui";
-import { useRef,useState } from "react";
+import { useEffect,useState } from "react";
 import {
 type AudienceScope
 } from "../audienceClient";
@@ -11,22 +11,18 @@ testState,
 type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
-import { audienceChanged,canStart,countChanged,isCancelled,type ChainPhase } from "../campaign/sendChain";
+import { canStart } from "../campaign/sendChain";
+import { runSendChain } from "../campaign/runSendChain";
+import type { ChainRecord } from "../campaign/sendChainStore";
 import { latestSend,sendStatus } from "../campaign/sendStatus";
 import { useSendingSetup } from "../campaign/sendingSetup";
 import {
-friendlyCampaignError,
-parseContentDoc,
 summarySubject,
 type ContentDoc
 } from "../campaignGrammar";
-import { contentClient } from "../contentClient";
 import "../crm-campaign.css";
-import { isApprovalRequired } from "../hostErrors";
 import {
 friendlySendError,
-parsePreparedSend,
-parseSendView,
 parseTestSendReceipt,
 sendClient,
 type SendListEntry,
@@ -36,15 +32,9 @@ type TestSendReceipt
 } from "../sendClient";
 import { EMAIL_SENDING_HREF,WAITING_APPROVAL_TEXT,isHostedTransport } from "../sendingView";
 import type { Viewer } from "../viewer";
-import { newAudienceId } from "../segmentGrammar";
 
 
 import SendProgressPanel from "./SendProgressPanel";
-
-type Phase = ChainPhase;
-
-/** The chain stopped itself before a host card: nothing was asked, nothing sent. */
-class ChainStop extends Error {}
 
 /**
  * Review and send. One card of facts, one primary button that names the
@@ -73,8 +63,8 @@ export default function FinalSendPanel({
   onSendsChanged,
   onTab,
   onDoc,
-  sendPhase: phase,
-  onSendPhase: setPhase,
+  chain,
+  chainId,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
@@ -94,22 +84,19 @@ export default function FinalSendPanel({
   onSendsChanged: () => void;
   onTab: (tab: CampaignTab) => void;
   onDoc: (doc: ContentDoc) => void;
-  /** Lifted above the tabs so leaving this tab can neither re-arm Send nor
-   *  start a second chain. */
-  sendPhase: ChainPhase | null;
-  onSendPhase: (phase: ChainPhase | null) => void;
+  /** The running send, held outside this page: leaving the tab or remounting
+   *  the page can neither re-arm Send nor start a second chain. */
+  chain: ChainRecord;
+  chainId: string;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   const setup = useSendingSetup();
-  const [error, setError] = useState<string | null>(null);
-  const [waiting, setWaiting] = useState(false);
-  const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
   const [again, setAgain] = useState(false);
-  const [errorStep, setErrorStep] = useState<Phase | null>(null);
-  const [cancelled, setCancelled] = useState(false);
-  const live = useRef({ freezeId });
-  live.current = { freezeId };
+  const phase = chain.phase;
+  const notice = chain.notice;
+  const approvedSendId = chain.approvedSendId ?? chain.pendingSendId;
+  useEffect(() => { if (chain.approvedSendId !== null) setAgain(false); }, [chain.approvedSendId]);
   const [testPending, setTestPending] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
 
@@ -123,67 +110,14 @@ export default function FinalSendPanel({
   const count = audience.state === "ready" ? audience.count : null;
   const canSend = canWrite && why === null && selection !== null && freezeId !== null && canStart(phase);
   const latest = sends === null ? null : latestSend(sends);
-  const resultId = approvedSendId ?? latest?.sendId ?? null;
+  // While a card is open the page shows the review (locked), not a result.
+  const resultId = phase !== null ? null : (approvedSendId ?? latest?.sendId ?? null);
 
-  const send = async () => {
+  const send = () => {
     if (!canSend || selection === null || freezeId === null) return;
-    const captured = freezeId;
-    const expected = count;
-    setError(null);
-    setWaiting(false);
-    setCancelled(false);
-    let step: Phase = "approving";
-    setPhase(step);
-    // The audience on screen at each host card must be the one this press
-    // started with; the button's count is what the owner agreed to.
-    const stillSame = () => {
-      if (audienceChanged(captured, live.current.freezeId)) {
-        throw new ChainStop(t("The audience changed while sending was starting."));
-      }
-    };
-    try {
-      stillSame();
-      // The daemon requires the current revision to be approved before it
-      // prepares; the host's content card is that approval.
-      if (!(doc.approval.valid && doc.approval.revision === doc.revision)) {
-        onDoc(parseContentDoc(await contentClient.approve(scope, campaignId, doc.revision)));
-      }
-      step = "preparing";
-      setPhase(step);
-      stillSame();
-      const prepared = parsePreparedSend(
-        await sendClient.sendPrepare(scope, campaignId, freezeId, newAudienceId("send"), selection),
-      );
-      stillSame();
-      if (countChanged(expected, prepared.counts.final)) {
-        throw new ChainStop(
-          t("The number of people changed from {before} to {after}.")
-            .replace("{before}", expected === null ? "?" : formatNumber(expected))
-            .replace("{after}", formatNumber(prepared.counts.final)),
-        );
-      }
-      step = "confirming";
-      setPhase(step);
-      // The host freshly reads the prepared send and draws its own
-      // recipient-count confirmation; only its press approves.
-      const view = parseSendView(await sendClient.sendApprove(scope, prepared.send.sendId));
-      setApprovedSendId(view.send.sendId);
-      setAgain(false);
-    } catch (err: unknown) {
-      if (isApprovalRequired(err)) setWaiting(true);
-      else if (isCancelled(err)) setCancelled(true);
-      else if (err instanceof ChainStop) {
-        setError(err.message);
-        setErrorStep("preparing");
-      } else {
-        setError(step === "approving" ? friendlyCampaignError(err) : friendlySendError(err));
-        setErrorStep(step);
-      }
-    } finally {
-      setPhase(null);
-      onSendsChanged();
-    }
+    void runSendChain({ key: chainId, scope, campaignId, doc, selection, freezeId, count, onDoc });
   };
+
   const sendTest = () => {
     setTestError(null);
     onTestEvidence(null);
@@ -271,21 +205,21 @@ export default function FinalSendPanel({
       {testError !== null && (
         <p className="text-label text-fail" role="alert">{t(testError)}</p>
       )}
-      {waiting && (
+      {notice?.kind === "waiting" && (
         <p className="text-label text-ink-200" role="status" data-approval-waiting>
           {t(WAITING_APPROVAL_TEXT)}.{" "}
           {t("Nothing has been sent — the request is in the owner's approvals inbox.")}
         </p>
       )}
-      {cancelled && (
+      {notice?.kind === "cancelled" && (
         <p className="text-label text-ink-300" role="status" data-send-cancelled>
           {t("Cancelled. Nothing was sent.")}
         </p>
       )}
-      {error !== null && (
+      {notice?.kind === "error" && (
         <p className="text-label text-fail" role="alert" data-send-error>
-          {t(error)}{" "}
-          {errorStep === "confirming"
+          {Object.entries(notice.slots ?? {}).reduce((text, [slot, value]) => text.replace(`{${slot}}`, formatNumber(Number(value))), t(notice.text))}{" "}
+          {notice.confirming
             ? t("The send wasn't confirmed. Open Activity to see whether anything went out.")
             : t("Nothing was sent.")}
         </p>
@@ -297,7 +231,7 @@ export default function FinalSendPanel({
             variant="primary"
             loading={phase !== null}
             disabled={!canSend}
-            onClick={() => { void send(); }}
+            onClick={send}
           >
             {count !== null ? t("Send to {people}").replace("{people}", people(count)) : t("Send")}
           </Button>
@@ -334,12 +268,23 @@ export default function FinalSendPanel({
   // Another send is offered only once this one has clearly finished: not
   // while it runs, and not while its result still needs checking.
   const shown = sends?.find((row) => row.sendId === resultId) ?? null;
-  const finished = shown !== null && ["sent", "partial", "failed", "nothing"].includes(sendStatus(shown).key);
+  const finished = shown !== null && ["sent", "partial", "failed", "nothing", "draft"].includes(sendStatus(shown).key);
+  const shownKey = shown === null ? null : sendStatus(shown).key;
   return (
     <>
       <section aria-label={t("Send result card")} className="card px-4 py-4 grid gap-3" data-send-result>
         <h4 className="text-cardtitle font-medium text-ink-100">{t("Send result")}</h4>
         <SendProgressPanel scope={scope} viewer={viewer} sendId={resultId} onChanged={onSendsChanged} />
+        {shownKey === "sending" && (
+          <p className="text-micro text-ink-500" data-stalled-hint>
+            {t("If this stays on Sending for a long time it may have stopped. Check Activity before cloning this campaign to send again.")}
+          </p>
+        )}
+        {shown?.state === "closed" && (
+          <p className="text-label text-ink-300" data-closed-hint>
+            {t("This send ended early. You can clone this campaign to send again; check who was already emailed first.")}
+          </p>
+        )}
         {canWrite && !again && finished && canStart(phase) && (
           <div>
             <button type="button" className="lnk text-label" onClick={() => setAgain(true)}>{t("Prepare another send")}</button>

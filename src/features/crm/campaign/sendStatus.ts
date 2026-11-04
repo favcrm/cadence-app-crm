@@ -28,6 +28,8 @@ export function latestSend(sends: SendListEntry[]): SendListEntry | null {
 }
 
 export function sendStatus(send: SendFacts): CampaignStatus {
+  // Prepared, never approved: nothing went out.
+  if (send.state === "prepared") return { key: "draft", label: "Draft", chip: null };
   if (send.state === "sending") return { key: "sending", label: "Sending", chip: "running" };
   if (send.state === "closed" || send.counts.uncertain > 0) {
     return { key: "uncertain", label: "Check result", chip: "uncertain" };

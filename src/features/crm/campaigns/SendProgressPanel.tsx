@@ -20,13 +20,22 @@ import DeliveryRows from "./DeliveryRows";
 
 /** The plain sentence above the numbers. Acceptance by the mail server is
  *  the most this app ever claims — never inbox delivery. */
-function headline(view: SendView): { text: string; tone: "fail" | "normal" } {
+function headline(view: SendView, total: number): { text: string; tone: "fail" | "normal" } {
   const status = sendStatus({ state: view.send.state, counts: view.counts });
+  if (view.send.state === "prepared") return { text: "This send was prepared but not confirmed. Nothing was sent.", tone: "normal" };
   if (status.key === "sending") return { text: "Sending. The result appears here when it finishes.", tone: "normal" };
   if (status.key === "failed") return { text: "Nothing was sent. The mail server accepted none of these.", tone: "fail" };
-  if (status.key === "nothing") return { text: "Nothing was sent. Everyone in this audience was skipped.", tone: "normal" };
-  if (status.key === "partial") return { text: "Sent, but {count} weren't accepted. They aren't retried automatically.", tone: "normal" };
-  if (status.key === "uncertain") return { text: "This send stopped before it finished. Check the list below before doing anything else.", tone: "fail" };
+  if (status.key === "nothing") return { text: total === 0 ? "Nothing was sent. There was no one to send to." : "Nothing was sent. Everyone in this audience was skipped.", tone: "normal" };
+  if (status.key === "partial") {
+    return view.counts.failed === 1
+      ? { text: "Sent, but 1 wasn't accepted. It isn't retried automatically.", tone: "normal" }
+      : { text: "Sent, but {count} weren't accepted. They aren't retried automatically.", tone: "normal" };
+  }
+  if (status.key === "uncertain") {
+    return view.deliveries.length > 0
+      ? { text: "This send stopped before it finished. Check the list below before doing anything else.", tone: "fail" }
+      : { text: "This send stopped before it finished. Some people may not have been emailed.", tone: "fail" };
+  }
   return { text: "Sent. The mail server accepted these, which doesn't confirm inbox delivery.", tone: "normal" };
 }
 
@@ -96,7 +105,7 @@ export default function SendProgressPanel({
   }
   const counts = view.counts;
   const total = counts.queued + counts.submitting + counts.accepted + counts.failed + counts.uncertain + counts.suppressed + counts.closed;
-  const head = headline(view);
+  const head = headline(view, total);
   const cells: [string, number, boolean][] = [
     ["Audience", total, true],
     ["Accepted", counts.accepted, true],

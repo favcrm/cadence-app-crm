@@ -12,7 +12,7 @@ type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
 import { blockingReason } from "../campaign/EligibilityFunnel";
-import { type ChainPhase } from "../campaign/sendChain";
+import { chainKey,publishCurrent,useChain } from "../campaign/sendChainStore";
 import { campaignStatus } from "../campaign/sendStatus";
 import { useAudiencePreview } from "../campaign/useAudiencePreview";
 import {
@@ -29,7 +29,7 @@ import type { Viewer } from "../viewer";
 import AudienceSection from "./AudienceSection";
 import CampaignSends from "./CampaignSends";
 import CampaignWorkspace from "./CampaignWorkspace";
-import { audienceFreezeId,type AudiencePick } from "./audienceModel";
+import { audienceFreezeId,sendCeiling,type AudiencePick } from "./audienceModel";
 import { useCampaignSends } from "./useCampaignSends";
 import { useDraftAudience } from "./useDraftAudience";
 
@@ -107,9 +107,10 @@ export default function CampaignDetail({
   });
   const count = useAudiencePreview(scope, viewer, pick);
   const sendsState = useCampaignSends(scope, viewer.operator === true, campaignId);
-  const status = campaignStatus(sendsState.sends);
+  const listedStatus = campaignStatus(sendsState.sends);
   const [tab, setTab] = useState<CampaignTab>(() => peekLanding(campaignId)?.tab ?? "review");
-  const freezeId = audienceFreezeId(campaignId, pick);
+  const ceiling = count.preview !== null && count.preview.finalCount > 0 ? sendCeiling(count.preview.finalCount) : null;
+  const freezeId = audienceFreezeId(campaignId, pick, ceiling);
   const [freeze, setFreeze] = useState<{
     finalCount: number;
     digest: string;
@@ -118,8 +119,24 @@ export default function CampaignDetail({
     currentCount: number | null;
   } | null>(null);
 
-  // Lifted here, above the tabs, so a running send survives tab changes.
-  const [sendPhase, setSendPhase] = useState<ChainPhase | null>(null);
+  // The running send lives in a module-level store keyed by campaign, not in
+  // this component: this page remounts on a route change or back/forward
+  // while the host card stays alive, and the lock must come back with it.
+  const chainId = chainKey(scope.installId, campaignId);
+  const chain = useChain(chainId);
+  const sendPhase = chain.phase;
+  // A card may have been confirmed that the list does not show yet: never
+  // read that as Draft.
+  const status =
+    chain.phase === null && (listedStatus === null || listedStatus.key === "draft") && chain.approvedSendId !== null ? { key: "sending" as const, label: "Sending", chip: "running" as const }
+    : chain.phase === null && (listedStatus === null || listedStatus.key === "draft") && chain.pendingSendId !== null ? { key: "uncertain" as const, label: "Check result", chip: "uncertain" as const }
+    : listedStatus;
+  // A chain that ended (maybe while this page was gone) means the host's
+  // send list has moved; a stale count means the button must recount.
+  const refreshSends = sendsState.refresh;
+  useEffect(() => { if (chain.ended > 0) refreshSends(); }, [chain.ended, refreshSends]);
+  const recount = count.recount;
+  useEffect(() => { if (chain.recount > 0) recount(); }, [chain.recount, recount]);
   const requestBack = () => {
     if (sendPhase !== null) return;
     if (unsaved) setConfirmLeave(true);
@@ -135,10 +152,13 @@ export default function CampaignDetail({
   // Reopen on the audience the board kept — before the first paint, so the
   // page never flashes "Not chosen". An older board's segment hint still
   // restores a segment, read-only.
+  const [hydrated, setHydrated] = useState(pickEdited.current);
   const kept = doc?.draftAudience;
   const legacySegment = doc?.legacySegmentId ?? null;
   useLayoutEffect(() => {
-    if (pickEdited.current || doc === null) return;
+    if (doc === null) return;
+    if (pickEdited.current) { setHydrated(true); return; }
+    setHydrated(true);
     const restored = kept ?? (kept === undefined && legacySegment !== null ? { mode: "segment" as const, segmentId: legacySegment } : null);
     if (restored !== null) setPick((current) => ({ ...current, base: restored }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,9 +217,17 @@ export default function CampaignDetail({
       ? {
           base: pick.base,
           exclusionListId: pick.exclusionListId,
-          maxRecipients: Math.max(10, Math.ceil(preview.finalCount * 1.25) + 10),
+          maxRecipients: sendCeiling(preview.finalCount),
         }
       : null;
+  // Publish what this page shows, so a running chain compares against the
+  // current audience, not a closure. Withdrawn when the page goes away.
+  const countNow = preview !== null ? preview.finalCount : null;
+  useEffect(() => {
+    if (!hydrated) return;
+    publishCurrent(chainId, { freezeId, count: countNow });
+    return () => publishCurrent(chainId, undefined);
+  }, [chainId, hydrated, freezeId, countNow]);
   const audienceState: AudienceState =
     pick.base === null || (pick.base.mode === "custom" && pick.base.customerIds.length === 0) ? { state: "unchosen" }
     : draftAudience.keeping === "waiting" ? { state: "email-unsaved" }
@@ -279,8 +307,8 @@ export default function CampaignDetail({
             sends={sendsState.sends}
             sendsError={sendsState.error}
             onSendsChanged={sendsState.refresh}
-            sendPhase={sendPhase}
-            onSendPhase={setSendPhase}
+            chain={chain}
+            chainId={chainId}
             tab={tab}
             onTab={setTab}
             activitySlot={<CampaignSends scope={scope} viewer={viewer} sends={sendsState.sends} error={sendsState.error} onChanged={sendsState.refresh} />}

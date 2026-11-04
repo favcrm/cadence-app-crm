@@ -70,6 +70,14 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
+/* A send is running: the controls that would change what it was started for
+   stay visible but read as unavailable. */
+.crm-ctab[aria-disabled="true"],
+.crm-chead-back:disabled,
+.crm-confirm-go:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .crm-ctab:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;

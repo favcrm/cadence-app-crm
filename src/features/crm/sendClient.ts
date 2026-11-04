@@ -281,6 +281,12 @@ export interface SendListEntry {
   sendDigest: string;
   created: number;
   approvedAt: number | null;
+  /** Which frozen audience, ceiling and content this send was prepared for,
+   *  so an unapproved prepared send is only reused when nothing changed. */
+  audienceFreezeId: string;
+  maxRecipients: number;
+  contentRevision: number;
+  contentDigest: string;
   counts: SendCounts;
   deliveryClaim: string;
 }
@@ -299,6 +305,10 @@ export function parseSendList(value: unknown): SendListEntry[] {
       sendDigest: typeof row.send_digest === "string" ? row.send_digest : "",
       created: typeof row.created === "number" ? row.created : 0,
       approvedAt: typeof row.approved_at === "number" ? row.approved_at : null,
+      audienceFreezeId: typeof row.audience_freeze_id === "string" ? row.audience_freeze_id : "",
+      maxRecipients: typeof row.max_recipients === "number" ? row.max_recipients : -1,
+      contentRevision: typeof row.content_revision === "number" ? row.content_revision : -1,
+      contentDigest: typeof row.content_digest === "string" ? row.content_digest : "",
       counts: parseCounts(row.counts),
       deliveryClaim: typeof row.delivery_claim === "string" ? row.delivery_claim : DELIVERY_CLAIM,
     };

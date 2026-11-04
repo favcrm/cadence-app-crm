@@ -86,8 +86,8 @@ test("readiness reports the first blocker in order", () => {
   expect(ready.firstBlocker(items({ audience: { state: "counting" } }))).toBe("Counting who can receive this…");
 });
 test("an unchosen audience has no freeze id", () => {
-  expect(model.audienceFreezeId("c1", { base: null, exclusionListId: null })).toBeNull();
-  expect(model.audienceFreezeId("c1", { base: { mode: "all" }, exclusionListId: null })).toMatch(/^c1-freeze-/);
+  expect(model.audienceFreezeId("c1", { base: null, exclusionListId: null }, 20)).toBeNull();
+  expect(model.audienceFreezeId("c1", { base: { mode: "all" }, exclusionListId: null }, 20)).toMatch(/^c1-freeze-/);
 });
 test("a send waits while the audience choice is still being saved", () => {
   const items = ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "saving" } });
