@@ -1,5 +1,5 @@
 import { useLocale } from "../locale";
-import { Button,Link } from "@cadence/screen-ui";
+import { Button } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
 import { campaignChat } from "../../../bridge/chat";
 import {
@@ -9,15 +9,13 @@ type AudienceScope
 import ActivityPane from "../campaign/ActivityPane";
 import CampaignTabs from "../campaign/CampaignTabs";
 import EmailPane from "../campaign/EmailPane";
-import OverviewPane from "../campaign/OverviewPane";
 import { setLanding } from "../campaign/landing";
+import { type ChainRecord } from "../campaign/sendChainStore";
 import {
-TEST_ANCHOR,
-sendReadiness,
+type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
-import { displayUiNotice, type UiNotice, useEmailDraft } from "../campaign/useEmailDraft";
-import { useSendingSetup } from "../campaign/sendingSetup";
+import { type UiNotice, useEmailDraft } from "../campaign/useEmailDraft";
 import {
 CAMPAIGN_NAME_MAX,
 campaignTitle,
@@ -32,26 +30,17 @@ import { contentClient } from "../contentClient";
 import "../crm-campaign.css";
 import {
 friendlySendError,
-parseTestSendReceipt,
 readSmtpBinding,
-sendClient,
+type SendListEntry,
 type SendSelection,
 type SmtpBinding,
 type TestSendReceipt
 } from "../sendClient";
-import {
-EMAIL_SENDING_HREF,
-WAITING_APPROVAL_TEXT,
-sendingFrom
-} from "../sendingView";
 import type { Viewer } from "../viewer";
 import { useCrmQuery } from "../resources";
 
 
-import HostPreview from "../../../bridge/HostPreview";
 import FinalSendPanel from "./FinalSendPanel";
-import ProposalRow from "./ProposalRow";
-import SenderPanel from "./SenderPanel";
 
 export default function CampaignWorkspace({
   scope,
@@ -64,12 +53,16 @@ export default function CampaignWorkspace({
   starterSenderBindingId,
   freezeId,
   freeze,
-  freezeMissing,
-  freezeError,
   selection,
+  audience,
+  audienceTitle,
+  sends,
+  sendsError,
+  onSendsChanged,
+  chain,
+  chainId,
   audienceSlot,
   activitySlot,
-  audienceLabel,
   tab,
   onTab,
 }: {
@@ -81,36 +74,30 @@ export default function CampaignWorkspace({
   onCloned?: (campaignId: string) => void;
   onDirtyChange?: (dirty: boolean) => void;
   starterSenderBindingId?: string | null;
-  /** The detail page's named freeze + its last validity recheck —
-   *  the final-send gate reads both. */
-  freezeId?: string;
-  freeze?: { valid: boolean | null; finalCount?: number } | null;
-  /** The detail page's freeze action, surfaced in the send panel so the
-   *  snapshot sits immediately before the send it belongs to. */
-  freezeMissing?: boolean;
-  freezeError?: string | null;
+  /** The audience's derived snapshot id (null = no audience chosen) and its
+   *  last validity check; clone reads both. */
+  freezeId: string | null;
+  freeze: { valid: boolean | null; finalCount?: number } | null;
   /** CAD-1836: the audience the send freezes with its one approval. */
-  selection?: SendSelection | null;
-  /** CAD-1008: the saved campaign's audience/freeze panel, supplied by
-   *  the owning page so the task order renders Content+Preview →
-   *  Audience → Sender → Test → Proposals → Final send; prepare approves the
-   *  current content revision.
-   *  `undefined` on the new-campaign page, which keeps its own layout. */
-  audienceSlot?: React.ReactNode;
-  /** CAD-1055: the saved campaign's Activity tab body, the one-line
-   *  audience summary for Overview and the controlled tab. */
-  activitySlot?: React.ReactNode;
-  audienceLabel?: string;
-  tab?: CampaignTab;
-  onTab?: (tab: CampaignTab) => void;
+  selection: SendSelection | null;
+  audience: AudienceState;
+  audienceTitle: string | null;
+  sends: SendListEntry[] | null;
+  sendsError: string | null;
+  onSendsChanged: () => void;
+  chain: ChainRecord;
+  chainId: string;
+  audienceSlot: React.ReactNode;
+  activitySlot: React.ReactNode;
+  tab: CampaignTab;
+  onTab: (tab: CampaignTab) => void;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  const setup = useSendingSetup();
   const emailDraft = useEmailDraft(scope, campaignId, doc, onDoc);
-  const [contentBindings, setContentBindings] = useState<{ id: string; name: string; address: string }[]>([]);
-  const [contentBindingError, setContentBindingError] = useState<string | null>(null);
-  const [contentBindingId, setContentBindingId] = useState<string | null>(starterSenderBindingId ?? null);
+  // A starter sender carried from a clone only picks which saved sender the
+  // preview borrows; the real sender is the connected one below.
+  const [contentBindingId] = useState<string | null>(starterSenderBindingId ?? null);
   useEffect(() => onDirtyChange?.(emailDraft.dirty), [emailDraft.dirty, onDirtyChange]);
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneName, setCloneName] = useState("");
@@ -123,7 +110,6 @@ export default function CampaignWorkspace({
   const [renderPending, setRenderPending] = useState(false);
   const [renderError, setRenderError] = useState<UiNotice | null>(null);
   const [renderToken, setRenderToken] = useState(0);
-  const [previewTab, setPreviewTab] = useState<"visual" | "html" | "text">("visual");
   const [sampleName, setSampleName] = useState("");
   // Debounce the sample name so typing does not issue one host render per
   // keystroke; the render effect's sequence guard still drops stale answers.
@@ -132,8 +118,6 @@ export default function CampaignWorkspace({
     const timer = setTimeout(() => setRenderSample(sampleName), 300);
     return () => clearTimeout(timer);
   }, [sampleName]);
-  const [testPending, setTestPending] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
   const [testReceipt, setTestReceipt] = useState<TestSendReceipt | null>(null);
   // The live sender binding: `null` is the host's none-bound answer,
   // `undefined` is still-loading so dependent panels can wait.
@@ -235,29 +219,6 @@ export default function CampaignWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope.installId, campaignId, docIdentity, contentBindingId, renderToken, renderSample]);
 
-  // These app-content sender rows are render metadata, not live SMTP
-  // authority. Keep their binding IDs distinct from SmtpBinding.connectionId.
-  useEffect(() => {
-    if (!viewer.operator) return;
-    const controller = new AbortController();
-    contentClient.bindingList(scope).then((value) => {
-      if (controller.signal.aborted) return;
-      const rows = (value as { bindings?: unknown } | null)?.bindings;
-      setContentBindings(Array.isArray(rows) ? rows.flatMap((raw) => {
-        if (!raw || typeof raw !== "object") return [];
-        const row = raw as Record<string, unknown>;
-        const sender = row.sender as Record<string, unknown> | null;
-        return typeof row.binding_id === "string" && typeof sender?.name === "string" && typeof sender.address === "string"
-          ? [{ id: row.binding_id, name: sender.name, address: sender.address }]
-          : [];
-      }) : []);
-      setContentBindingError(null);
-    }).catch((error: unknown) => {
-      if (!controller.signal.aborted) setContentBindingError(friendlyCampaignError(error));
-    });
-    return () => controller.abort();
-  }, [scope.installId, viewer.operator]);
-
   // The SMTP connection is context-global send authority. Keep it
   // separate from the preview-only app-content sender selection above.
   useEffect(() => {
@@ -277,7 +238,6 @@ export default function CampaignWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope.installId, viewer.operator, bindingToken]);
-
 
   // CAD-1016: refresh pending drafts on the agent's actual completion —
   // a new non-operator entry landing in the scoped thread (the assistant's
@@ -306,301 +266,6 @@ export default function CampaignWorkspace({
     if (proposalToken > 0) void proposalState.store.refresh();
   }, [proposalToken, proposalState.store]);
 
-  // CAD-1016: no manual proposal-request mint — an ordinary scoped chat
-  // message invokes the CAD-1014 assistant-draft turn, which lands an
-  // inert `pending` proposal on this campaign. The drafts list below
-  // refreshes to surface it; there is no request id to mint or poll.
-
-  const dirty = emailDraft.dirty;
-
-  const previewBody =
-    doc === null ? (
-      <p className="text-label text-ink-400" data-preview="unsaved">
-        {t("No saved email yet. Ask the assistant in the left chat to draft it, then Apply its verified proposal below to create revision 1.")}
-      </p>
-    ) : (
-      <>
-        <div className="crm-field-row">
-          <div className="crm-field">
-            <label className="text-label text-ink-300" htmlFor="cmp-sample">
-              {t("Sample first name (optional)")}
-            </label>
-            <input
-              id="cmp-sample"
-              className="field"
-              value={sampleName}
-              onChange={(e) => setSampleName(e.target.value)}
-              maxLength={40}
-              autoComplete="off"
-              placeholder={t("Ada")}
-            />
-          </div>
-          <div>
-            <span className="text-label text-ink-300">{t("Saved render")}</span>
-            <div className="mt-1">
-              <Button
-                size="sm"
-                loading={renderPending}
-                disabled={renderPending}
-                title={t("Re-render the last saved version with the current sample name")}
-                onClick={() => setRenderToken((count) => count + 1)}
-              >
-                {t("Refresh preview")}
-              </Button>
-            </div>
-          </div>
-        </div>
-        {renderError !== null && !renderPending && (
-          <p className="text-label text-fail" role="alert">
-            {displayUiNotice(renderError, t)}{" "}
-            <button type="button" className="lnk" onClick={() => setRenderToken((count) => count + 1)}>
-              {t("Retry")}
-            </button>
-          </p>
-        )}
-        {render === null && renderPending && (
-          <p className="text-label text-ink-500" role="status" data-preview="loading">
-            {t("Rendering the saved email…")}
-          </p>
-        )}
-        {dirty && (
-          <p className="text-micro text-ink-500" data-preview="dirty">
-            {t("Preview shows the last saved version. Save changes to refresh.")}
-          </p>
-        )}
-        {render !== null && (
-          <>
-            <p className="text-label text-ink-300">
-              <span className="chip" title={t("Sender material is host-locked preview-only bytes")}>
-                {t("preview-only")}
-              </span>{" "}
-              <span className="num">
-                {render.sender.name} · {render.sender.address}
-              </span>
-            </p>
-            <div className="app-outlet-tabs" role="tablist" aria-label={t("Preview format")}>
-              {(
-                [
-                  ["visual", t("Visual")],
-                  ["html", "HTML"],
-                  ["text", t("Text")],
-                ] as ["visual" | "html" | "text", string][]
-              ).map(([tab, label]) => (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={previewTab === tab}
-                  className="app-outlet-tab"
-                  data-on={previewTab === tab || undefined}
-                  onClick={() => setPreviewTab(tab)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {previewTab === "visual" && (
-              <HostPreview title={`${t("Visual email preview, saved revision")} ${formatNumber(render.revision)}`} document={render.html} mode="saved" />
-            )}
-            {previewTab !== "visual" && (
-              <pre className="crm-preview" data-preview={previewTab}>
-                {previewTab === "html" ? render.html : render.text}
-              </pre>
-            )}
-            <SenderPanel render={render} />
-          </>
-        )}
-      </>
-    );
-
-  const previewSection = (
-    <section aria-label={t("Email preview")} className="card px-4 py-4 grid gap-3">
-      <h4 className="text-cardtitle font-medium text-ink-100">
-        {t("Preview")}{doc !== null ? ` — ${t("saved version")}` : ""}
-      </h4>
-      {previewBody}
-    </section>
-  );
-
-  const contentForm = (
-      <div className="card px-4 py-4 grid gap-3" aria-label={t("Email content")}>
-        <h4 className="text-cardtitle font-medium text-ink-100">
-          {t("Content")} {doc === null ? `— ${t("not drafted yet")}` : `— ${t("revision")} ${formatNumber(doc.revision)}`}
-        </h4>
-        {doc === null && (
-          <p className="text-label text-ink-400" data-state="no-draft">
-            {t("No saved email yet. Ask the assistant in the left chat to draft it, then Apply its verified proposal below to create revision 1.")}
-          </p>
-        )}
-        {doc !== null && (
-          <dl className="sdetail" data-content-summary>
-            <div>
-              <dt>{t("Subject")}</dt>
-              <dd>{doc.subject}</dd>
-            </div>
-            <div>
-              <dt>{t("Preheader")}</dt>
-              <dd>{doc.preheader === "" ? "—" : doc.preheader}</dd>
-            </div>
-            <div>
-              <dt>{t("Body")}</dt>
-              <dd>
-                {doc.mode === "html"
-                  ? t("HTML body")
-                  : `${formatNumber(doc.blocks.length)} ${t(doc.blocks.length === 1 ? "block" : "blocks")}`}{" "}
-                · {doc.contentDigest.slice(0, 18)}…
-              </dd>
-            </div>
-          </dl>
-        )}
-        {doc !== null && (
-          <p className="text-label text-ink-400">
-            {t("Edit the email on the campaign's Email tab.")}
-          </p>
-        )}
-      </div>
-  );
-
-  const testSection = doc !== null && (
-        <section aria-label={t("Test send")} id={TEST_ANCHOR} tabIndex={-1} className="card px-4 py-4 grid gap-2">
-          <h4 className="text-cardtitle font-medium text-ink-100">
-            {t("Test send — one operator address")}
-          </h4>
-          <p className="text-label text-ink-400">
-            {t("Sends the exact frozen content through the campaign sender to one operator-typed address. The receipt records acceptance or refusal only — a campaign send needs one accepted test send of this exact content and sender.")}
-          </p>
-          {bindingError !== null && (
-            <p className="text-label text-fail" role="alert">
-              {t(bindingError)}{" "}
-              <button
-                type="button"
-                className="lnk"
-                onClick={() => {
-                  setBinding(undefined);
-                  setBindingError(null);
-                  setBindingToken((count) => count + 1);
-                }}
-              >
-                {t("Retry")}</button>
-            </p>
-          )}
-          {binding !== undefined && sendingFrom(binding) === null && bindingError === null && (
-            <>
-              <p className="text-label text-ink-500" data-testsend="disabled">
-                {setup.available ? (
-                  <>{t("No sender is set up")} — <Link
-                    href={EMAIL_SENDING_HREF}
-                    onClick={(event) => { event.preventDefault(); setup.open(); }}
-                  >{t("set up sending")}</Link> {t("to send a test.")}</>
-                ) : (
-                  <>{t("No sender is set up")}. {t("Sending setup isn't available on this host, so a test can't be sent.")}</>
-                )}
-              </p>
-              {setup.error !== null && (
-                <p className="text-label text-fail" role="alert">{setup.error}</p>
-              )}
-            </>
-          )}
-          <form
-            className="grid gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setTestError(null);
-              setTestReceipt(null);
-              setTestPending(true);
-              void sendClient
-                .smtpTestSend(scope, campaignId)
-                .then((value) => setTestReceipt(parseTestSendReceipt(value)))
-                .catch((err: unknown) => setTestError(friendlySendError(err)))
-                .finally(() => setTestPending(false));
-            }}
-          >
-            <div>
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                loading={testPending}
-                disabled={!canWrite || testPending || sendingFrom(binding) === null}
-                title={
-                  sendingFrom(binding) === null
-                    ? t("No sender is set up")
-                    : t("Send one test message through the campaign sender")
-                }
-              >
-                {t("Send test")}
-              </Button>
-            </div>
-            <p className="text-micro text-ink-500">
-              {t("The host asks for the recipient in its own confirmation. This app never collects or stores it.")}
-            </p>
-          </form>
-          {testError && (
-            <p className="text-label text-fail" role="alert">
-              {t(testError)}
-            </p>
-          )}
-          {testReceipt && (
-            <dl className="crm-detail" aria-label={t("Test-send receipt")} data-testreceipt>
-              <div>
-                <dt>{t("Result")}</dt>
-                <dd>
-                  {testReceipt.pendingApproval ? (
-                    <span className="chip crm-send-chip" data-state="pending">
-                      {t(WAITING_APPROVAL_TEXT)}
-                    </span>
-                  ) : (
-                    <>
-                      <span
-                        className="chip crm-send-chip"
-                        data-state={testReceipt.accepted ? "accepted" : "failed"}
-                      >
-                        {t(testReceipt.accepted ? "Accepted" : "Refused")}
-                      </span>{" "}
-                      <span className="num">
-                        SMTP {testReceipt.smtpCode ?? "—"} {testReceipt.smtpMessage}
-                      </span>
-                    </>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Recipient")}</dt>
-                <dd className="num">{testReceipt.to}</dd>
-              </div>
-              <div>
-                <dt>{t("Claim")}</dt>
-                <dd className="text-ink-300">
-                  {testReceipt.pendingApproval
-                    ? t("Nothing was sent yet. Send the same test again once the owner has approved it.")
-                    : t("The sender accepted the message — this is not proof of inbox delivery.")}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Details")}</dt>
-                <dd>
-                  <details>
-                    <summary className="cursor-pointer text-ink-400">{t("Show")}</summary>
-                    <span className="num break-all">
-                      r{formatNumber(testReceipt.contentRevision)} · {testReceipt.contentDigest.slice(0, 18)}…
-                    </span>
-                  </details>
-                </dd>
-              </div>
-            </dl>
-          )}
-        </section>
-  );
-
-  const applyProposal = (next: ContentDoc) => {
-    onDoc(next);
-    setProposalToken((count) => count + 1);
-    setRender(null);
-    setTestReceipt(null);
-    setProposalNote(
-      `${t("Applied as revision")} ${formatNumber(next.revision)} — ${t("the send confirmation approves the current revision.")}`,
-    );
-  };
   const discardProposal = (id: string) => {
     setProposalToken((count) => count + 1);
     setProposalNote(
@@ -610,89 +275,7 @@ export default function CampaignWorkspace({
     );
   };
 
-  // CAD-1013: proposals stay available before revision 1 — the assistant
-  // mint/apply path is the creation route now that the manual composer is
-  // gone. expectedRevision is 0 for an unsaved campaign (source_revision=0).
-  const proposalsSection = (
-        <section aria-label={t("Assistant proposals")} className="card px-4 py-4 grid gap-3">
-          <h4 className="text-cardtitle font-medium text-ink-100">{t("Proposals — Apply or Discard")}</h4>
-          <p className="text-label text-ink-400">
-            {t("Only Apply changes the saved version; Discard is non-mutating. Nothing proposes, edits or sends silently.")}
-          </p>
-          {proposalsError && (
-            <p className="text-label text-fail" role="alert">
-              {t(proposalsError)}{" "}
-              <button type="button" className="lnk" onClick={() => setProposalToken((count) => count + 1)}>
-                {t("Retry")}</button>
-            </p>
-          )}
-          {proposalError && (
-            <p className="text-label text-fail" role="alert">
-              {t(proposalError)}
-            </p>
-          )}
-          {proposalNote && (
-            <p className="text-label text-ok" role="status">
-              {proposalNote}
-            </p>
-          )}
-          {canWrite && (
-            <p className="text-label text-ink-500" data-assistant-hint>
-              {t("Ask the assistant in the left chat; its draft appears below for review.")}{" "}
-              <button
-                type="button"
-                className="lnk"
-                onClick={() => setProposalToken((count) => count + 1)}
-              >
-                {t("Refresh drafts")}
-              </button>
-            </p>
-          )}
-          {proposals.filter((row) => row.state === "pending").length === 0 ? (
-            <p className="text-label text-ink-400" data-empty="proposals">
-              {t("No pending proposals for this campaign.")}
-            </p>
-          ) : (
-            <ol className="crm-history" aria-label={t("Pending proposals")}>
-              {proposals
-                .filter((row) => row.state === "pending")
-                .map((row) => (
-                  <ProposalRow
-                    key={row.proposalId}
-                    scope={scope}
-                    proposal={row}
-                    expectedRevision={doc === null ? 0 : doc.revision}
-                    canWrite={canWrite}
-                    onApplied={applyProposal}
-                    onDiscarded={discardProposal}
-                    onError={setProposalError}
-                  />
-                ))}
-            </ol>
-          )}
-        </section>
-  );
-
-  const finalSend = doc !== null && freezeId !== undefined && (
-    <FinalSendPanel
-      scope={scope}
-      viewer={viewer}
-      campaignId={campaignId}
-      doc={doc}
-      freezeId={freezeId}
-      freeze={freeze ?? null}
-      freezeMissing={freezeMissing}
-      freezeError={freezeError}
-      selection={selection ?? null}
-      binding={binding}
-      testEvidence={testReceipt}
-      audienceLabel={audienceLabel ?? "—"}
-      onTab={onTab}
-      onDoc={onDoc}
-    />
-  );
-
-  const canCopyAudience = freezeId !== undefined && freeze?.valid === true;
+  const canCopyAudience = freezeId !== null && freeze?.valid === true;
   const canCopySender = contentBindingId !== null && render !== null && !renderPending && render.bindingId === contentBindingId && render.bindingId !== "preview";
   const cloneSavedCampaign = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -713,7 +296,7 @@ export default function CampaignWorkspace({
     void contentClient.clone(scope, campaignId, {
       expectedRevision: doc.revision,
       name,
-      ...(cloneAudience && freezeId !== undefined ? { copyAudience: { sourceFreezeId: freezeId } } : {}),
+      ...(cloneAudience && freezeId !== null ? { copyAudience: { sourceFreezeId: freezeId } } : {}),
       ...(cloneSender && canCopySender && render !== null && render.bindingId !== "preview"
         ? { copySender: { sourceBindingId: render.bindingId } }
         : {}),
@@ -740,34 +323,6 @@ export default function CampaignWorkspace({
     }).catch((error: unknown) => setCloneError(friendlyCampaignError(error))).finally(() => setClonePending(false));
   };
 
-  // New campaign (or a host without an audience slot): content first
-  // with the always-mounted preview beside it; the audience picker
-  // stays on the new page itself. Saved campaigns take the ordered
-  // task layout below.
-  if (audienceSlot === undefined) {
-    return (
-      <div className="grid gap-3">
-        <div className="crm-compose">
-          {contentForm}
-          {previewSection}
-        </div>
-        {testSection}
-        {proposalsSection}
-        {finalSend}
-      </div>
-    );
-  }
-  // CAD-1055 saved campaign: four tabs. Overview stays compact; the
-  // revision-bound test and final-send controls remain distinct guarded
-  // actions. Email owns editing and assistant proposal review.
-  const activeTab = tab ?? "overview";
-  const setTab = onTab ?? (() => {});
-  const readiness = sendReadiness({
-    doc,
-    binding,
-    testEvidence: testReceipt,
-    selectionReady: (selection ?? null) !== null,
-  });
   const pendingProposals = proposals.filter((row) => row.state === "pending");
   const emailBadge = pendingProposals.length > 0 ? t("{count} draft").replace("{count}", () => formatNumber(pendingProposals.length)) : null;
   return (
@@ -781,19 +336,21 @@ export default function CampaignWorkspace({
       >
         <form className="grid gap-3 p-4" onSubmit={cloneSavedCampaign}>
           <h2 id="cmp-clone-title" className="text-cardtitle font-medium text-ink-100">{t("Clone campaign")}</h2>
-          <p className="text-label text-ink-300">{t("Creates a new draft from this campaign's saved revision. Frozen recipients, proposals, tests and send history are not copied. Sender selection stays preview-only; it never rebinds SMTP or authorizes sending.")}</p>
+          <p className="text-label text-ink-300">{t("Creates a new draft from this campaign's saved email. Recipients, tests, assistant drafts and send history aren't copied.")}</p>
           <label className="grid gap-1 text-label text-ink-300" htmlFor="cmp-clone-name">
             {t("New campaign name")}
             <input id="cmp-clone-name" className="field" value={cloneName} maxLength={CAMPAIGN_NAME_MAX} required disabled={clonePending} onChange={(event) => setCloneName(event.target.value)} />
           </label>
           <label className="flex items-center gap-2 text-label text-ink-300">
             <input type="checkbox" checked={cloneAudience} disabled={!canCopyAudience || clonePending} onChange={(event) => setCloneAudience(event.target.checked)} />
-            {t("Copy audience criteria")}{canCopyAudience ? t("from the current valid freeze") : t("(no valid source freeze)")}
+            {t("Copy the audience")}{canCopyAudience ? "" : ` ${t("(none chosen yet)")}`}
           </label>
-          <label className="flex items-center gap-2 text-label text-ink-300">
-            <input type="checkbox" checked={cloneSender} disabled={!canCopySender || clonePending} onChange={(event) => setCloneSender(event.target.checked)} />
-            {t("Copy selected sender preview")} {canCopySender ? `(${render?.sender.name})` : t("(select a non-preview sender in Email first)")}
-          </label>
+          {canCopySender && (
+            <label className="flex items-center gap-2 text-label text-ink-300">
+              <input type="checkbox" checked={cloneSender} disabled={clonePending} onChange={(event) => setCloneSender(event.target.checked)} />
+              {t("Copy the sender preview")} ({render?.sender.name})
+            </label>
+          )}
           {emailDraft.dirty && <p className="text-label text-warn" role="status">{t("Unsaved edits are not included. Save them first if you want to clone the changes.")}</p>}
           {cloneError !== null && <p className="text-label text-fail" role="alert">{t(cloneError)}</p>}
           <div className="flex justify-end gap-2">
@@ -804,17 +361,18 @@ export default function CampaignWorkspace({
       </dialog>
       <CampaignTabs
       tabs={[
-        { id: "overview", label: "Overview" },
         { id: "email", label: "Email", badge: emailBadge },
         { id: "audience", label: "Audience" },
+        { id: "review", label: "Review and send" },
         { id: "activity", label: "Activity" },
       ]}
-      active={activeTab}
-      onChange={setTab}
+      active={tab}
+      onChange={onTab}
+      disabled={chain.phase !== null}
       actions={onCloned !== undefined && doc !== null ? (
         <Button
           size="sm"
-          disabled={!canWrite}
+          disabled={!canWrite || chain.phase !== null}
           title={t("Copy this campaign's saved version into a new draft")}
           onClick={() => {
             setCloneName(`${campaignTitle(doc)} — Copy`);
@@ -828,27 +386,7 @@ export default function CampaignWorkspace({
         </Button>
       ) : undefined}
     >
-      {activeTab === "overview" && (
-        <>
-          <OverviewPane
-            items={readiness}
-            doc={doc}
-            binding={binding}
-            audienceLabel={audienceLabel ?? "—"}
-            onTab={setTab}
-          />
-          {doc !== null && (
-            <details className="crm-diag crm-guard-diag" data-send-decisions>
-              <summary className="text-label text-ink-300">{t("Send decisions — test and final send stay separate")}</summary>
-              <div className="grid gap-3">
-                {testSection}
-                {finalSend}
-              </div>
-            </details>
-          )}
-        </>
-      )}
-      {activeTab === "email" && (
+      {tab === "email" && (
         <EmailPane
           scope={scope}
           canWrite={canWrite}
@@ -859,10 +397,9 @@ export default function CampaignWorkspace({
           onRefresh={() => setRenderToken((count) => count + 1)}
           sampleName={sampleName}
           onSampleName={setSampleName}
-          senderBindings={contentBindings}
-          senderBindingId={contentBindingId}
-          onSenderBindingId={(id) => { setContentBindingId(id); setRender(null); }}
-          senderBindingError={contentBindingError}
+          binding={binding}
+          bindingError={bindingError}
+          onRetryBinding={() => { setBinding(undefined); setBindingError(null); setBindingToken((count) => count + 1); }}
           proposals={pendingProposals}
           proposalsError={proposalsError}
           proposalError={proposalError}
@@ -873,28 +410,56 @@ export default function CampaignWorkspace({
           edit={canWrite ? emailDraft : null}
         />
       )}
-      {activeTab === "audience" && audienceSlot}
-      {activeTab === "activity" && (
+      {tab === "audience" && audienceSlot}
+      {tab === "review" && (doc === null ? (
+        <p className="card px-4 py-4 text-label text-ink-400" data-state="no-draft">
+          {t("There's no saved email yet. Ask the assistant to draft one, then apply it on the Email tab.")}
+        </p>
+      ) : (
+        <>
+          {bindingError !== null && (
+            <p className="text-label text-fail" role="alert">
+              {t(bindingError)}{" "}
+              <button type="button" className="lnk" onClick={() => { setBinding(undefined); setBindingError(null); setBindingToken((count) => count + 1); }}>
+                {t("Retry")}
+              </button>
+            </p>
+          )}
+          <FinalSendPanel
+            scope={scope}
+            viewer={viewer}
+            campaignId={campaignId}
+            doc={doc}
+            freezeId={freezeId}
+            selection={selection}
+            binding={binding}
+            testEvidence={testReceipt}
+            onTestEvidence={setTestReceipt}
+            audience={audience}
+            audienceTitle={audienceTitle}
+            sends={sends}
+            sendsError={sendsError}
+            onSendsChanged={onSendsChanged}
+            onTab={onTab}
+            onDoc={onDoc}
+            chain={chain}
+            chainId={chainId}
+          />
+        </>
+      ))}
+      {tab === "activity" && (
         <ActivityPane
           campaignId={campaignId}
           doc={doc}
           proposals={proposals}
           render={render}
           binding={binding}
-          sends={activitySlot}
+          testEvidence={testReceipt}
+          sends={sends}
+          sendsSlot={activitySlot}
         />
       )}
       </CampaignTabs>
     </>
   );
 }
-
-/**
- * One pending proposal. The CAD-813 render rule is strict: only
- * `actor == "assistant"` AND a non-null `assistant_receipt` earns the
- * verified badge — an operator submission (or a receipt-less row) is
- * always labelled operator-submitted, never assistant, whatever its
- * text looks like. A pending row whose stamped source drifted behind
- * the current draft renders "Needs review (stale)" with Apply
- * disabled — the operator re-reviews instead of merging late output.
- */

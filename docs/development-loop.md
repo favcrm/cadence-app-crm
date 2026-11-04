@@ -30,12 +30,20 @@ The real app action buttons operate on browser-memory fixtures:
 - Segments: create, edit and duplicate rules; counts use the current local customers.
 - Campaigns: choose **Blank** or **Paste HTML**, edit/save revisions and clone
   drafts without copying live sender/audience state. Saving never creates an
-  approval; **Send N emails** approves the current revision when the send is
-  confirmed, and the campaign UI has no separate content-approval step. The
-  send freezes its audience as part of that one approval: there is no separate
+  approval. The campaign opens on **Review and send**; pressing **Send to N
+  people** runs the host's content card, prepare and the host's send card in
+  order, each needing its own press, with no extra dialog from the app. The send
+  freezes its audience as part of that one approval: there is no separate
   snapshot action anywhere in the campaign UI.
   Subject/preheader validation is shared with the real editor in both modes,
   including direct local saves; it is not host authorization.
+  Two URL switches change what the fixture shows, and neither simulates a
+  send, test or approval (those slots stay refused): `?board=audience` makes the
+  fixture keep a chosen audience like a board that reports
+  `draft_audience_full` (without it the fixture is an older board and the
+  Audience tab says the choice stays on screen), and
+  `?sends=sending|sent|partial|uncertain` seeds one read-only send row so the
+  status chip and result view can be reviewed.
 - **Reset local data** asks before discarding all local changes and the chat draft.
   Reload also resets the data; nothing is stored in localStorage or on a server.
 

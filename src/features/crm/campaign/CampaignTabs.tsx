@@ -9,7 +9,7 @@ export interface TabSpec {
   badge?: string | null;
 }
 
-const ORDER: CampaignTab[] = ["overview", "email", "audience", "activity"];
+const ORDER: CampaignTab[] = ["email", "audience", "review", "activity"];
 
 /**
  * The saved campaign's tablist (CAD-1055). Only the active panel is
@@ -20,6 +20,7 @@ export default function CampaignTabs({
   active,
   onChange,
   actions,
+  disabled = false,
   children,
 }: {
   tabs: TabSpec[];
@@ -27,6 +28,8 @@ export default function CampaignTabs({
   onChange: (tab: CampaignTab) => void;
   /** One compact action aligned with the tab row (e.g. Clone). */
   actions?: ReactNode;
+  /** A send is running: staying on this tab keeps what it was started for true. */
+  disabled?: boolean;
   children: ReactNode;
 }) {
   const { t } = useLocale();
@@ -60,8 +63,10 @@ export default function CampaignTabs({
               aria-selected={active === tab.id}
               aria-controls={`cmp-panel-${tab.id}`}
               tabIndex={active === tab.id ? 0 : -1}
-              onClick={() => onChange(tab.id)}
+              aria-disabled={disabled || undefined}
+              onClick={() => { if (!disabled) onChange(tab.id); }}
               onKeyDown={(e) => {
+                if (disabled) return;
                 if (move(tab.id, e.key)) e.preventDefault();
               }}
             >

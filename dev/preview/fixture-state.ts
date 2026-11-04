@@ -7,7 +7,7 @@ export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
 export const fixtureActions = [
   "records.list", "records.show", "records.create", "records.update", "segments.list", "segments.show", "segments.save", "audience.preview",
-  "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list",
+  "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list", "sends.show",
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
 ];
@@ -15,7 +15,7 @@ type Profile = { schema: number; display_name: string; email?: string; phone?: s
 type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
-type Content = { campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
+type Content = { draft_audience_full?: unknown; campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
 const records: LocalRecord[] = [
   { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
@@ -29,6 +29,25 @@ const fixtureSenderBindings = [{ binding_id: "fixture-sender", revision: 1, dige
  *  starts unassigned, so the "no recorded work" path is what the preview
  *  exercises by default. */
 const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixture draft", revision: 1, subject: "Welcome to the community", preheader: "A synthetic local-development email.", blocks: [{ type: "heading", text: "Welcome" }, { type: "paragraph", text: "This is synthetic preview content. No email can be sent." }], mode: "blocks", html: null, text_override: null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } }];
+
+/** Preview switches, read from the preview page's own URL:
+ *  `?board=audience` makes the fixture board keep an audience the way an
+ *  AOS-521 board does (`draft_audience_full`); without it the fixture is an
+ *  older board that cannot. `?sends=sending|sent|partial|uncertain` seeds one
+ *  READ-ONLY send row so the status chip and result view can be seen. No send,
+ *  approval or test is ever simulated: slots stay refused. */
+const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+const keepsAudience = params.get("board") === "audience";
+const seededSend = params.get("sends");
+const sendCounts = { sending: { queued: 80, submitting: 3, accepted: 41, failed: 0, uncertain: 0, suppressed: 0, closed: 0 }, sent: { queued: 0, submitting: 0, accepted: 121, failed: 0, uncertain: 0, suppressed: 3, closed: 0 }, partial: { queued: 0, submitting: 0, accepted: 113, failed: 8, uncertain: 0, suppressed: 3, closed: 0 }, uncertain: { queued: 0, submitting: 0, accepted: 60, failed: 0, uncertain: 2, suppressed: 0, closed: 0 } } as const;
+function seededSendRow() {
+  const key = seededSend as keyof typeof sendCounts | null;
+  if (!key || !(key in sendCounts)) return null;
+  return { send_id: "send-fixture", campaign_id: "welcome", state: key === "sending" ? "sending" : "completed", send_digest: fixtureDigest, content_revision: 1, content_digest: fixtureDigest, audience_freeze_id: "welcome-freeze-fixture", audience_digest: fixtureDigest, connection_id: "fixture-smtp", link_revision: 1, max_recipients: 200, unsubscribe_origin: "https://example.invalid", created: 1, approved_at: 2, counts: sendCounts[key], delivery_claim: "smtp-acceptance-only" };
+}
+function withAudience(content: Content): Content {
+  return keepsAudience ? { ...content, draft_audience_full: content.draft_audience_full ?? null } : content;
+}
 
 function requireId(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) throw new ApiError("A valid local record ID is required.", 400, { code: "invalid_body" });
@@ -125,8 +144,8 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const eligible = valid.filter(r => r.profile.consent.email === "granted");
       return { base_count: members.length, exclusion_count: 0, final_count: eligible.length, final_excluded: { invalid_email: invalid.length, no_consent: valid.filter(r => r.profile.consent.email === "unknown").length, unsubscribed: valid.filter(r => r.profile.consent.email === "denied").length, suppressed: 0 }, sample: eligible.slice(0, 20).map(r => ({ id: r.id, display_name: r.profile.display_name })), digest: fixtureDigest };
     }
-    case "content.list": return { contents };
-    case "content.show": return { content: contents.find(c => c.campaign_id === args.campaign_id) ?? missing() };
+    case "content.list": return { contents: contents.map(withAudience) };
+    case "content.show": return { content: withAudience(contents.find(c => c.campaign_id === args.campaign_id) ?? missing()) };
     case "content.save": {
       if (typeof args.campaign_id !== "string" || typeof args.subject !== "string") throw new ApiError("A campaign ID and subject are required.", 400);
       checkCampaignId(args.campaign_id);
@@ -142,10 +161,14 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
         checkContentFields(args.subject, preheader);
         if (typeof args.html !== "string" || !args.html.trim()) throw new ApiError("Valid email HTML is required.", 400);
       }
-      const content: Content = { campaign_id: args.campaign_id, name, revision: (existing?.revision ?? 0) + 1, subject: args.subject, preheader, blocks: blocks ?? [], mode: blocks ? "blocks" : "html", html: typeof args.html === "string" ? inertHtml(args.html) : null, text_override: typeof args.text === "string" ? args.text : null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } };
+      if ("draft_audience" in args && !keepsAudience) throw new ApiError("Unknown field draft_audience.", 400, { code: "validation_failed" });
+      const content: Content = { draft_audience_full: "draft_audience" in args ? args.draft_audience : existing?.draft_audience_full ?? null, campaign_id: args.campaign_id, name, revision: (existing?.revision ?? 0) + 1, subject: args.subject, preheader, blocks: blocks ?? [], mode: blocks ? "blocks" : "html", html: typeof args.html === "string" ? inertHtml(args.html) : null, text_override: typeof args.text === "string" ? args.text : null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } };
+      // An audience-only save (same content) keeps the revision, as AOS-521 does.
+      const unchanged = existing && existing.subject === content.subject && existing.preheader === content.preheader && JSON.stringify(existing.blocks) === JSON.stringify(content.blocks);
+      if (unchanged) content.revision = existing.revision;
       if (existing) contents.splice(contents.indexOf(existing), 1, content); else contents.push(content);
       changed(existing ? "Campaign draft updated locally." : "Campaign draft created locally.");
-      return { content };
+      return { content: withAudience(content) };
     }
     case "content.clone": {
       const original = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
@@ -167,7 +190,8 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
     }
     case "proposals.list": return { proposals: [] };
-    case "sends.list": return { sends: [] };
+    case "sends.list": { const row = seededSendRow(); return { sends: row ? [row] : [] }; }
+    case "sends.show": { const row = seededSendRow(); if (!row) missing(); return { send: row, counts: row.counts, deliveries: [{ send_id: row.send_id, customer_id: "ada", email: "a***@example.invalid", state: "accepted", attempts: 1, smtp_code: 250 }, { send_id: row.send_id, customer_id: "lee", email: "l***@example.invalid", state: "suppressed", attempts: 0, reason: "unsubscribed" }, ...(params.get("sends") === "partial" ? [{ send_id: row.send_id, customer_id: "kim", email: "k***@example.invalid", state: "failed", attempts: 1, smtp_code: 550, reason: "Mailbox not found" }] : [])], delivery_claim: "smtp-acceptance-only" }; }
     case "sender-bindings.list": return { bindings: fixtureSenderBindings };
     case "exclusions.list": return { exclusions: [] };
     case "suppressions.list": return { suppressions: [] };

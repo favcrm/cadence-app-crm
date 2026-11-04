@@ -3,6 +3,7 @@ import { useEffect,useRef,useState } from "react";
 import {
 type AudienceScope
 } from "../audienceClient";
+import { sendStatus } from "../campaign/sendStatus";
 import "../crm-campaign.css";
 import {
 DELIVERY_CLAIM,
@@ -17,14 +18,39 @@ import type { Viewer } from "../viewer";
 
 import DeliveryRows from "./DeliveryRows";
 
+/** The plain sentence above the numbers. Acceptance by the mail server is
+ *  the most this app ever claims — never inbox delivery. */
+function headline(view: SendView, total: number): { text: string; tone: "fail" | "normal" } {
+  const status = sendStatus({ state: view.send.state, counts: view.counts });
+  if (view.send.state === "prepared") return { text: "This send was prepared but not confirmed. Nothing was sent.", tone: "normal" };
+  if (status.key === "sending") return { text: "Sending. The result appears here when it finishes.", tone: "normal" };
+  if (status.key === "finished") return { text: "Finished. The result didn't say how many were accepted.", tone: "normal" };
+  if (status.key === "failed") return { text: "Nothing was sent. The mail server accepted none of these.", tone: "fail" };
+  if (status.key === "nothing") return { text: total === 0 ? "Nothing was sent. There was no one to send to." : "Nothing was sent. Everyone in this audience was skipped.", tone: "normal" };
+  if (status.key === "partial") {
+    return view.counts.failed === 1
+      ? { text: "Sent, but 1 wasn't accepted. It isn't retried automatically.", tone: "normal" }
+      : { text: "Sent, but {count} weren't accepted. They aren't retried automatically.", tone: "normal" };
+  }
+  if (status.key === "uncertain") {
+    return view.deliveries.length > 0
+      ? { text: "This send stopped before it finished. Check the list below before doing anything else.", tone: "fail" }
+      : { text: "This send stopped before it finished. Some people may not have been emailed.", tone: "fail" };
+  }
+  return { text: "Sent. The mail server accepted these, which doesn't confirm inbox delivery.", tone: "normal" };
+}
+
 export default function SendProgressPanel({
   scope,
   viewer,
   sendId,
+  onChanged,
 }: {
   scope: AudienceScope;
   viewer: Viewer;
   sendId: string;
+  /** The campaign's send list should be read again. */
+  onChanged?: () => void;
 }) {
   const { t, formatNumber } = useLocale();
   const [view, setView] = useState<SendView | null>(null);
@@ -46,6 +72,8 @@ export default function SendProgressPanel({
           setError(null);
           if (!sendTerminal(parsed.send.state) && ticks < 150) {
             pollRef.current.timer = setTimeout(tick, 2000);
+          } else {
+            onChanged?.();
           }
         })
         .catch((e: unknown) => {
@@ -77,44 +105,33 @@ export default function SendProgressPanel({
     );
   }
   const counts = view.counts;
-  const cells: [string, number][] = [
-    ["prepared", view.send.state === "prepared" ? view.deliveries.length || counts.queued : view.deliveries.length],
-    ["queued", counts.queued],
-    ["suppressed", counts.suppressed],
-    ["submitted", counts.submitting + counts.accepted + counts.failed + counts.uncertain],
-    ["accepted", counts.accepted],
-    ["failed", counts.failed],
-    ["uncertain", counts.uncertain],
-    ["closed", counts.closed],
+  const total = counts.queued + counts.submitting + counts.accepted + counts.failed + counts.uncertain + counts.suppressed + counts.closed;
+  const head = headline(view, total);
+  const cells: [string, number, boolean][] = [
+    ["Audience", total, true],
+    ["Accepted", counts.accepted, true],
+    ["Skipped", counts.suppressed, true],
+    ["Failed", counts.failed, true],
+    ["Unconfirmed", counts.uncertain, counts.uncertain > 0],
+    ["Waiting", counts.queued + counts.submitting, counts.queued + counts.submitting > 0],
+    ["Not sent", counts.closed, counts.closed > 0],
   ];
   return (
-    <section aria-label={t("Send progress")} className="grid gap-3">
-      <p className="text-label text-ink-300">
-        <span className="chip crm-send-chip" data-state={view.send.state}>
-          {t(view.send.state)}
-        </span>{" "}
-        <span className="num">
-          {view.send.sendId} · {t("digest")} {view.send.sendDigest.slice(0, 18)}…
-        </span>
-        {view.send.closeReason !== null && (
-          <span className="text-fail"> · {view.send.closeReason}</span>
-        )}
+    <section aria-label={t("Send result")} className="grid gap-3">
+      <p className={`text-label ${head.tone === "fail" ? "text-fail" : "text-ink-200"}`} role="status">
+        {t(head.text).replace("{count}", formatNumber(counts.failed))}
+        {view.send.closeReason !== null && <span className="text-ink-400"> {view.send.closeReason}</span>}
       </p>
-      <dl className="crm-detail" aria-label={t("Delivery counts")}>
-        {cells.map(([label, count]) => (
+      {view.countsKnown && (
+      <dl className="sdetail" aria-label={t("Delivery counts")}>
+        {cells.filter(([, , shown]) => shown).map(([label, n]) => (
           <div key={label}>
             <dt>{t(label)}</dt>
-            <dd className="num" data-count={label}>
-              {formatNumber(count)}
-            </dd>
+            <dd className="num" data-count={label.toLowerCase()}>{formatNumber(n)}</dd>
           </div>
         ))}
       </dl>
-      <p className="text-micro text-ink-500">
-        {DELIVERY_CLAIM === "smtp-acceptance-only" || view.deliveryClaim === DELIVERY_CLAIM
-          ? t("SMTP accepted the message — this is not proof of inbox delivery.")
-          : view.deliveryClaim}
-      </p>
+      )}
       {error && (
         <p className="text-label text-fail" role="alert">
           {t(error)}
@@ -128,22 +145,23 @@ export default function SendProgressPanel({
           onResolved={() => {
             sendClient
               .sendShow(scope, sendId)
-              .then((value) => setView(parseSendView(value)))
+              .then((value) => { setView(parseSendView(value)); onChanged?.(); })
               .catch(() => undefined);
           }}
         />
       )}
+      <details className="crm-diag" data-technical="true">
+        <summary className="text-micro text-ink-500">{t("Technical details")}</summary>
+        <dl className="sdetail mt-1">
+          <div><dt>{t("Send")}</dt><dd className="num">{view.send.sendId}</dd></div>
+          <div><dt>{t("Version")}</dt><dd className="num">r{formatNumber(view.send.contentRevision)} · {view.send.contentDigest.slice(0, 18)}…</dd></div>
+          <div><dt>{t("Audience snapshot")}</dt><dd className="num">{view.send.audienceFreezeId} · {view.send.audienceDigest.slice(0, 18)}…</dd></div>
+          <div><dt>{t("Sender link")}</dt><dd className="num break-all">{view.send.connectionId} {t("· link r")}{view.send.linkRevision}</dd></div>
+          <div><dt>{t("Unsubscribe origin")}</dt><dd className="num">{view.send.unsubscribeOrigin}</dd></div>
+          <div><dt>{t("Send digest")}</dt><dd className="num" title={view.send.sendDigest}>{view.send.sendDigest.slice(0, 24)}…</dd></div>
+          <div><dt>{t("Delivery claim")}</dt><dd className="num">{view.deliveryClaim === DELIVERY_CLAIM ? t("Accepted by the mail server only") : view.deliveryClaim}</dd></div>
+        </dl>
+      </details>
     </section>
   );
 }
-
-/**
- * The final-send section — visually distinct from the test send, it
- * gates Prepare on every prerequisite the host re-verifies (approved
- * content at the current revision, a valid named audience freeze, a
- * live sender binding, an accepted test send of this content+binding)
- * and shows which is missing before the wire ever sees a request.
- * Approve demands the operator type the final recipient count; the
- * body is exactly `{install_id, context_id, send_id, send_digest}`.
- * Any host refusal discards the prepared view — prepare again.
- */

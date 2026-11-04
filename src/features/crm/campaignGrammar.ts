@@ -1,4 +1,5 @@
 import { ApiError } from "@cadence/screen-ui";
+import type { AudienceBaseInput } from "./audienceClient";
 import { hostErrorText } from "./hostErrors";
 
 /**
@@ -178,8 +179,14 @@ export interface ContentDoc {
   campaignId: string;
   /** CAD-1058: optional human name; null for campaigns without one. */
   name: string | null;
-  /** Saved draft hint only; it is not a frozen or committed audience. */
-  draftAudience?: { mode: "segment"; segmentId: string } | null;
+  /** The audience the owner chose for this campaign, as the board keeps it
+   *  (`draft_audience_full`). `null` = nothing chosen yet; `undefined` = this
+   *  board does not report one, so it cannot keep an audience. It is a saved
+   *  choice only, never a frozen or committed audience. */
+  draftAudience?: AudienceBaseInput | null;
+  /** The older segment-only hint (`draft_audience`), read so a campaign saved
+   *  by an older board still reopens on its segment. */
+  legacySegmentId?: string | null;
   revision: number;
   subject: string;
   preheader: string;
@@ -193,6 +200,85 @@ export interface ContentDoc {
   approval: { revision: number | null; digest: string | null; valid: boolean; scope: string };
 }
 
+/** Strict: all, a segment with an id, custom with 1 to 100 ids, or null.
+ *  Anything else is a malformed receipt, never a guessed audience. */
+export const DRAFT_AUDIENCE_MAX_CUSTOMERS = 100;
+export function parseDraftAudience(value: unknown): AudienceBaseInput | null {
+  if (value === null) return null;
+  const bad = () => new ApiError("The server returned an invalid campaign draft audience", 502);
+  if (typeof value !== "object" || Array.isArray(value)) throw bad();
+  const audience = value as Record<string, unknown>;
+  if (audience.mode === "all") return { mode: "all" };
+  if (audience.mode === "segment") {
+    if (typeof audience.segment_id !== "string" || audience.segment_id === "") throw bad();
+    return { mode: "segment", segmentId: audience.segment_id };
+  }
+  if (audience.mode === "custom") {
+    const ids = audience.customer_ids;
+    if (
+      !Array.isArray(ids) ||
+      ids.length < 1 ||
+      ids.length > DRAFT_AUDIENCE_MAX_CUSTOMERS ||
+      ids.some((id) => typeof id !== "string" || id === "")
+    ) throw bad();
+    return { mode: "custom", customerIds: ids as string[] };
+  }
+  throw bad();
+}
+
+/** The wire form `content.save` takes for `draft_audience`. */
+export function draftAudienceWire(
+  audience: AudienceBaseInput | null,
+): { mode: "all" } | { mode: "segment"; segment_id: string } | { mode: "custom"; customer_ids: string[] } | null {
+  if (audience === null) return null;
+  if (audience.mode === "segment") return { mode: "segment", segment_id: audience.segmentId };
+  if (audience.mode === "custom") return { mode: "custom", customer_ids: audience.customerIds };
+  return { mode: "all" };
+}
+
+export function sameAudience(a: AudienceBaseInput | null | undefined, b: AudienceBaseInput | null | undefined): boolean {
+  if (a == null || b == null) return a == null && b == null;
+  if (a.mode !== b.mode) return false;
+  if (a.mode === "segment" && b.mode === "segment") return a.segmentId === b.segmentId;
+  if (a.mode === "custom" && b.mode === "custom") {
+    const left = [...a.customerIds].sort();
+    const right = [...b.customerIds].sort();
+    return left.length === right.length && left.every((id, i) => id === right[i]);
+  }
+  return true;
+}
+
+/** Show a subject the way a recipient reads it: the one approved token
+ *  becomes the sample first name, or its own fallback when none is given.
+ *  Walks the text like `checkTokens`; no pattern matching. */
+export function previewSubject(subject: string, sampleFirstName: string): string {
+  const sample = sampleFirstName.trim();
+  let out = "";
+  let rest = subject;
+  for (;;) {
+    const open = rest.indexOf("{{");
+    const close = open === -1 ? -1 : rest.indexOf("}}", open + 2);
+    if (open === -1 || close === -1) return out + rest;
+    const parts = rest.slice(open + 2, close).split("|");
+    out += rest.slice(0, open) + (parts[0] === "first_name" && parts.length === 2 ? (sample === "" ? parts[1] : sample) : rest.slice(open, close + 2));
+    rest = rest.slice(close + 2);
+  }
+}
+
+/** The same subject for a summary row: the token reads as `{first name}`. */
+export function summarySubject(subject: string): string {
+  let out = "";
+  let rest = subject;
+  for (;;) {
+    const open = rest.indexOf("{{");
+    const close = open === -1 ? -1 : rest.indexOf("}}", open + 2);
+    if (open === -1 || close === -1) return out + rest;
+    const parts = rest.slice(open + 2, close).split("|");
+    out += rest.slice(0, open) + (parts[0] === "first_name" && parts.length === 2 ? "{first name}" : rest.slice(open, close + 2));
+    rest = rest.slice(close + 2);
+  }
+}
+
 export function parseContentDoc(value: unknown): ContentDoc {
   const doc = (value as { content?: unknown } | null)?.content;
   if (!doc || typeof doc !== "object") {
@@ -201,19 +287,14 @@ export function parseContentDoc(value: unknown): ContentDoc {
   const row = doc as Record<string, unknown>;
   const approval = (row.approval as Record<string, unknown> | null) ?? {};
   let draftAudience: ContentDoc["draftAudience"];
-  if (Object.prototype.hasOwnProperty.call(row, "draft_audience")) {
-    const rawAudience = row.draft_audience;
-    if (rawAudience === null) {
-      draftAudience = null;
-    } else if (typeof rawAudience === "object" && !Array.isArray(rawAudience)) {
-      const audience = rawAudience as Record<string, unknown>;
-      if (audience.mode !== "segment" || typeof audience.segment_id !== "string" || audience.segment_id === "") {
-        throw new ApiError("The server returned an invalid campaign draft audience", 502);
-      }
-      draftAudience = { mode: "segment", segmentId: audience.segment_id };
-    } else {
-      throw new ApiError("The server returned an invalid campaign draft audience", 502);
-    }
+  if (Object.prototype.hasOwnProperty.call(row, "draft_audience_full")) {
+    draftAudience = parseDraftAudience(row.draft_audience_full);
+  }
+  let legacySegmentId: string | null = null;
+  const legacy = row.draft_audience;
+  if (legacy !== null && legacy !== undefined) {
+    const parsed = parseDraftAudience(legacy);
+    if (parsed !== null && parsed.mode === "segment") legacySegmentId = parsed.segmentId;
   }
   if (
     typeof row.campaign_id !== "string" ||
@@ -229,6 +310,7 @@ export function parseContentDoc(value: unknown): ContentDoc {
     campaignId: row.campaign_id,
     name: typeof row.name === "string" && row.name !== "" ? row.name : null,
     ...(draftAudience !== undefined ? { draftAudience } : {}),
+    legacySegmentId,
     revision: row.revision,
     subject: row.subject,
     preheader: row.preheader,

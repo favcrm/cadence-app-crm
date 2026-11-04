@@ -6,12 +6,15 @@ import type { AudienceScope } from "../audienceClient";
 import {
 friendlyCampaignError,
 parseProposalRender,
+previewSubject,
 type ContentDoc,
 type ContentRender,
 type ProposalDoc,
 type ProposalRenderDoc,
 } from "../campaignGrammar";
 import { contentClient } from "../contentClient";
+import type { SmtpBinding } from "../sendClient";
+import { sendingFrom } from "../sendingView";
 import EmailBlocksCanvas,{ AddBlockTools,MAX_BLOCKS } from "./EmailBlocksCanvas";
 import ProposalStrip from "./ProposalStrip";
 import { blocksFromProposal,blocksToGrammar,displayUiNotice,type EmailDraftApi,type UiNotice } from "./useEmailDraft";
@@ -43,10 +46,9 @@ export default function EmailPane({
   onRefresh,
   sampleName,
   onSampleName,
-  senderBindings,
-  senderBindingId,
-  onSenderBindingId,
-  senderBindingError,
+  binding,
+  bindingError,
+  onRetryBinding,
   proposals,
   proposalsError,
   proposalError,
@@ -65,10 +67,10 @@ export default function EmailPane({
   onRefresh: () => void;
   sampleName: string;
   onSampleName: (value: string) => void;
-  senderBindings: { id: string; name: string; address: string }[];
-  senderBindingId: string | null;
-  onSenderBindingId: (value: string | null) => void;
-  senderBindingError: string | null;
+  /** The connected sender: `undefined` while loading, `null` when none. */
+  binding: SmtpBinding | null | undefined;
+  bindingError: string | null;
+  onRetryBinding: () => void;
   /** Pending proposals for this campaign only. */
   proposals: ProposalDoc[];
   proposalsError: string | null;
@@ -126,14 +128,6 @@ export default function EmailPane({
   // A host-attributed suggestion is read-only until Use in editor. The
   // local editor is available at revision 0 as well as on saved revisions.
   const editing = canWrite && edit !== null && draft === null;
-  // CAD-1146: the optional preheader starts collapsed; hiding it never
-  // discards its value and never makes it required. A saved preheader
-  // opens the row on load so its value is never hidden silently.
-  const [preheaderOpen, setPreheaderOpen] = useState((doc?.preheader ?? "") !== "");
-  useEffect(() => {
-    if ((doc?.preheader ?? "") !== "") setPreheaderOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc?.campaignId, doc?.revision]);
   const editingBlocks =
     editing && edit !== null && mode === "visual" && edit.draft.html === null;
   const blockSource = edit === null
@@ -208,13 +202,17 @@ export default function EmailPane({
           <div className="crm-envelope" aria-label={t("Email envelope")}>
             <p className="text-label text-ink-400">
               {t("From")}{" "}
-              <span className="num">
-                {shown !== null ? `${shown.sender.name} <${shown.sender.address}>` : "…"}
+              <span className="num" data-envelope-from>
+                {binding === undefined
+                  ? "…"
+                  : binding === null || sendingFrom(binding) === null
+                    ? t("No sender connected")
+                    : `${binding.sender.name} <${binding.sender.address}>`}
               </span>{" "}
-              · {t("To")} <span className="num">{sampleName.trim() === "" ? t("each recipient") : sampleName.trim()}</span>{" "}
-              <span className="chip" title={t("Sender material is host-locked preview-only bytes")}>
-                {t("preview-only")}
-              </span>
+              · {t("To")} <span className="num">{t("each recipient")}</span>
+            </p>
+            <p className="text-label text-ink-200" data-envelope-subject>
+              {t("Subject")}: <span>{previewSubject(editing && edit !== null ? edit.draft.subject : subject, sampleName)}</span>
             </p>
           </div>
           {editingBlocks && edit !== null && (
@@ -222,7 +220,6 @@ export default function EmailPane({
               <EmailBlocksCanvas
                 blocks={edit.draft.blocks}
                 disabled={edit.saving || edit.reloading}
-                brandName={shown !== null ? shown.sender.name : "Email"}
                 device={device}
                 canUndo={edit.canUndo}
                 onUndo={edit.undoBlocks}
@@ -238,7 +235,7 @@ export default function EmailPane({
                 }
               />
               <p className="crm-footer-lock" data-host-footer>
-                🔒 {t("host footer — the unsubscribe link and sender address are added by the host and cannot be edited.")}
+                {t("The sender and an Unsubscribe link are added to every email.")}
               </p>
             </>
           )}
@@ -311,7 +308,7 @@ export default function EmailPane({
                     {edit.draft.ownText ? (
                       <div className="crm-field">
                         <label className="text-label text-ink-300" htmlFor="cmp-text-override">
-                          {t("Custom plain-text override")}
+                          {t("Your plain-text version")}
                         </label>
                         <textarea
                           id="cmp-text-override"
@@ -327,7 +324,7 @@ export default function EmailPane({
                       </div>
                     ) : (
                       <p className="text-micro text-ink-500">
-                        {t("The host generates plain text from the email body unless you write an override.")}
+                        {t("Plain text is made from the email body unless you write your own.")}
                       </p>
                     )}
                   </>
@@ -336,18 +333,18 @@ export default function EmailPane({
                   <div className="crm-field" data-preview="plain-text">
                     <span className="text-label text-ink-300">
                       {draft !== null
-                        ? t("Suggested plain-text render (not saved)")
+                        ? t("Suggested plain text (not saved)")
                         : doc?.textOverride != null
-                          ? `${t("Saved custom plain-text render")} (v${formatNumber(doc.revision)})`
+                          ? `${t("Saved plain text, written by you")} (v${formatNumber(doc.revision)})`
                           : doc !== null
-                            ? `${t("Saved host-generated plain text")} (v${formatNumber(doc.revision)})`
-                            : t("Host-rendered plain text")}
+                            ? `${t("Saved plain text")} (v${formatNumber(doc.revision)})`
+                            : t("Plain text")}
                     </span>
                     <pre className="crm-preview">{shown.text}</pre>
                   </div>
                 )}
                 <p className="text-micro text-ink-500" data-host-footer-note>
-                  {t("The required sender and unsubscribe footer is appended by the host and cannot be edited here.")}
+                  {t("The sender and an Unsubscribe link are added to every email and can't be edited here.")}
                 </p>
               </div>
             </details>
@@ -518,9 +515,7 @@ export default function EmailPane({
             {edit.dirty && (
               <div className="crm-unsaved" data-unsaved-bar>
                 <div className="grid gap-1">
-                  <span className="text-label text-ink-100">
-                    {t("Unsaved changes to v")}{formatNumber(edit.source)} · {t("Saving creates v")}{formatNumber(edit.source + 1)}
-                  </span>
+                  <span className="text-label text-ink-100">{t("Unsaved changes")}</span>
                   {edit.stale && (
                     <span className="text-micro text-warn" role="status" data-stale-edit>
                       {t("A newer version was saved while you were editing — your text is kept, but saving is pinned to v")}{formatNumber(edit.source)} {t("and will be refused rather than overwrite it.")}
@@ -537,7 +532,7 @@ export default function EmailPane({
                   {t(edit.reloading ? "Reloading latest…" : "Discard")}
                 </Button>
                 <Button size="sm" variant="primary" loading={edit.saving} disabled={edit.saving || edit.reloading} onClick={edit.save}>
-                  {`${t("Save as v")}${formatNumber(edit.source + 1)}`}
+                  {t("Save")}
                 </Button>
               </div>
             )}
@@ -566,61 +561,36 @@ export default function EmailPane({
                     disabled={edit.saving || edit.reloading}
                   />
                 </div>
-                {preheaderOpen ? (
-                  <div className="crm-field">
-                    <label className="text-label text-ink-300" htmlFor="cmp-preheader">{t("Preheader")}</label>
-                    <input
-                      id="cmp-preheader"
-                      className="field"
-                      value={edit.draft.preheader}
-                      onChange={(e) => edit.patch({ preheader: e.target.value })}
-                      maxLength={200}
-                      autoComplete="off"
-                      placeholder={t("Optional inbox preview text")}
-                      disabled={edit.saving || edit.reloading}
-                    />
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  id="cmp-preheader-toggle"
-                  className="lnk crm-preheader-toggle"
-                  aria-expanded={preheaderOpen}
-                  aria-controls="cmp-preheader"
-                  disabled={edit.saving || edit.reloading}
-                  onClick={() => setPreheaderOpen((open) => !open)}
-                >
-                  {preheaderOpen ? `− ${t("Hide preheader")}` : `+ ${t("Add preheader")}`}{" "}
-                  <span className="text-ink-500">({t("optional")})</span>
-                </button>
+                <div className="crm-field">
+                  <label className="text-label text-ink-300" htmlFor="cmp-preheader">
+                    {t("Preview text")} <span className="text-ink-500">({t("optional")})</span>
+                  </label>
+                  <input
+                    id="cmp-preheader"
+                    className="field"
+                    value={edit.draft.preheader}
+                    onChange={(e) => edit.patch({ preheader: e.target.value })}
+                    maxLength={200}
+                    autoComplete="off"
+                    disabled={edit.saving || edit.reloading}
+                  />
+                </div>
               </>
             ) : (
               <dl className="sdetail">
                 <div><dt>{t("Subject")}</dt><dd>{subject}</dd></div>
-                <div><dt>{t("Preheader")}</dt><dd>{preheader === "" ? "—" : preheader}</dd></div>
+                <div><dt>{t("Preview text")}</dt><dd>{preheader === "" ? "—" : preheader}</dd></div>
               </dl>
             )}
-            <div className="crm-field">
-              <label className="text-label text-ink-300" htmlFor="cmp-sender-preview">
-                {t("Sender preview (not send authorization)")}
-              </label>
-              <select
-                id="cmp-sender-preview"
-                className="field"
-                disabled={!canWrite}
-                value={senderBindingId ?? ""}
-                onChange={(event) => onSenderBindingId(event.target.value === "" ? null : event.target.value)}
-              >
-                <option value="">{t("Preview placeholder — no sender selected")}</option>
-                {senderBindings.map((binding) => (
-                  <option key={binding.id} value={binding.id}>{binding.name} · {binding.address}</option>
-                ))}
-              </select>
-            </div>
-            {senderBindingError !== null && <p className="text-label text-fail" role="alert">{senderBindingError}</p>}
+            {bindingError !== null && (
+              <p className="text-label text-fail" role="alert">
+                {t(bindingError)}{" "}
+                <button type="button" className="lnk" onClick={onRetryBinding}>{t("Retry")}</button>
+              </p>
+            )}
             <div className="crm-field">
               <label className="text-label text-ink-300" htmlFor="cmp-sample">
-                {t("Sample recipient first name (optional)")}
+                {t("Preview with first name")}
               </label>
               <input
                 id="cmp-sample"
@@ -631,6 +601,7 @@ export default function EmailPane({
                 autoComplete="off"
                 placeholder="Ada"
               />
+              <p className="text-micro text-ink-500">{t("Recipients with no first name see the fallback name instead.")}</p>
             </div>
           </section>
         </aside>

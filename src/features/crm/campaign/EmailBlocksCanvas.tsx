@@ -19,7 +19,6 @@ export const MAX_BLOCKS = 12;
 export default function EmailBlocksCanvas({
   blocks,
   disabled,
-  brandName,
   device,
   canUndo,
   onUndo,
@@ -28,8 +27,6 @@ export default function EmailBlocksCanvas({
 }: {
   blocks: EditorBlock[];
   disabled: boolean;
-  /** Sender brand line shown atop the email (preview-only label). */
-  brandName: string;
   device: "desktop" | "mobile";
   canUndo: boolean;
   onUndo: () => void;
@@ -50,7 +47,6 @@ export default function EmailBlocksCanvas({
   return (
     <div className="crm-vcanvas">
       <article className="crm-vemail" data-device={device} aria-label={t("Email canvas — edit directly")}>
-        <div className="crm-vbrand">{brandName}</div>
         <div className="crm-vbody">
           {blocks.map((block, index) => (
             <div key={block.key} className="crm-vblock" data-block={block.kind}>

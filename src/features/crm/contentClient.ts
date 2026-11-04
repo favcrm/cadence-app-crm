@@ -1,5 +1,7 @@
 import { ApiError } from "@cadence/screen-ui";
 import { serviceCall, serviceSlot, type CallArgs } from "../../bridge/services";
+import type { AudienceBaseInput } from "./audienceClient";
+import { draftAudienceWire } from "./campaignGrammar";
 
 /**
  * Typed host action client for versioned campaign email content (CAD-782).
@@ -41,6 +43,7 @@ const SAVE_KEYS = [
   "html",
   "text",
   "expected_revision",
+  "draft_audience",
 ] as const;
 const CLONE_KEYS = [
   "expected_revision",
@@ -120,6 +123,10 @@ export type ContentDraftInput = {
   preheader?: string;
   text?: string;
   expectedRevision?: number;
+  /** AOS-521: the audience the owner chose. Omit to leave the stored one
+   *  alone; `null` clears it. Only boards that report
+   *  `draft_audience_full` accept it. */
+  draftAudience?: AudienceBaseInput | null;
 } & (
   | { blocks: ContentBlock[]; html?: never }
   | { html: string; blocks?: never }
@@ -179,7 +186,7 @@ export interface ProposalInput {
  *  campaign route; this client stays mount-agnostic. */
 export const contentClient = {
   save(scope: ContentScope, input: ContentDraftInput): Promise<unknown> {
-    assertInputClean(input as unknown as Record<string, unknown>, ["campaignId", "name", "subject", "preheader", "blocks", "html", "text", "expectedRevision"], "save");
+    assertInputClean(input as unknown as Record<string, unknown>, ["campaignId", "name", "subject", "preheader", "blocks", "html", "text", "expectedRevision", "draftAudience"], "save");
     if ((input.blocks === undefined) === (input.html === undefined)) {
       throw new ApiError("content save needs exactly one of blocks or html", 400, {
         code: "invalid_body",
@@ -195,6 +202,7 @@ export const contentClient = {
     if (input.text !== undefined) body.text = input.text;
     if (input.name !== undefined) body.name = input.name;
     if (input.expectedRevision !== undefined) body.expected_revision = input.expectedRevision;
+    if (input.draftAudience !== undefined) body.draft_audience = draftAudienceWire(input.draftAudience);
     assertClean(body, SAVE_KEYS, "save");
     return serviceCall(scope, "content.save", body);
   },

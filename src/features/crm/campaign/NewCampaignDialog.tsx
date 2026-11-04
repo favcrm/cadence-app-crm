@@ -109,12 +109,9 @@ export default function NewCampaignDialog({
                   { type: "paragraph" as const, text: "Write your message here." },
                 ],
               };
-        await contentClient.save(scope, {
-          campaignId,
-          name: trimmed,
-          subject: trimmed,
-          ...body,
-        });
+        // The chosen segment rides the landing hand-off and is saved from
+        // the campaign page once the board reports it can keep one.
+        await contentClient.save(scope, { campaignId, name: trimmed, subject: trimmed, ...body });
         setSaved(true);
       }
       if (start === "ai") {
