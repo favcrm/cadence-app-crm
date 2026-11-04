@@ -22,11 +22,15 @@ export type FixTarget =
 export type AudienceState =
   | { state: "unchosen" }
   | { state: "counting" }
+  /** The choice is still being written to the board. A send waits for it:
+   *  saving after a freeze would make that freeze stale at once. */
+  | { state: "saving" }
+  | { state: "unsaved" }
   | { state: "error" }
   | { state: "empty"; reason: string | null }
   | { state: "ready"; count: number };
 
-export type TestState = "none" | "content-changed" | "sender-changed" | "ok";
+export type TestState = "none" | "not-accepted" | "content-changed" | "sender-changed" | "ok";
 
 export interface ReadinessItem {
   key: "draft" | "audience" | "sender" | "test";
@@ -53,7 +57,7 @@ export function testState(
   if (evidence === null || doc === null || binding === null || binding === undefined) return "none";
   if (evidence.contentRevision !== doc.revision || evidence.contentDigest !== doc.contentDigest) return "content-changed";
   if (evidence.linkDigest !== binding.digest) return "sender-changed";
-  return "ok";
+  return evidence.accepted && !evidence.pendingApproval ? "ok" : "not-accepted";
 }
 
 export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
@@ -62,6 +66,8 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
   const audienceBlocker =
     audience.state === "unchosen" ? "Choose an audience first."
     : audience.state === "counting" ? "Counting who can receive this…"
+    : audience.state === "saving" ? "Saving your audience choice…"
+    : audience.state === "unsaved" ? "Your audience choice wasn't saved. Open Audience and retry."
     : audience.state === "error" ? "The audience couldn't be counted. Open Audience and retry."
     : audience.state === "empty" ? (audience.reason ?? "Nobody in this audience can be emailed.")
     : null;
@@ -90,6 +96,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
       blocker:
         test === "ok" ? null
         : test === "sender-changed" ? "The sender changed. Send a new test, then send."
+        : test === "not-accepted" ? (testEvidence?.pendingApproval ? "Approve the test email in AgenticOS, then send it again." : "The last test wasn't accepted. Send a new test, then send.")
         : test === "content-changed" ? "The email changed since the last test. Send a new test, then send."
         : "Send a test email first.",
       fix: { kind: "test", label: test === "none" ? "Send test" : "Send again" },

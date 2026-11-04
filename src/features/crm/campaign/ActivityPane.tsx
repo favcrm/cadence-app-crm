@@ -1,14 +1,15 @@
-import { useTranslate } from "../locale";
+import { useLocale } from "../locale";
 import type { ReactNode } from "react";
 import type { ContentDoc,ContentRender,ProposalDoc } from "../campaignGrammar";
-import type { SmtpBinding } from "../sendClient";
+import type { SendListEntry,SmtpBinding,TestSendReceipt } from "../sendClient";
+import { sendStatus } from "./sendStatus";
 
 /**
- * Activity tab (CAD-1055): a plain-language revision/proposal timeline
- * built from what the host reported, the sends history, and every id,
- * digest, binding and unsubscribe-origin detail behind one Technical
- * details disclosure. The host wire carries no timestamps for these
- * rows, so the timeline is ordered by state, never by an invented time.
+ * Activity tab: a plain-language timeline built from what the host
+ * reported, the sends history, and every id, digest, binding and
+ * unsubscribe-origin detail behind one Technical details disclosure. The
+ * host wire carries no timestamps for these rows, so the timeline is
+ * ordered by state, newest first, never by an invented time.
  */
 export default function ActivityPane({
   campaignId,
@@ -16,26 +17,53 @@ export default function ActivityPane({
   proposals,
   render,
   binding,
+  testEvidence,
   sends,
+  sendsSlot,
 }: {
   campaignId: string;
   doc: ContentDoc | null;
   proposals: ProposalDoc[];
   render: ContentRender | null;
   binding: SmtpBinding | null | undefined;
+  testEvidence: TestSendReceipt | null;
+  sends: SendListEntry[] | null;
   /** The sends-history panel. */
-  sends: ReactNode;
+  sendsSlot: ReactNode;
 }) {
-  const t = useTranslate();
+  const { t, formatNumber } = useLocale();
   const pending = proposals.filter((row) => row.state === "pending");
   const decided = proposals.filter((row) => row.state !== "pending");
   const who = (row: ProposalDoc) =>
     row.actor === "assistant" && row.assistantReceipt !== null ? t("Assistant") : t("An operator");
+  const sent = (sends ?? []).filter((row) => row.state !== "prepared").slice().reverse();
+  const empty = doc === null && pending.length === 0 && decided.length === 0 && sent.length === 0;
   return (
     <>
       <section aria-label={t("Campaign timeline")} className="card px-4 py-4 grid gap-3">
         <h4 className="text-cardtitle font-medium text-ink-100">{t("Timeline")}</h4>
         <ol className="crm-timeline" data-timeline>
+          {sent.map((row) => {
+            const total = row.counts.queued + row.counts.submitting + row.counts.accepted + row.counts.failed + row.counts.uncertain + row.counts.suppressed + row.counts.closed;
+            return (
+              <li key={row.sendId} data-event="send">
+                <span className="crm-dot" aria-hidden="true" />
+                <span>{t("Send to {count} people").replace("{count}", formatNumber(total))}: {t(sendStatus(row).label)}</span>
+              </li>
+            );
+          })}
+          {testEvidence !== null && (
+            <li data-event="test">
+              <span className="crm-dot" aria-hidden="true" />
+              <span>
+                {testEvidence.pendingApproval
+                  ? t("Test email waiting for approval in AgenticOS")
+                  : testEvidence.accepted
+                    ? `${t("Test accepted for")} ${testEvidence.to}`
+                    : `${t("Test not accepted for")} ${testEvidence.to}`}
+              </span>
+            </li>
+          )}
           {pending.map((row) => (
             <li key={row.proposalId} data-event="proposal-pending" data-accent>
               <span className="crm-dot" aria-hidden="true" />
@@ -48,7 +76,7 @@ export default function ActivityPane({
             <li data-event="revision">
               <span className="crm-dot" aria-hidden="true" />
               <span>
-                {t("Latest saved version is r")}{doc.revision}: “{doc.subject}”
+                {t("Email saved as version")} {formatNumber(doc.revision)}: “{doc.subject}”
               </span>
             </li>
           )}
@@ -60,7 +88,7 @@ export default function ActivityPane({
               </span>
             </li>
           ))}
-          {doc === null && pending.length === 0 && decided.length === 0 && (
+          {empty && (
             <li data-event="empty">
               <span className="crm-dot" aria-hidden="true" />
               <span>{t("No versions or drafts yet.")}</span>
@@ -75,14 +103,12 @@ export default function ActivityPane({
               <dd className="num">{campaignId}</dd>
             </div>
             {doc !== null && (
-              <>
-                <div>
-                  <dt>{t("Revision")}</dt>
-                  <dd className="num">
-                    r{doc.revision} · {doc.contentDigest}
-                  </dd>
-                </div>
-              </>
+              <div>
+                <dt>{t("Version")}</dt>
+                <dd className="num">
+                  r{doc.revision} · {doc.contentDigest}
+                </dd>
+              </div>
             )}
             {render !== null && (
               <>
@@ -109,7 +135,7 @@ export default function ActivityPane({
             )}
             {proposals.map((row) => (
               <div key={row.proposalId}>
-                <dt>{t("Proposal")}</dt>
+                <dt>{t("Draft")}</dt>
                 <dd className="num">
                   {row.proposalId} · {t(row.state)} · {t("actor")} {row.actor} · {t("origin")} {row.origin} · {t("source r")}
                   {row.sourceRevision}
@@ -119,7 +145,7 @@ export default function ActivityPane({
           </dl>
         </details>
       </section>
-      {sends}
+      {sendsSlot}
     </>
   );
 }

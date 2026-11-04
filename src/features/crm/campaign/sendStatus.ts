@@ -1,4 +1,7 @@
-import type { SendListEntry } from "../sendClient";
+import type { SendCounts,SendListEntry } from "../sendClient";
+
+/** What the status needs of a send: its state and per-recipient counts. */
+export type SendFacts = { state: string; counts: SendCounts };
 
 /** The campaign's status, derived only from what the host recorded about
  *  its sends. `null` (unknown) is not "Draft": a failed or unfinished read
@@ -24,7 +27,7 @@ export function latestSend(sends: SendListEntry[]): SendListEntry | null {
   return best;
 }
 
-export function sendStatus(send: SendListEntry): CampaignStatus {
+export function sendStatus(send: SendFacts): CampaignStatus {
   if (send.state === "sending") return { key: "sending", label: "Sending", chip: "running" };
   if (send.state === "closed" || send.counts.uncertain > 0) {
     return { key: "uncertain", label: "Check result", chip: "uncertain" };

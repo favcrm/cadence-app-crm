@@ -9,7 +9,7 @@ export interface TabSpec {
   badge?: string | null;
 }
 
-const ORDER: CampaignTab[] = ["overview", "email", "audience", "activity"];
+const ORDER: CampaignTab[] = ["email", "audience", "review", "activity"];
 
 /**
  * The saved campaign's tablist (CAD-1055). Only the active panel is

@@ -6,11 +6,14 @@ import {
 audienceClient,
 type AudienceScope
 } from "../audienceClient";
-import { audienceSummary } from "../campaign/audienceSummary";
 import { clearLanding,peekLanding } from "../campaign/landing";
 import {
+type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
+import { blockingReason } from "../campaign/EligibilityFunnel";
+import { campaignStatus } from "../campaign/sendStatus";
+import { useAudiencePreview } from "../campaign/useAudiencePreview";
 import {
 campaignTitle,
 parseContentDoc,
@@ -18,8 +21,7 @@ parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import "../crm-campaign.css";
-import { friendlyAudienceError } from "../segmentGrammar";
-import { type AudiencePreview } from "../segments/Segments";
+import { parseSegmentList } from "../segments/Segments";
 import type { Viewer } from "../viewer";
 
 
@@ -27,6 +29,8 @@ import AudienceSection from "./AudienceSection";
 import CampaignSends from "./CampaignSends";
 import CampaignWorkspace from "./CampaignWorkspace";
 import { audienceFreezeId,type AudiencePick } from "./audienceModel";
+import { useCampaignSends } from "./useCampaignSends";
+import { useDraftAudience } from "./useDraftAudience";
 
 export default function CampaignDetail({
   scope,
@@ -77,28 +81,27 @@ export default function CampaignDetail({
   // mount and cleared in an effect, so the hand-off is one-shot.
   const [landingSegmentId] = useState(() => peekLanding(campaignId)?.segmentId ?? null);
   const [starterSenderBindingId] = useState(() => peekLanding(campaignId)?.senderBindingId ?? null);
-  // A clone starter audience counts as an explicit pick: the saved draft
-  // audience must never replace what the operator chose to copy.
-  const pickEdited = useRef(peekLanding(campaignId)?.audienceBase != null);
+  // A landing audience (new campaign, clone) counts as an explicit pick: the
+  // saved audience must never replace what the operator chose to start with.
+  const pickEdited = useRef(
+    peekLanding(campaignId)?.audienceBase != null || peekLanding(campaignId)?.segmentId != null,
+  );
+  // Nothing is chosen until the owner chooses (or the board gives one back).
   const [pick, setPick] = useState<AudiencePick>(() => {
     const landing = peekLanding(campaignId);
     return {
       base:
         landing?.audienceBase ??
-        (landingSegmentId !== null ? { mode: "segment", segmentId: landingSegmentId } : { mode: "all" }),
+        (landingSegmentId !== null ? { mode: "segment", segmentId: landingSegmentId } : null),
       exclusionListId: landing?.exclusionListId ?? null,
     };
   });
-  const [audiencePreviewState, setAudiencePreviewState] = useState<{ key: string; preview: AudiencePreview } | null>(null);
-  const audiencePickKey = JSON.stringify({ base: pick.base, exclusion: pick.exclusionListId });
-  const audiencePreview = audiencePreviewState?.key === audiencePickKey ? audiencePreviewState.preview : null;
-  const recordAudiencePreview = (preview: AudiencePreview | null) => {
-    setAudiencePreviewState(preview === null ? null : { key: audiencePickKey, preview });
-  };
-  const [tab, setTab] = useState<CampaignTab>(() => peekLanding(campaignId)?.tab ?? "overview");
-  // CAD-1178: derived, never typed — the operator's audience choice *is*
-  // the freeze identity. A changed audience is a new id, so the status line
-  // reads "not frozen yet" until the operator freezes it.
+  const segmentState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
+  const segments = segmentState.data ?? [];
+  const count = useAudiencePreview(scope, viewer, pick);
+  const sendsState = useCampaignSends(scope, viewer.operator === true, campaignId);
+  const status = campaignStatus(sendsState.sends);
+  const [tab, setTab] = useState<CampaignTab>(() => peekLanding(campaignId)?.tab ?? "review");
   const freezeId = audienceFreezeId(campaignId, pick);
   const [freeze, setFreeze] = useState<{
     finalCount: number;
@@ -107,10 +110,6 @@ export default function CampaignDetail({
     drift: string | null;
     currentCount: number | null;
   } | null>(null);
-  const [freezeError, setFreezeError] = useState<string | null>(null);
-  // No freeze row for this derived id yet — the honest "not frozen" state,
-  // distinct from an error.
-  const [freezeMissing, setFreezeMissing] = useState(false);
 
   const requestBack = () => {
     if (unsaved) setConfirmLeave(true);
@@ -123,12 +122,19 @@ export default function CampaignDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const draftAudience = doc?.draftAudience;
-    if (landingSegmentId === null && !pickEdited.current && draftAudience?.mode === "segment") {
-      setPick(current => pickEdited.current ? current : { ...current, base: { mode: "segment", segmentId: draftAudience.segmentId } });
-    }
-  }, [doc, landingSegmentId]);
+  // Reopen on the audience the board kept — before the first paint, so the
+  // page never flashes "Not chosen". An older board's segment hint still
+  // restores a segment, read-only.
+  const kept = doc?.draftAudience;
+  const legacySegment = doc?.legacySegmentId ?? null;
+  useLayoutEffect(() => {
+    if (pickEdited.current || doc === null) return;
+    const restored = kept ?? (kept === undefined && legacySegment !== null ? { mode: "segment" as const, segmentId: legacySegment } : null);
+    if (restored !== null) setPick((current) => ({ ...current, base: restored }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc?.campaignId, JSON.stringify(kept), legacySegment]);
+
+  const draftAudience = useDraftAudience(scope, campaignId, doc, setDoc, pick, unsaved);
 
   // Every check carries a generation: an older lookup resolving after a
   // newer one (audience changed mid-flight) can never paint its row.
@@ -136,14 +142,16 @@ export default function CampaignDetail({
 
   const checkFreeze = () => {
     const generation = (freezeGeneration.current += 1);
-    setFreezeError(null);
+    if (freezeId === null) {
+      setFreeze(null);
+      return;
+    }
     void audienceClient
       .freezeShow(scope, freezeId)
       .then((value) => {
         if (generation !== freezeGeneration.current) return;
         const root = (value as Record<string, unknown> | null) ?? {};
         const row = (root.freeze as Record<string, unknown> | null) ?? {};
-        setFreezeMissing(false);
         setFreeze({
           finalCount: typeof row.final_count === "number" ? row.final_count : -1,
           digest: typeof row.digest === "string" ? row.digest : "",
@@ -158,17 +166,12 @@ export default function CampaignDetail({
         // not an error the operator has to decode (the board maps it to 404).
         if (err instanceof ApiError && err.status === 404) {
           setFreeze(null);
-          setFreezeMissing(true);
           return;
         }
-        setFreezeError(friendlyAudienceError(err));
-      })
-;
+      });
   };
 
-  // Auto-recheck on load and whenever the derived id changes (the audience
-  // base, the exclusions, or the campaign itself): the status line is always
-  // the current truth, never a stale click's memory.
+  // Used only to offer "copy the audience" when cloning.
   useEffect(() => {
     checkFreeze();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,15 +179,30 @@ export default function CampaignDetail({
 
   // CAD-1836: the send freezes its audience. The ceiling rides with the
   // selection so the approved prepare owns the whole snapshot; there is no
-  // separate freeze action to click.
+  // separate freeze action to click. No chosen audience, no selection.
+  const preview = count.preview;
   const sendSelection =
-    audiencePreview !== null && audiencePreview.finalCount > 0
+    pick.base !== null && preview !== null && preview.finalCount > 0
       ? {
           base: pick.base,
           exclusionListId: pick.exclusionListId,
-          maxRecipients: Math.max(10, Math.ceil(audiencePreview.finalCount * 1.25) + 10),
+          maxRecipients: Math.max(10, Math.ceil(preview.finalCount * 1.25) + 10),
         }
       : null;
+  const audienceState: AudienceState =
+    pick.base === null || (pick.base.mode === "custom" && pick.base.customerIds.length === 0) ? { state: "unchosen" }
+    : draftAudience.keeping === "saving" || draftAudience.keeping === "waiting" ? { state: "saving" }
+    : draftAudience.keeping === "failed" ? { state: "unsaved" }
+    : count.error !== null ? { state: "error" }
+    : preview === null ? { state: "counting" }
+    : preview.finalCount === 0 ? { state: "empty", reason: blockingReason(preview, t) }
+    : { state: "ready", count: preview.finalCount };
+  const segmentName = pick.base?.mode === "segment" ? (segments.find((row) => row.id === (pick.base as { segmentId: string }).segmentId)?.name ?? null) : null;
+  const audienceTitle =
+    pick.base === null ? null
+    : pick.base.mode === "all" ? t("Everyone who can be emailed")
+    : pick.base.mode === "segment" ? (segmentName ?? t("Saved segment"))
+    : t("{count} chosen customers").replace("{count}", String(pick.base.customerIds.length));
 
   return (
     <section aria-label={t("Campaign details")} className="grid gap-3">
@@ -194,9 +212,13 @@ export default function CampaignDetail({
         </button>
         <h3 ref={headRef} className="text-cardtitle font-medium text-ink-100" tabIndex={-1} data-outlet-heading>
           {loading ? t("Campaign details") : (doc !== null ? campaignTitle(doc) : t("Campaign details"))}{" "}
-          {doc !== null && (
-            <span className="chip align-middle" data-campaign-status>
-              {t("Draft")}
+          {doc !== null && status !== null && (
+            <span
+              className={`chip align-middle${status.chip === null ? "" : " crm-send-chip"}`}
+              data-state={status.chip ?? undefined}
+              data-campaign-status={status.key}
+            >
+              {t(status.label)}
             </span>
           )}
         </h3>
@@ -237,13 +259,14 @@ export default function CampaignDetail({
             starterSenderBindingId={starterSenderBindingId}
             freezeId={freezeId}
             freeze={freeze}
-            freezeMissing={freezeMissing}
-            freezeError={freezeError}
             selection={sendSelection}
+            audience={audienceState}
+            audienceTitle={audienceTitle}
+            sends={sendsState.sends}
+            onSendsChanged={sendsState.refresh}
             tab={tab}
             onTab={setTab}
-            audienceLabel={audienceSummary(pick, audiencePreview)}
-            activitySlot={<CampaignSends scope={scope} viewer={viewer} campaignId={campaignId} />}
+            activitySlot={<CampaignSends scope={scope} viewer={viewer} sends={sendsState.sends} error={sendsState.error} onChanged={sendsState.refresh} />}
             audienceSlot={
               <AudienceSection
                 scope={scope}
@@ -252,10 +275,11 @@ export default function CampaignDetail({
                 onPick={(next) => {
                   pickEdited.current = true;
                   setPick(next);
-                  setAudiencePreviewState(null);
                 }}
-                onPreview={recordAudiencePreview}
-                layout="detail"
+                segments={segments}
+                count={count}
+                keeping={draftAudience.keeping}
+                onRetrySave={draftAudience.retry}
               />
             }
           />
@@ -278,6 +302,3 @@ export default function CampaignDetail({
     </section>
   );
 }
-
-/** Prior sends of this campaign — the same `list` read the campaigns
- *  table shows, plus each send's live counts on demand. */

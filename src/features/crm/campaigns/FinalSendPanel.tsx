@@ -1,54 +1,71 @@
 import { useLocale } from "../locale";
-import { Button,ConfirmDialog } from "@cadence/screen-ui";
+import { Button,Link } from "@cadence/screen-ui";
 import { useState } from "react";
 import {
 type AudienceScope
 } from "../audienceClient";
 import {
-missingReasons,
+firstBlocker,
 sendReadiness,
-TEST_ANCHOR,
+testState,
+type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
-import { focusAnchor } from "../campaign/OverviewPane";
+import { latestSend } from "../campaign/sendStatus";
+import { useSendingSetup } from "../campaign/sendingSetup";
 import {
 friendlyCampaignError,
 parseContentDoc,
+summarySubject,
 type ContentDoc
 } from "../campaignGrammar";
 import { contentClient } from "../contentClient";
 import "../crm-campaign.css";
-import { newAudienceId } from "../segmentGrammar";
 import { isApprovalRequired } from "../hostErrors";
 import {
 friendlySendError,
 parsePreparedSend,
 parseSendView,
+parseTestSendReceipt,
 sendClient,
-type PreparedSend,
+type SendListEntry,
 type SendSelection,
 type SmtpBinding,
 type TestSendReceipt
 } from "../sendClient";
-import { WAITING_APPROVAL_TEXT } from "../sendingView";
+import { EMAIL_SENDING_HREF,WAITING_APPROVAL_TEXT,isHostedTransport } from "../sendingView";
 import type { Viewer } from "../viewer";
+import { newAudienceId } from "../segmentGrammar";
 
 
 import SendProgressPanel from "./SendProgressPanel";
 
+type Phase = "approving" | "preparing" | "confirming";
+
+/**
+ * Review and send. One card of facts, one primary button that names the
+ * count, and one line that says why it is blocked.
+ *
+ * Pressing send runs the existing host steps in order, without this app
+ * asking again in between: the host's content card (when this revision is
+ * not yet approved), prepare, then the host's send card. Each host card
+ * still needs its own press, and nothing here approves on the host's
+ * behalf: a refused or cancelled card stops the chain and nothing is sent.
+ */
 export default function FinalSendPanel({
   scope,
   viewer,
   campaignId,
   doc,
   freezeId,
-  freeze,
-  freezeMissing,
-  freezeError,
   selection,
   binding,
   testEvidence,
-  audienceLabel,
+  onTestEvidence,
+  audience,
+  audienceTitle,
+  sends,
+  onSendsChanged,
   onTab,
   onDoc,
 }: {
@@ -56,169 +73,153 @@ export default function FinalSendPanel({
   viewer: Viewer;
   campaignId: string;
   doc: ContentDoc;
-  freezeId: string;
-  freeze: { valid: boolean | null; finalCount?: number } | null;
-  freezeMissing?: boolean;
-  freezeError?: string | null;
+  freezeId: string | null;
   /** CAD-1836: the selection the send freezes with its one approval. */
   selection: SendSelection | null;
   binding: SmtpBinding | null | undefined;
   testEvidence: TestSendReceipt | null;
-  audienceLabel?: string;
-  onTab?: (tab: CampaignTab) => void;
+  onTestEvidence: (receipt: TestSendReceipt | null) => void;
+  audience: AudienceState;
+  audienceTitle: string | null;
+  sends: SendListEntry[] | null;
+  onSendsChanged: () => void;
+  onTab: (tab: CampaignTab) => void;
   onDoc: (doc: ContentDoc) => void;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  const [prepared, setPrepared] = useState<PreparedSend | null>(null);
-  const [preparePending, setPreparePending] = useState(false);
+  const setup = useSendingSetup();
+  const [phase, setPhase] = useState<Phase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
-  const [requestOpen, setRequestOpen] = useState(false);
-  const [approvePending, setApprovePending] = useState(false);
-  const [approveOpen, setApproveOpen] = useState(false);
   const [approvedSendId, setApprovedSendId] = useState<string | null>(null);
+  const [again, setAgain] = useState(false);
+  const [errorStep, setErrorStep] = useState<Phase | null>(null);
+  const [testPending, setTestPending] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
-  const readiness = sendReadiness({ doc, binding, testEvidence, selectionReady: selection !== null });
-  const missing = missingReasons(readiness);
-  const check = (key: "freeze" | "sender" | "test") =>
-    readiness.find((row) => row.key === key)!;
-  const canPrepare = canWrite && missing.length === 0;
-  const recipients = freeze?.valid === true && typeof freeze.finalCount === "number" ? freeze.finalCount : null;
-  const sendLabel =
-    recipients === null
-      ? t("Review and send")
-      : t("Send {count} emails").replace("{count}", formatNumber(recipients));
-  const approveLabel =
-    recipients === null
-      ? t("Approve send")
-      : t("Send {count} emails").replace("{count}", formatNumber(recipients));
+  const items = sendReadiness({ doc, binding, testEvidence, audience });
+  const why = firstBlocker(items);
+  const test = testState(doc, binding, testEvidence);
+  const people = (n: number) => t(n === 1 ? "1 person" : "{count} people").replace("{count}", formatNumber(n));
+  const count = audience.state === "ready" ? audience.count : null;
+  const canSend = canWrite && why === null && selection !== null && freezeId !== null && phase === null;
+  const latest = sends === null ? null : latestSend(sends);
+  const resultId = approvedSendId ?? latest?.sendId ?? null;
 
-  const prepare = () => {
-    setPreparePending(true);
+  const send = async () => {
+    if (!canSend || selection === null || freezeId === null) return;
     setError(null);
     setWaiting(false);
-    setPrepared(null);
-    setApprovedSendId(null);
-    const commit = () => {
-      void sendClient
-        .sendPrepare(scope, campaignId, freezeId.trim(), newAudienceId("send"), selection ?? undefined)
-        .then((value) => setPrepared(parsePreparedSend(value)))
-        .catch((err: unknown) => {
-          if (isApprovalRequired(err)) {
-            setWaiting(true);
-            return;
-          }
-          setError(friendlySendError(err));
-        })
-        .finally(() => setPreparePending(false));
-    };
-    // The daemon requires the current revision to be approved before it
-    // prepares; this confirmation is that approval, so the campaign has no
-    // separate content-approval step.
-    if (doc.approval.valid && doc.approval.revision === doc.revision) {
-      commit();
-      return;
+    let step: Phase = "approving";
+    setPhase(step);
+    try {
+      // The daemon requires the current revision to be approved before it
+      // prepares; the host's content card is that approval.
+      if (!(doc.approval.valid && doc.approval.revision === doc.revision)) {
+        onDoc(parseContentDoc(await contentClient.approve(scope, campaignId, doc.revision)));
+      }
+      step = "preparing";
+      setPhase(step);
+      const prepared = parsePreparedSend(
+        await sendClient.sendPrepare(scope, campaignId, freezeId, newAudienceId("send"), selection),
+      );
+      step = "confirming";
+      setPhase(step);
+      // The host freshly reads the prepared send and draws its own
+      // recipient-count confirmation; only its press approves.
+      const view = parseSendView(await sendClient.sendApprove(scope, prepared.send.sendId));
+      setApprovedSendId(view.send.sendId);
+      setAgain(false);
+    } catch (err: unknown) {
+      if (isApprovalRequired(err)) setWaiting(true);
+      else {
+        setError(step === "approving" ? friendlyCampaignError(err) : friendlySendError(err));
+        setErrorStep(step);
+      }
+    } finally {
+      setPhase(null);
+      onSendsChanged();
     }
-    void contentClient
-      .approve(scope, campaignId, doc.revision)
-      .then((value) => {
-        onDoc(parseContentDoc(value));
-        commit();
-      })
-      .catch((err: unknown) => {
-        if (isApprovalRequired(err)) {
-          setWaiting(true);
-          return;
-        }
-        setError(friendlyCampaignError(err));
-        setPreparePending(false);
-      });
   };
-
-  const approve = () => {
-    if (prepared === null) return;
-    setApprovePending(true);
-    setError(null);
-    // The host freshly reads the prepared send and draws the
-    // authoritative recipient-count/digest confirmation.
+  const sendTest = () => {
+    setTestError(null);
+    onTestEvidence(null);
+    setTestPending(true);
     void sendClient
-      .sendApprove(scope, prepared.send.sendId)
-      .then((value) => {
-        setApprovedSendId(parseSendView(value).send.sendId);
-        setPrepared(null);
-      })
-      .catch((err: unknown) => {
-        setError(friendlySendError(err));
-      })
-      .finally(() => {
-        setApprovePending(false);
-        setApproveOpen(false);
-      });
+      .smtpTestSend(scope, campaignId)
+      .then((value) => onTestEvidence(parseTestSendReceipt(value)))
+      .catch((err: unknown) => setTestError(friendlySendError(err)))
+      .finally(() => setTestPending(false));
   };
 
-  return (
-    <section id="cmp-final-send" tabIndex={-1} aria-label={t("Send")} className="card px-4 py-4 grid gap-3">
-      <h4 className="text-cardtitle font-medium text-ink-100">{t("Send")}</h4>
-      <p className="text-label text-ink-400">
-        {t("The owner approves one send: the content revision, the frozen audience, the sender and the unsubscribe origin are committed into a digest, and any change before approval refuses it. SMTP acceptance is recorded — never inbox delivery, never reads.")}
-      </p>
-      <dl className="sdetail" aria-label={t("Send confirmation")} data-send-confirmation data-prerequisites={missing.length > 0 ? "missing" : "met"}>
+  const from =
+    binding === undefined ? t("Checking…")
+    : binding === null || binding.state !== "live"
+      ? setup.available
+        ? <Link href={EMAIL_SENDING_HREF} onClick={(event) => { event.preventDefault(); setup.open(); }}>{t("No sender connected · Set up")}</Link>
+        : <span data-smtp-setup="unavailable">{t("No sender connected")}. {t("Sending setup isn't available on this host.")}</span>
+      : `${binding.sender.name} <${binding.sender.address}>${isHostedTransport(binding) ? ` · ${t("via AgenticOS")}` : ""}`;
+
+  const testValue =
+    test === "ok" ? `${t("Accepted for")} ${testEvidence?.to ?? ""}`
+    : test === "sender-changed" ? t("Not sent for this sender")
+    : test === "not-accepted" ? (testEvidence?.pendingApproval ? t(WAITING_APPROVAL_TEXT) : t("Not accepted"))
+    : t("Not sent for this version");
+
+  const review = (
+    <section id="cmp-final-send" tabIndex={-1} aria-label={t("Review and send")} className="card px-4 py-4 grid gap-3" data-review>
+      <h4 className="text-cardtitle font-medium text-ink-100">{t("Review and send")}</h4>
+      <dl className="sdetail" aria-label={t("Send summary")} data-send-confirmation data-prerequisites={why === null ? "met" : "missing"}>
+        <div>
+          <dt>{t("Email")}</dt>
+          <dd>
+            {summarySubject(doc.subject)}{" "}
+            <button type="button" className="lnk crm-confirm-go" onClick={() => onTab("email")}>{t("Edit")}</button>
+          </dd>
+        </div>
         <div>
           <dt>{t("Audience")}</dt>
           <dd>
-            {audienceLabel ?? "—"} ·{" "}
-            {check("freeze").done
-              ? `${selection !== null ? t("freezes with this send") : t("frozen")}${
-                  typeof freeze?.finalCount === "number"
-                    ? ` · ${formatNumber(freeze.finalCount)} ${t("recipients")}`
-                    : ""
-                }`
-              : freezeMissing
-                ? t("no audience selection yet")
-                : freeze === null
-                  ? t("checking the snapshot…")
-                  : t("the audience changed since it was frozen")}
-            {!check("freeze").done && onTab !== undefined && (
-              <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={() => onTab("audience")}>{t("Open audience")}</button></>
-            )}
+            {audienceTitle === null ? <span className="text-warn">{t("Not chosen")}</span> : (
+              <>
+                {audienceTitle}
+                {count !== null && <> · {people(count)}</>}
+              </>
+            )}{" "}
+            <button type="button" className="lnk crm-confirm-go" onClick={() => onTab("audience")}>
+              {t(audienceTitle === null ? "Choose" : "Change")}
+            </button>
           </dd>
         </div>
         <div>
-          <dt>{t("Content")}</dt>
+          <dt>{t("From")}</dt>
           <dd>
-            r{formatNumber(doc.revision)} · {doc.subject}
-          </dd>
-        </div>
-        <div>
-          <dt>{t("Sender")}</dt>
-          <dd>
-            {check("sender").done && binding
-              ? `${binding.sender.name} <${binding.sender.address}>`
-              : t("no live sender")}
+            <span className="num">{from}</span>
+            {test === "sender-changed" && <span className="text-warn"> · {t("changed since last test")}</span>}
+            {setup.error !== null && <span className="text-fail block" role="alert">{setup.error}</span>}
           </dd>
         </div>
         <div>
           <dt>{t("Test")}</dt>
           <dd>
-            {check("test").done
-              ? t("accepted for this revision")
-              : t("not accepted for this revision")}
-            {!check("test").done && (
-              <>{" "}<button type="button" className="lnk crm-confirm-go" onClick={() => focusAnchor(TEST_ANCHOR)}>{t("Send a test")}</button></>
+            {test === "ok" ? testValue : <span className="text-warn">{testValue}</span>}
+            {canWrite && doc !== null && (
+              <>{" "}<button
+                type="button"
+                className="lnk crm-confirm-go"
+                disabled={testPending || phase !== null || binding === undefined || binding === null || binding.state !== "live"}
+                onClick={sendTest}
+              >{t(testPending ? "Sending test…" : test === "none" ? "Send test" : "Send again")}</button></>
             )}
           </dd>
         </div>
       </dl>
-      {freezeError != null && freezeError !== "" && (
-        <p className="text-label text-fail" role="alert">
-          {t(freezeError)}
-        </p>
-      )}
-      {missing.length > 0 && (
-        <p className="text-label text-ink-400">
-          {t("Every check above must be met before a send can be requested.")}
-        </p>
+      <p className="text-label text-ink-400">
+        {t("A test email goes to one address you enter when you confirm. The mail server's acceptance doesn't confirm inbox delivery, so check that inbox yourself.")}
+      </p>
+      {testError !== null && (
+        <p className="text-label text-fail" role="alert">{t(testError)}</p>
       )}
       {waiting && (
         <p className="text-label text-ink-200" role="status" data-approval-waiting>
@@ -226,137 +227,68 @@ export default function FinalSendPanel({
           {t("Nothing has been sent — the request is in the owner's approvals inbox.")}
         </p>
       )}
-      {error && (
-        <p className="text-label text-fail" role="alert">
-          {t(error)}
+      {error !== null && (
+        <p className="text-label text-fail" role="alert" data-send-error>
+          {t(error)}{" "}
+          {errorStep === "confirming"
+            ? t("The send wasn't confirmed. Open Activity to see whether anything went out.")
+            : t("Nothing was sent.")}
         </p>
       )}
-      {canWrite && (
-        <div>
+      {canWrite ? (
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
             variant="primary"
-            loading={preparePending}
-            disabled={!canPrepare || preparePending}
-            title={
-              canPrepare
-                ? t("Approve the current revision and request the owner's send approval")
-                : `${t("Missing:")} ${missing.map((item) => t(item)).join("; ")}`
-            }
-            onClick={() => setRequestOpen(true)}
+            loading={phase !== null}
+            disabled={!canSend}
+            onClick={() => { void send(); }}
           >
-            {sendLabel}
+            {count !== null ? t("Send to {people}").replace("{people}", people(count)) : t("Send")}
           </Button>
+          {phase !== null ? (
+            <span className="text-label text-ink-400" role="status">
+              {t(phase === "approving" ? "Waiting for your confirmation…" : phase === "preparing" ? "Preparing the send…" : "Waiting for your confirmation…")}
+            </span>
+          ) : why !== null ? (
+            <span className="text-label text-ink-400" data-blocked-why>{t(why)}</span>
+          ) : null}
         </div>
+      ) : (
+        <p className="text-label text-ink-400" data-state="read-only">{t("Read-only view. A verified operator sends campaigns.")}</p>
       )}
-      {prepared !== null && (
-        <section aria-label={t("Prepared send")} className="card px-3 py-3 grid gap-3" data-prepared>
-          <p className="text-label text-ink-200">
-            {t("Ready to send")} —{" "}
-            <span className="num">{formatNumber(prepared.counts.final)}</span> {t("recipients")} ·{" "}
-            {binding?.sender.address ?? "—"}
-          </p>
-          <p className="text-micro text-ink-500">{doc.subject}</p>
-          {prepared.sample.length > 0 && (
-            <p className="text-micro text-ink-500">
-              {t("Sample (masked):")}{" "}
-              {prepared.sample.map((row) => `${row.customerId} · ${row.email}`).join(", ")}
-            </p>
-          )}
-          <details className="crm-diag">
-            <summary className="text-micro text-ink-500">{t("Details")}</summary>
-            <dl className="crm-detail mt-1" aria-label={t("Prepared counts")}>
-              <div>
-                <dt>{t("Included")}</dt>
-                <dd className="num" data-count="included">{prepared.counts.included}</dd>
-              </div>
-              <div>
-                <dt>{t("Excluded")}</dt>
-                <dd className="num" data-count="excluded">{prepared.counts.excluded}</dd>
-              </div>
-              <div>
-                <dt>{t("Suppressed now")}</dt>
-                <dd className="num" data-count="suppressed_now">{prepared.counts.suppressedNow}</dd>
-              </div>
-              <div>
-                <dt>{t("Ceiling")}</dt>
-                <dd className="num">{formatNumber(prepared.counts.maxRecipients)}</dd>
-              </div>
-              <div>
-                <dt>{t("Content")}</dt>
-                <dd className="num">r{formatNumber(prepared.send.contentRevision)} · {prepared.send.contentDigest.slice(0, 18)}…</dd>
-              </div>
-              <div>
-                <dt>{t("Audience freeze")}</dt>
-                <dd className="num">{prepared.send.audienceFreezeId} · {prepared.send.audienceDigest.slice(0, 18)}…</dd>
-              </div>
-              <div>
-                <dt>{t("Sender")}</dt>
-                <dd className="num break-all">
-                  {prepared.send.connectionId} {t("· link r")}{prepared.send.linkRevision}
-                </dd>
-              </div>
-              <div>
-                <dt>{t("Unsubscribe origin")}</dt>
-                <dd className="num">{prepared.send.unsubscribeOrigin}</dd>
-              </div>
-              <div>
-                <dt>{t("Send digest")}</dt>
-                <dd className="num" title={prepared.sendDigest}>{prepared.sendDigest.slice(0, 24)}…</dd>
-              </div>
-            </dl>
-          </details>
-          <div className="crm-toolbar">
-            <Button size="sm" variant="danger" disabled={approvePending} onClick={() => setApproveOpen(true)}>
-              {approveLabel}
-            </Button>
-            <button type="button" className="lnk text-label" onClick={() => setPrepared(null)}>
-              {t("Discard prepared view")}
-            </button>
-          </div>
-        </section>
-      )}
-      {approvedSendId !== null && (
-        <SendProgressPanel scope={scope} viewer={viewer} sendId={approvedSendId} />
-      )}
-      {requestOpen && (
-        <ConfirmDialog
-          title={recipients === null ? t("Request this send?") : t("Send {count} emails?").replace("{count}", formatNumber(recipients))}
-          body={
-            <div className="grid gap-2">
-              <p>
-                {t("This sends real email to the frozen audience once the owner approves. A test send of this exact content and sender must already be accepted.")}
-              </p>
-              <p className="text-label text-ink-400">
-                {audienceLabel ?? "—"} · r{formatNumber(doc.revision)} · {doc.subject}
-              </p>
+      {testEvidence !== null && (
+        <details className="crm-diag" data-technical="true">
+          <summary className="text-micro text-ink-500">{t("Technical details")}</summary>
+          <dl className="sdetail mt-1">
+            <div>
+              <dt>{t("Test result")}</dt>
+              <dd className="num">{testEvidence.pendingApproval ? t(WAITING_APPROVAL_TEXT) : `SMTP ${testEvidence.smtpCode ?? "—"} ${testEvidence.smtpMessage}`}</dd>
             </div>
-          }
-          confirmLabel={t("Request approval")}
-          pending={preparePending}
-          error={null}
-          onCancel={() => setRequestOpen(false)}
-          onConfirm={() => {
-            setRequestOpen(false);
-            prepare();
-          }}
-        />
-      )}
-      {approveOpen && prepared !== null && (
-        <ConfirmDialog
-          title={t("Send to {count} recipients?").replace("{count}", formatNumber(prepared.counts.final))}
-          body={
-            <p>
-              {t("This is the real send. The frozen audience is the exact recipient list, and the send cannot be undone or resent.")}
-            </p>
-          }
-          confirmLabel={t("Approve and send")}
-          pending={approvePending}
-          error={null}
-          onCancel={() => setApproveOpen(false)}
-          onConfirm={approve}
-        />
+            <div>
+              <dt>{t("Version")}</dt>
+              <dd className="num">r{formatNumber(testEvidence.contentRevision)} · {testEvidence.contentDigest.slice(0, 18)}…</dd>
+            </div>
+          </dl>
+        </details>
       )}
     </section>
+  );
+
+  if (resultId === null) return review;
+  const running = latest !== null && approvedSendId === null && latest.state === "sending";
+  return (
+    <>
+      <section aria-label={t("Send result card")} className="card px-4 py-4 grid gap-3" data-send-result>
+        <h4 className="text-cardtitle font-medium text-ink-100">{t("Send result")}</h4>
+        <SendProgressPanel scope={scope} viewer={viewer} sendId={resultId} onChanged={onSendsChanged} />
+        {canWrite && !again && !running && (
+          <div>
+            <button type="button" className="lnk text-label" onClick={() => setAgain(true)}>{t("Prepare another send")}</button>
+          </div>
+        )}
+      </section>
+      {again && review}
+    </>
   );
 }

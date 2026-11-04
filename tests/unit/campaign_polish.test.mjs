@@ -70,7 +70,7 @@ test("status uses the newest sent send and ignores a later prepared one", () => 
 
 const doc = { revision: 2, contentDigest: "d" };
 const binding = { state: "live", digest: "L" };
-const receipt = { contentRevision: 2, contentDigest: "d", linkDigest: "L" };
+const receipt = { contentRevision: 2, contentDigest: "d", linkDigest: "L", accepted: true, pendingApproval: false };
 test("readiness reports the first blocker in order", () => {
   const items = (o) => ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "ready", count: 3 }, ...o });
   expect(ready.firstBlocker(items({}))).toBeNull();
@@ -79,9 +79,17 @@ test("readiness reports the first blocker in order", () => {
   expect(ready.firstBlocker(items({ binding: { state: "live", digest: "M" } }))).toBe("The sender changed. Send a new test, then send.");
   expect(ready.firstBlocker(items({ testEvidence: { ...receipt, contentRevision: 1 } }))).toBe("The email changed since the last test. Send a new test, then send.");
   expect(ready.firstBlocker(items({ binding: null }))).toBe("Connect a sender first.");
+  expect(ready.firstBlocker(items({ testEvidence: { ...receipt, accepted: false } }))).toBe("The last test wasn't accepted. Send a new test, then send.");
+  expect(ready.firstBlocker(items({ testEvidence: { ...receipt, accepted: false, pendingApproval: true } }))).toBe("Approve the test email in AgenticOS, then send it again.");
   expect(ready.firstBlocker(items({ audience: { state: "counting" } }))).toBe("Counting who can receive this…");
 });
 test("an unchosen audience has no freeze id", () => {
   expect(model.audienceFreezeId("c1", { base: null, exclusionListId: null })).toBeNull();
   expect(model.audienceFreezeId("c1", { base: { mode: "all" }, exclusionListId: null })).toMatch(/^c1-freeze-/);
+});
+test("a send waits while the audience choice is still being saved", () => {
+  const items = ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "saving" } });
+  expect(ready.firstBlocker(items)).toBe("Saving your audience choice…");
+  const failed = ready.sendReadiness({ doc, binding, testEvidence: receipt, audience: { state: "unsaved" } });
+  expect(ready.firstBlocker(failed)).toBe("Your audience choice wasn't saved. Open Audience and retry.");
 });

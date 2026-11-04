@@ -13,6 +13,7 @@ import { QueryRefresh,useCrmQuery } from "../resources";
 import { useListMemory } from "../listMemory";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import "../crm-campaign.css";
+import { campaignStatus,latestSend } from "../campaign/sendStatus";
 import {
 parseSendList,
 sendClient,
@@ -41,7 +42,8 @@ export default function CampaignList({
   const pendingDrafts = proposalState.data?.filter(row => row.state === "pending") ?? [];
   const { loading, error } = queryState;
   const listRef = useListMemory(scope, "campaigns", viewer.operator === true && queryState.data !== null, queryState.failure);
-  const [sends, setSends] = useState<SendListEntry[]>([]);
+  // null = unknown (loading or the read failed): no status is shown then.
+  const [sends, setSends] = useState<SendListEntry[] | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
   const search = query.trim().toLocaleLowerCase();
@@ -65,19 +67,14 @@ export default function CampaignList({
         if (!controller.signal.aborted) setSends(parseSendList(value));
       })
       .catch(() => {
-        if (!controller.signal.aborted) setSends([]);
+        if (!controller.signal.aborted) setSends(null);
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadToken]);
 
-  // The newest send the host recorded per campaign — the list's
-  // `created` order is the daemon's insertion order.
-  const latestSendByCampaign = (() => {
-    const map = new Map<string, SendListEntry>();
-    for (const row of sends) map.set(row.campaignId, row);
-    return map;
-  })();
+  const sendsOf = (campaignId: string): SendListEntry[] | null =>
+    sends === null ? null : sends.filter((row) => row.campaignId === campaignId);
 
   return (
     <section ref={listRef} aria-label={t("Campaigns list")} className="crm-list crm-list-controls">
@@ -160,7 +157,7 @@ export default function CampaignList({
             <thead>
               <tr>
                 <th scope="col">{t("Campaign")}</th>
-                <th scope="col">{t("Content")}</th>
+                <th scope="col">{t("Status")}</th>
                 <th scope="col">{t("Latest send")}</th>
                 <th scope="col">
                   <span className="sr-only">{t("Open")}</span>
@@ -176,41 +173,31 @@ export default function CampaignList({
                       <span className="text-micro text-ink-500"> · {campaign.subject}</span>
                     )}
                   </td>
-                  <td>
-                    <span className="chip">{t("Draft")}</span>
+                  <td data-campaign-status-cell>
+                    {(() => {
+                      const status = campaignStatus(sendsOf(campaign.campaignId));
+                      if (status === null) return <span className="text-ink-500">—</span>;
+                      return (
+                        <span
+                          className={`chip${status.chip === null ? "" : " crm-send-chip"}`}
+                          data-state={status.chip ?? undefined}
+                          data-campaign-status={status.key}
+                        >
+                          {t(status.label)}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="num text-ink-300" data-send-state>
                     {(() => {
-                      const send = latestSendByCampaign.get(campaign.campaignId);
-                      if (send === undefined) {
+                      const rows = sendsOf(campaign.campaignId);
+                      const send = rows === null ? null : latestSend(rows);
+                      if (send === null) {
                         return <span className="text-ink-500">—</span>;
                       }
-                      if (send.state === "prepared") {
-                        return (
-                          <span
-                            className="chip crm-send-chip"
-                            data-state={send.state}
-                            title={t("Prepared but not yet approved — nothing was sent")}
-                          >
-                            {t("Pending send")}
-                          </span>
-                        );
-                      }
-                      const total =
-                        send.counts.queued +
-                        send.counts.submitting +
-                        send.counts.accepted +
-                        send.counts.failed +
-                        send.counts.uncertain +
-                        send.counts.suppressed +
-                        send.counts.closed;
                       return (
-                        <span
-                          className="chip crm-send-chip"
-                          data-state={send.state}
-                          title={t("SMTP acceptance only — not proof of inbox delivery")}
-                        >
-                          {t(send.state)} · {formatNumber(send.counts.accepted)}/{formatNumber(total)} {t("accepted")}
+                        <span title={t("Accepted by the mail server — not proof of inbox delivery")}>
+                          {formatNumber(send.counts.accepted)} {t("accepted")}
                         </span>
                       );
                     })()}
