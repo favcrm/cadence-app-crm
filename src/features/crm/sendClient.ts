@@ -257,6 +257,7 @@ export interface SendView {
   send: SendRow;
   counts: SendCounts;
   deliveries: DeliveryRow[];
+  countsKnown: boolean;
   deliveryClaim: string;
 }
 
@@ -269,6 +270,7 @@ export function parseSendView(value: unknown): SendView {
     send: parseSendRow(row.send),
     counts: parseCounts(row.counts),
     deliveries: Array.isArray(row.deliveries) ? row.deliveries.map(parseDelivery) : [],
+    countsKnown: row.counts !== null && typeof row.counts === "object",
     deliveryClaim: typeof row.delivery_claim === "string" ? row.delivery_claim : DELIVERY_CLAIM,
   };
 }
@@ -281,13 +283,10 @@ export interface SendListEntry {
   sendDigest: string;
   created: number;
   approvedAt: number | null;
-  /** Which frozen audience, ceiling and content this send was prepared for,
-   *  so an unapproved prepared send is only reused when nothing changed. */
-  audienceFreezeId: string;
-  maxRecipients: number;
-  contentRevision: number;
-  contentDigest: string;
   counts: SendCounts;
+  /** False when the host's list row carries no counts at all (hosted rows
+   *  do not): zeros then mean "not reported", never "nothing accepted". */
+  countsKnown: boolean;
   deliveryClaim: string;
 }
 
@@ -303,13 +302,11 @@ export function parseSendList(value: unknown): SendListEntry[] {
       campaignId: typeof row.campaign_id === "string" ? row.campaign_id : "",
       state: typeof row.state === "string" ? row.state : "",
       sendDigest: typeof row.send_digest === "string" ? row.send_digest : "",
-      created: typeof row.created === "number" ? row.created : 0,
+      // Native names it `created`, hosted `created_at`.
+      created: typeof row.created === "number" ? row.created : typeof row.created_at === "number" ? row.created_at : 0,
       approvedAt: typeof row.approved_at === "number" ? row.approved_at : null,
-      audienceFreezeId: typeof row.audience_freeze_id === "string" ? row.audience_freeze_id : "",
-      maxRecipients: typeof row.max_recipients === "number" ? row.max_recipients : -1,
-      contentRevision: typeof row.content_revision === "number" ? row.content_revision : -1,
-      contentDigest: typeof row.content_digest === "string" ? row.content_digest : "",
       counts: parseCounts(row.counts),
+      countsKnown: row.counts !== null && typeof row.counts === "object",
       deliveryClaim: typeof row.delivery_claim === "string" ? row.delivery_claim : DELIVERY_CLAIM,
     };
   });
@@ -357,7 +354,9 @@ export const sendClient = {
           }
         : {}),
     }),
-  sendApprove: (scope: SendScope, sendId: string): Promise<unknown> => serviceSlot(scope, "sends.approve", { send_id: sendId }).then(() => serviceCall(scope, "sends.show", { send_id: sendId })),
+  /** Only the host's confirmation. Reading the send afterwards is a separate
+   *  step, so a failed read can never look like a refused confirmation. */
+  sendApprove: (scope: SendScope, sendId: string): Promise<unknown> => serviceSlot(scope, "sends.approve", { send_id: sendId }),
   sendResolve: (scope: SendScope, sendId: string, customerId: string): Promise<unknown> => serviceSlot(scope, "sends.resolve", { send_id: sendId, customer_id: customerId }),
   sendShow: (scope: SendScope, sendId: string): Promise<unknown> => serviceCall(scope, "sends.show", { send_id: sendId }),
   sendList: (scope: SendScope, campaignId?: string): Promise<unknown> => serviceCall(scope, "sends.list", { campaign_id: campaignId }),

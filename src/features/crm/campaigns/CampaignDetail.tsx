@@ -12,7 +12,7 @@ type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
 import { blockingReason } from "../campaign/EligibilityFunnel";
-import { chainKey,publishCurrent,useChain } from "../campaign/sendChainStore";
+import { chainKey,consumeRecount,publishCurrent,useChain } from "../campaign/sendChainStore";
 import { campaignStatus } from "../campaign/sendStatus";
 import { useAudiencePreview } from "../campaign/useAudiencePreview";
 import {
@@ -29,7 +29,7 @@ import type { Viewer } from "../viewer";
 import AudienceSection from "./AudienceSection";
 import CampaignSends from "./CampaignSends";
 import CampaignWorkspace from "./CampaignWorkspace";
-import { audienceFreezeId,sendCeiling,type AudiencePick } from "./audienceModel";
+import { audienceFreezeId,sendCeiling,SEND_MAX,type AudiencePick } from "./audienceModel";
 import { useCampaignSends } from "./useCampaignSends";
 import { useDraftAudience } from "./useDraftAudience";
 
@@ -109,7 +109,7 @@ export default function CampaignDetail({
   const sendsState = useCampaignSends(scope, viewer.operator === true, campaignId);
   const listedStatus = campaignStatus(sendsState.sends);
   const [tab, setTab] = useState<CampaignTab>(() => peekLanding(campaignId)?.tab ?? "review");
-  const ceiling = count.preview !== null && count.preview.finalCount > 0 ? sendCeiling(count.preview.finalCount) : null;
+  const ceiling = count.preview !== null && count.preview.finalCount > 0 && count.preview.finalCount <= SEND_MAX ? sendCeiling(count.preview.finalCount) : null;
   const freezeId = audienceFreezeId(campaignId, pick, ceiling);
   const [freeze, setFreeze] = useState<{
     finalCount: number;
@@ -136,7 +136,11 @@ export default function CampaignDetail({
   const refreshSends = sendsState.refresh;
   useEffect(() => { if (chain.ended > 0) refreshSends(); }, [chain.ended, refreshSends]);
   const recount = count.recount;
-  useEffect(() => { if (chain.recount > 0) recount(); }, [chain.recount, recount]);
+  useEffect(() => {
+    if (chain.recount === 0) return;
+    consumeRecount(chainId); // once: a counter left standing would re-enter
+    recount();
+  }, [chain.recount, chainId, recount]);
   const requestBack = () => {
     if (sendPhase !== null) return;
     if (unsaved) setConfirmLeave(true);
@@ -213,7 +217,7 @@ export default function CampaignDetail({
   // separate freeze action to click. No chosen audience, no selection.
   const preview = count.preview;
   const sendSelection =
-    pick.base !== null && preview !== null && preview.finalCount > 0
+    pick.base !== null && preview !== null && preview.finalCount > 0 && preview.finalCount <= SEND_MAX
       ? {
           base: pick.base,
           exclusionListId: pick.exclusionListId,
@@ -235,6 +239,7 @@ export default function CampaignDetail({
     : draftAudience.keeping === "failed" || draftAudience.keeping === "mismatch" ? { state: "unsaved" }
     : count.error !== null ? { state: "error" }
     : preview === null ? { state: "counting" }
+    : preview.finalCount > SEND_MAX ? { state: "too-many", count: preview.finalCount }
     : preview.finalCount === 0 ? { state: "empty", reason: blockingReason(preview, t) }
     : { state: "ready", count: preview.finalCount };
   const segmentName = pick.base?.mode === "segment" ? (segments.find((row) => row.id === (pick.base as { segmentId: string }).segmentId)?.name ?? null) : null;

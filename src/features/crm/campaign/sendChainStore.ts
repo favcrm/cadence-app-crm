@@ -9,12 +9,12 @@ import type { ChainPhase } from "./sendChain";
  * reads them back instead of starting from a fresh "Draft".
  */
 export interface ChainNotice {
-  kind: "error" | "cancelled" | "waiting";
+  /** `unknown`: a confirmation failed and the host could not say whether the
+   *  send went out; Send stays blocked until a read settles it. */
+  kind: "error" | "cancelled" | "waiting" | "unknown";
   /** English text with `{slot}` placeholders; translated where it is shown. */
   text: string;
   slots?: Record<string, string>;
-  /** Nothing can have been sent when the chain stopped before its last card. */
-  confirming: boolean;
 }
 
 export interface ChainRecord {
@@ -25,8 +25,11 @@ export interface ChainRecord {
   notice: ChainNotice | null;
   /** Bumped whenever a chain ends: a mounted page reads the sends again. */
   ended: number;
-  /** Bumped when the count the owner agreed to proved out of date. */
+  /** Non-zero when the count the owner agreed to proved out of date; the page
+   *  consumes it (back to 0) after recounting. */
   recount: number;
+  /** A read of the pending send is in flight. */
+  settling: boolean;
 }
 
 export interface Current {
@@ -34,10 +37,9 @@ export interface Current {
   count: number | null;
 }
 
-const EMPTY: ChainRecord = { phase: null, pendingSendId: null, approvedSendId: null, notice: null, ended: 0, recount: 0 };
+const EMPTY: ChainRecord = { phase: null, pendingSendId: null, approvedSendId: null, notice: null, ended: 0, recount: 0, settling: false };
 const records = new Map<string, ChainRecord>();
 const currents = new Map<string, Current>();
-const skipped = new Map<string, Set<string>>();
 const listeners = new Map<string, Set<() => void>>();
 
 export const chainKey = (installId: string, campaignId: string) => `${installId}:${campaignId}`;
@@ -47,6 +49,10 @@ function emit(key: string) { for (const fn of listeners.get(key) ?? []) fn(); }
 export function patchChain(key: string, patch: Partial<ChainRecord>): void {
   records.set(key, { ...getChain(key), ...patch });
   emit(key);
+}
+
+export function consumeRecount(key: string): void {
+  if (getChain(key).recount !== 0) patchChain(key, { recount: 0 });
 }
 
 /** Atomically claim the right to run a chain. A second press, from this page
@@ -75,12 +81,5 @@ export const publishCurrent = (key: string, current: Current | undefined) => {
 };
 export const getCurrent = (key: string): Current | undefined => currents.get(key);
 
-export function skipPrepared(key: string, sendId: string): void {
-  let set = skipped.get(key);
-  if (set === undefined) { set = new Set(); skipped.set(key, set); }
-  set.add(sendId);
-}
-export const skippedPrepared = (key: string): ReadonlySet<string> => skipped.get(key) ?? new Set();
-
 /** Test hook: forget everything. */
-export function resetChains(): void { records.clear(); currents.clear(); skipped.clear(); listeners.clear(); }
+export function resetChains(): void { records.clear(); currents.clear(); listeners.clear(); }

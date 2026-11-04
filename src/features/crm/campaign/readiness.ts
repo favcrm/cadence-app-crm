@@ -29,6 +29,8 @@ export type AudienceState =
   /** A new audience is waiting for unsaved email edits to be saved or discarded. */
   | { state: "email-unsaved" }
   | { state: "error" }
+  /** More people than one send can freeze (500): both hosts refuse it. */
+  | { state: "too-many"; count: number }
   | { state: "empty"; reason: string | null }
   | { state: "ready"; count: number };
 
@@ -71,6 +73,7 @@ export function sendReadiness(input: ReadinessInput): ReadinessItem[] {
     : audience.state === "saving" ? "Saving your audience choice…"
     : audience.state === "email-unsaved" ? "Save or discard your email changes first."
     : audience.state === "unsaved" ? "Your audience choice wasn't saved. Open Audience and retry."
+    : audience.state === "too-many" ? "One send can reach up to 500 people. Choose a smaller audience."
     : audience.state === "error" ? "The audience couldn't be counted. Open Audience and retry."
     : audience.state === "empty" ? (audience.reason ?? "Nobody in this audience can be emailed.")
     : null;

@@ -1,12 +1,12 @@
 import type { SendCounts,SendListEntry } from "../sendClient";
 
 /** What the status needs of a send: its state and per-recipient counts. */
-export type SendFacts = { state: string; counts: SendCounts };
+export type SendFacts = { state: string; counts: SendCounts; countsKnown?: boolean };
 
 /** The campaign's status, derived only from what the host recorded about
  *  its sends. `null` (unknown) is not "Draft": a failed or unfinished read
  *  shows no chip rather than an invented state. */
-export type CampaignStatusKey = "draft" | "sending" | "sent" | "partial" | "failed" | "nothing" | "uncertain";
+export type CampaignStatusKey = "draft" | "sending" | "sent" | "partial" | "failed" | "nothing" | "finished" | "uncertain";
 
 export interface CampaignStatus {
   key: CampaignStatusKey;
@@ -33,6 +33,10 @@ export function sendStatus(send: SendFacts): CampaignStatus {
   if (send.state === "sending") return { key: "sending", label: "Sending", chip: "running" };
   if (send.state === "closed" || send.counts.uncertain > 0) {
     return { key: "uncertain", label: "Check result", chip: "uncertain" };
+  }
+  if (send.state === "completed" && send.countsKnown === false) {
+    // The host did not report counts: say it finished, not what it did.
+    return { key: "finished", label: "Finished", chip: null };
   }
   if (send.state === "completed") {
     // "Sent" needs at least one message the mail server accepted. A send in

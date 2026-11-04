@@ -1,4 +1,4 @@
-import { useEffect,useRef,useState } from "react";
+import { useCallback,useEffect,useRef,useState } from "react";
 import { audienceClient,type AudienceScope } from "../audienceClient";
 import { friendlyAudienceError } from "../segmentGrammar";
 import { parsePreview,type AudiencePreview } from "../segments/Segments";
@@ -17,6 +17,9 @@ export function useAudiencePreview(scope: AudienceScope, viewer: Viewer, pick: A
   const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState(0);
   const generation = useRef(0);
+  // Stable: callers list it as an effect dependency, and a new function every
+  // render would re-run (and so clear) the count on every render.
+  const recount = useCallback(() => setToken((n) => n + 1), []);
   const key = JSON.stringify({ base: pick.base, exclusion: pick.exclusionListId });
   const countable = pick.base !== null && !(pick.base.mode === "custom" && pick.base.customerIds.length === 0);
   useEffect(() => {
@@ -55,6 +58,6 @@ export function useAudiencePreview(scope: AudienceScope, viewer: Viewer, pick: A
     preview: state?.key === key ? state.preview : null,
     loading,
     error,
-    recount: () => setToken((n) => n + 1),
+    recount,
   };
 }

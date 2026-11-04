@@ -12,7 +12,7 @@ type AudienceState,
 type CampaignTab
 } from "../campaign/readiness";
 import { canStart } from "../campaign/sendChain";
-import { runSendChain } from "../campaign/runSendChain";
+import { runSendChain,settleSend } from "../campaign/runSendChain";
 import type { ChainRecord } from "../campaign/sendChainStore";
 import { latestSend,sendStatus } from "../campaign/sendStatus";
 import { useSendingSetup } from "../campaign/sendingSetup";
@@ -104,18 +104,19 @@ export default function FinalSendPanel({
   // While earlier sends are unknown the page cannot tell whether this
   // campaign was already sent, so sending waits.
   const why = firstBlocker(items)
-    ?? (sendsError !== null ? "Couldn't check earlier sends." : sends === null ? "Checking earlier sends…" : null);
+    ?? (chain.pendingSendId !== null ? "Check result first." : sendsError !== null ? "Couldn't check earlier sends." : sends === null ? "Checking earlier sends…" : null);
   const test = testState(doc, binding, testEvidence);
   const people = (n: number) => t(n === 1 ? "1 person" : "{count} people").replace("{count}", formatNumber(n));
   const count = audience.state === "ready" ? audience.count : null;
-  const canSend = canWrite && why === null && selection !== null && freezeId !== null && canStart(phase);
+  const canSend = canWrite && why === null && selection !== null && freezeId !== null && canStart(phase) && chain.pendingSendId === null;
   const latest = sends === null ? null : latestSend(sends);
-  // While a card is open the page shows the review (locked), not a result.
-  const resultId = phase !== null ? null : (approvedSendId ?? latest?.sendId ?? null);
+  // While a card is open, or while a lost answer is being settled, the page
+  // shows the review (locked, with the Check result line), not a result.
+  const resultId = phase !== null || notice?.kind === "unknown" ? null : (approvedSendId ?? latest?.sendId ?? null);
 
   const send = () => {
     if (!canSend || selection === null || freezeId === null) return;
-    void runSendChain({ key: chainId, scope, campaignId, doc, selection, freezeId, count, onDoc });
+    void runSendChain({ key: chainId, scope, campaignId, doc, selection, freezeId, count, knownSendIds: new Set((sends ?? []).map((row) => row.sendId)), onDoc });
   };
 
   const sendTest = () => {
@@ -194,7 +195,7 @@ export default function FinalSendPanel({
       <p className="text-label text-ink-400">
         {t("A test email goes to one address you enter when you confirm. The mail server's acceptance doesn't confirm inbox delivery, so check that inbox yourself.")}
       </p>
-      {sendsError !== null && (
+      {sendsError !== null && notice?.kind !== "unknown" && (
         // Shown whether or not an older list is on screen: a failed refresh
         // after a send must not leave a stale "no earlier sends" behind.
         <p className="text-label text-fail" role="alert" data-sends-error>
@@ -216,12 +217,18 @@ export default function FinalSendPanel({
           {t("Cancelled. Nothing was sent.")}
         </p>
       )}
+      {notice?.kind === "unknown" && chain.pendingSendId !== null && (
+        <p className="text-label text-fail" role="alert" data-send-unknown>
+          {t("Check result.")} {t(notice.text)}{" "}
+          <button type="button" className="lnk" disabled={chain.settling} onClick={() => { void settleSend(chainId, scope, chain.pendingSendId!, 0); }}>
+            {t("Retry")}
+          </button>
+        </p>
+      )}
       {notice?.kind === "error" && (
         <p className="text-label text-fail" role="alert" data-send-error>
           {Object.entries(notice.slots ?? {}).reduce((text, [slot, value]) => text.replace(`{${slot}}`, formatNumber(Number(value))), t(notice.text))}{" "}
-          {notice.confirming
-            ? t("The send wasn't confirmed. Open Activity to see whether anything went out.")
-            : t("Nothing was sent.")}
+          {t("Nothing was sent.")}
         </p>
       )}
       {canWrite ? (

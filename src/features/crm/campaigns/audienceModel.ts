@@ -7,11 +7,14 @@ export interface AudiencePick {
   exclusionListId: string | null;
 }
 
-/** The most recipients a send may freeze: the counted audience plus headroom,
+/** The most recipients a send may freeze (never above 500): the counted audience plus headroom,
  *  rounded up to a step of ten so a count that drifts by one or two stays in
  *  the same freeze instead of creating a new one each time. */
+export const SEND_MAX = 500;
 export function sendCeiling(finalCount: number): number {
-  return Math.max(10, Math.ceil((finalCount * 1.25 + 10) / 10) * 10);
+  // Both hosts refuse a ceiling above 500, so the headroom stops there; an
+  // audience of more than 500 is refused earlier, on the page, never here.
+  return Math.min(SEND_MAX, Math.max(10, Math.ceil((finalCount * 1.25 + 10) / 10) * 10));
 }
 
 /** CAD-1178: the freeze id is derived from the audience, never typed. The

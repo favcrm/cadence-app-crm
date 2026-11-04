@@ -38,7 +38,7 @@ export default function DeliveryRows({ scope, viewer, view, onResolved }: { scop
             {r.reason !== null && r.state !== "accepted" ? ` · ${r.reason}` : ""}
             {r.resolvedBy ? ` · ${t("by")} ${r.resolvedBy}` : ""}
           </span> },
-      { key: "resolve", header: <span className="sr-only">{t("Resolve")}</span>, cell: r => viewer.operator && !viewer.readOnly && r.state === "uncertain" ? <Button size="sm" loading={pending} disabled={pending} onClick={() => reconcile(r.customerId)}>{t("Check on host…")}</Button> : null },
+      { key: "resolve", header: <span className="sr-only">{t("Resolve")}</span>, cell: r => viewer.operator && !viewer.readOnly && r.state === "uncertain" ? <Button size="sm" loading={pending} disabled={pending} onClick={() => reconcile(r.customerId)}>{t("Check…")}</Button> : null },
     ]} />
   </>;
 }

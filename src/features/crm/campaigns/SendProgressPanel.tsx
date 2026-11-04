@@ -24,6 +24,7 @@ function headline(view: SendView, total: number): { text: string; tone: "fail" |
   const status = sendStatus({ state: view.send.state, counts: view.counts });
   if (view.send.state === "prepared") return { text: "This send was prepared but not confirmed. Nothing was sent.", tone: "normal" };
   if (status.key === "sending") return { text: "Sending. The result appears here when it finishes.", tone: "normal" };
+  if (status.key === "finished") return { text: "Finished. The result didn't say how many were accepted.", tone: "normal" };
   if (status.key === "failed") return { text: "Nothing was sent. The mail server accepted none of these.", tone: "fail" };
   if (status.key === "nothing") return { text: total === 0 ? "Nothing was sent. There was no one to send to." : "Nothing was sent. Everyone in this audience was skipped.", tone: "normal" };
   if (status.key === "partial") {
@@ -121,6 +122,7 @@ export default function SendProgressPanel({
         {t(head.text).replace("{count}", formatNumber(counts.failed))}
         {view.send.closeReason !== null && <span className="text-ink-400"> {view.send.closeReason}</span>}
       </p>
+      {view.countsKnown && (
       <dl className="sdetail" aria-label={t("Delivery counts")}>
         {cells.filter(([, , shown]) => shown).map(([label, n]) => (
           <div key={label}>
@@ -129,6 +131,7 @@ export default function SendProgressPanel({
           </div>
         ))}
       </dl>
+      )}
       {error && (
         <p className="text-label text-fail" role="alert">
           {t(error)}

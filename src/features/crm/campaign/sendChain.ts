@@ -26,31 +26,12 @@ export function canStart(phase: ChainPhase | null): boolean {
   return phase === null;
 }
 
-/** A host refusal carries a code; a timeout or a malformed answer does not.
- *  Only a refusal proves the host did not run the confirmation. */
-export function isRefusal(error: unknown): boolean {
-  return error instanceof ApiError && error.code !== undefined;
-}
-
-/** The prepared (never approved) send that can be confirmed again as it
- *  stands: same audience, same ceiling, same saved email, and not one the
- *  host already refused. Anything else is prepared fresh. */
-export function reusablePrepared(
-  sends: { sendId: string; state: string; audienceFreezeId: string; maxRecipients: number; contentRevision: number; contentDigest: string }[] | null,
-  want: { freezeId: string; maxRecipients: number; contentRevision: number; contentDigest: string },
-  skip: ReadonlySet<string>,
-): string | null {
-  if (sends === null) return null;
-  for (let i = sends.length - 1; i >= 0; i -= 1) {
-    const row = sends[i]!;
-    if (
-      row.state === "prepared" &&
-      !skip.has(row.sendId) &&
-      row.audienceFreezeId === want.freezeId &&
-      row.maxRecipients === want.maxRecipients &&
-      row.contentRevision === want.contentRevision &&
-      row.contentDigest === want.contentDigest
-    ) return row.sendId;
-  }
-  return null;
+/** Refusals the host's own card layer answers when the owner or the screen
+ *  closed the card before anything ran. Only these prove nothing was sent;
+ *  every other failure at the confirm step (a lost answer, an HTML 500, a 504,
+ *  a 503) is an unknown outcome, because hosted sends the mail inside the
+ *  confirm request. */
+export const HOST_LOCAL_REFUSALS: readonly string[] = ["cancelled", "expired", "superseded", "busy"];
+export function isHostLocalRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.code !== undefined && HOST_LOCAL_REFUSALS.includes(error.code);
 }
