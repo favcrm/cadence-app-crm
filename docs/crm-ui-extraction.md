@@ -30,10 +30,10 @@ invalid order, missing/duplicate assets, unsafe inline text or failed integrity
 must refuse rather than partially activate. Digest changes require fresh
 approval and mounting; this is not an in-place runtime update mechanism.
 
-Candidate development build raw UTF-8 sizes: runtime 191,081 bytes, client 229,959 bytes,
-CSS 33,698 bytes; assets total 454,738 bytes and manifest 2,662 bytes. Existing
-393,216-byte JavaScript, 131,072-byte other-asset, 524,288-byte total and
-16,384-byte manifest caps are unchanged. Offline verification checks all script
+Current build raw UTF-8 sizes: runtime 191,016 bytes, client 264,106 bytes,
+CSS 42,466 bytes; assets total 497,588 bytes and manifest 2,662 bytes. The build
+and verifier enforce the host's bundle grammar v4 screen caps: 2 MiB per asset,
+2 MiB total, 32 assets and a 32 KiB manifest. Offline verification checks all script
 bodies for `</script`, `<!--` and `-->` before packaging; none occur in these
 outputs. Before the form-adapter candidate, two unchanged-input builds produced
 byte-identical assets, manifest and archive. These are build/integrity results only: actual host-rendered frame

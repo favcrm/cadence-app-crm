@@ -8,7 +8,8 @@
     "dev": "node scripts/dev-preview.mjs",
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build_screen.mjs",
-    "verify": "node scripts/verify_screen.mjs"
+    "verify": "node scripts/verify_screen.mjs",
+    "test": "bun test tests/unit/campaign_polish.test.mjs tests/unit/customer_profile.test.mjs tests/unit/send_chain.test.mjs tests/contract/*.test.mjs && node --test tests/unit/publish-candidate.test.mjs"
   },
   "cadence": {
     "app": "crm",

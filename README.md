@@ -13,6 +13,9 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+Bun 1.4.3 runs the screen unit and contract tests (`pnpm test`); the publisher
+test still runs under Node.
+
 Open the printed `/dev/preview/` URL. For Cadence versions supporting package development:
 
 ```sh
@@ -50,6 +53,7 @@ See [development-loop.md](docs/development-loop.md) for behavior and limits.
 pnpm typecheck
 pnpm build
 pnpm verify
+pnpm test
 python3 scripts/package_app.py check --source app
 ```
 

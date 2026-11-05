@@ -9,7 +9,8 @@ const exact = (value, required, optional = []) => {
 };
 const decoder = new TextDecoder('utf-8',{fatal:true});
 const out = safePath(root,'app/screens/crm');
-const decl = parseJson(decoder.decode(readFileSync(safePath(out,'screens.json'))),16384);
+const SCREEN_ASSET_CAP=2097152, SCREEN_TOTAL_CAP=2097152, SCREEN_MANIFEST_CAP=32768;
+const decl = parseJson(decoder.decode(readFileSync(safePath(out,'screens.json'))),SCREEN_MANIFEST_CAP);
 exact(decl,['contract','app','entry','assets','provenance','may','host_contract','tools','operations','navigation'],['remote_images','startup']);
 if (decl.contract !== 'app-screens/v2' || decl.app !== 'crm' || decl.entry !== 'client.js' || decl.host_contract !== 'screen-records.v1') fail('CRM screen contract mismatch');
 if (JSON.stringify(decl.may) !== JSON.stringify(['records.call','records.slot']) || Object.keys(decl.tools ?? {}).length || !decl.tools || Array.isArray(decl.tools) || typeof decl.tools !== 'object' || (decl.remote_images !== undefined && JSON.stringify(decl.remote_images) !== '[]')) fail('Unexpected bridge authority');
@@ -27,13 +28,13 @@ for (const asset of decl.assets) {
   exact(asset,['name','media_type','sha256','size']);
   if (typeof asset.name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,31}\.(js|css|svg|json)$/.test(asset.name) || names.has(asset.name) || asset.name === 'screens.json') fail('Invalid/duplicate asset name');
   names.add(asset.name);
-  const ext=asset.name.split('.').at(-1),cap=ext==='js'?393216:131072;
+  const ext=asset.name.split('.').at(-1),cap=SCREEN_ASSET_CAP;
   const body=readFileSync(safePath(out,asset.name)); const text=decoder.decode(body);
   if (ext==='js' && /<\/script|<!--|-->/i.test(text)) fail(`Unsafe inline script text: ${asset.name}`);
   if (!Number.isSafeInteger(asset.size) || asset.size < 0 || body.length > cap || body.length !== asset.size || asset.media_type !== media[ext] || asset.sha256 !== `sha256:${hash(body)}`) fail(`Asset integrity/bounds mismatch: ${asset.name}`);
   total+=body.length;
 }
-if (total>524288 || !names.has('client.js') || !names.has('crm.css')) fail('Missing entry/styles or total exceeds bounds');
+if (total>SCREEN_TOTAL_CAP || !names.has('client.js') || !names.has('crm.css')) fail('Missing entry/styles or total exceeds bounds');
 const scripts=decl.assets.filter(a=>a.media_type==='text/javascript').map(a=>a.name);
 if (decl.startup !== undefined && (!Array.isArray(decl.startup) || decl.startup.length<2 || decl.startup.length>32 || decl.startup.some(name=>typeof name!=='string') || new Set(decl.startup).size!==decl.startup.length || decl.startup.at(-1)!==decl.entry || decl.startup.length!==scripts.length || decl.startup.some(name=>!scripts.includes(name)))) fail('Startup must name every declared JavaScript asset once, entry last');
 if (JSON.stringify(decl.startup)!==JSON.stringify(['runtime.js','client.js'])) fail('CRM requires the ordered static framework/client partition');

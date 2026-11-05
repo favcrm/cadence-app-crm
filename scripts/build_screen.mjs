@@ -58,10 +58,12 @@ await build({configFile:false,root,define:{'process.env.NODE_ENV':'"production"'
   },
 }],build:{outDir:out,emptyOutDir:runtime,minify:true,sourcemap:false,lib:{entry:join(root,runtime?'src/runtime.ts':'src/main.tsx'),name:runtime?'CadenceCrmRuntime':'CadenceCrm',formats:['iife'],fileName:()=>runtime?'runtime.js':'client.js',cssFileName:'crm'},rolldownOptions:{external:runtime?[]:Object.keys(globals),output:{codeSplitting:false,globals:id=>{if(!Object.hasOwn(globals,id))throw new Error(`Unlisted IIFE global: ${id}`);return globals[id];}}}}});
 }
-const assets=['runtime.js','client.js','crm.css'].map(path=>{const body=readFileSync(join(out,path));const cap=path.endsWith('.js')?393216:131072;if(body.length>cap)throw new Error(`${path}: ${body.length} exceeds ${cap}`);return {name:path,media_type:path.endsWith('.js')?'text/javascript':'text/css',size:body.length,sha256:`sha256:${hash(body)}`};});
-if(assets.reduce((n,a)=>n+a.size,0)>524288)throw new Error('Screen total exceeds 524288 bytes');
+// Host bundle grammar v4 screen caps: 2 MiB per screen asset, 2 MiB total.
+const SCREEN_ASSET_CAP=2097152, SCREEN_TOTAL_CAP=2097152, SCREEN_MANIFEST_CAP=32768;
+const assets=['runtime.js','client.js','crm.css'].map(path=>{const body=readFileSync(join(out,path));if(body.length>SCREEN_ASSET_CAP)throw new Error(`${path}: ${body.length} exceeds ${SCREEN_ASSET_CAP}`);return {name:path,media_type:path.endsWith('.js')?'text/javascript':'text/css',size:body.length,sha256:`sha256:${hash(body)}`};});
+if(assets.reduce((n,a)=>n+a.size,0)>SCREEN_TOTAL_CAP)throw new Error(`Screen total exceeds ${SCREEN_TOTAL_CAP} bytes`);
 const decl={contract:'app-screens/v2',app:'crm',entry:'client.js',startup:['runtime.js','client.js'],assets,provenance:{source_digest:`sha256:${sourceDigest()}`,sdk_digest:`sha256:${env.pin.archive.sha256}`,toolchain_digest:`sha256:${hash(JSON.stringify(env.pin.toolchain))}`},host_contract:'screen-records.v1',may:['records.call','records.slot'],tools:{},operations,navigation:{section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]}};
 const declaration=JSON.stringify(decl,null,2)+'\n';
-if(Buffer.byteLength(declaration)>16384)throw new Error('Screen declaration exceeds 16384 bytes');
+if(Buffer.byteLength(declaration)>SCREEN_MANIFEST_CAP)throw new Error(`Screen declaration exceeds ${SCREEN_MANIFEST_CAP} bytes`);
 writeFileSync(join(out,'screens.json'),declaration);
 console.log(JSON.stringify({development:env.dev,sdk:env.pin.archive,assets,total:assets.reduce((n,a)=>n+a.size,0)},null,2));
