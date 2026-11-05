@@ -16,9 +16,10 @@
 #
 # The pinned native CLI supplies the canonical bundle digest and inventory from
 # `app check`. A hosted-only package such as CRM 0.3.0 (`app-storage: [1]`) is
-# refused by the native validator; exit 3 with a digest/inventory report is
-# accepted as metadata only. No native install-check, daemon, compatibility
-# claim or `compatible: true` is part of a hosted candidate.
+# refused by the native validator. Exit 3 is accepted as metadata only for that
+# exact app-storage refusal; any other content refusal fails the release. No
+# native install-check, daemon, compatibility claim or `compatible: true` is
+# part of a hosted candidate.
 name: publish
 
 on:
@@ -86,8 +87,9 @@ jobs:
             cat /tmp/app-check.json >&2 || true
             exit 1
           fi
+          python3 .github/scripts/assert-app-check.py /tmp/app-check.json
           if [ "$status" -eq 3 ]; then
-            echo "Native content admission refused; digest/inventory alone prove neither safety nor compatibility. The publisher independently scans the exact uploaded members." >> "$GITHUB_STEP_SUMMARY"
+            echo "Native content admission refused only for hosted-only app-storage; digest/inventory alone prove neither safety nor compatibility. The publisher independently scans the exact uploaded members." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Publish the release to the catalogue directory

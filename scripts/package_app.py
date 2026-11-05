@@ -740,8 +740,8 @@ def file_cap(rel: str) -> int:
         return MAX_MIGRATION_BYTES
     if rel.startswith("screens/crm/") and rel.count("/") == 2:
         if rel == "screens/crm/screens.json":
-            return 16384
-        return 393216 if rel.endswith(".js") else 131072
+            return 32768
+        return 2097152
     return MAX_FILE_BYTES
 
 
@@ -758,13 +758,13 @@ def check_screen_bytes(contents: list[tuple[str, bytes]], where: str) -> None:
         return result
     try:
         raw = screen.pop("screens.json")
-        if len(raw) > 16384:
-            raise PackageError("screen manifest exceeds 16384 bytes")
+        if len(raw) > 32768:
+            raise PackageError("screen manifest exceeds 32768 bytes")
         decl = json.loads(raw.decode("utf-8"), object_pairs_hook=closed_pairs)
         assets = decl["assets"]
         if decl["app"] != "crm" or decl["contract"] != "app-screens/v2" or decl["host_contract"] != "screen-records.v1" or decl["entry"] != "client.js":
             raise PackageError("CRM screen contract mismatch")
-        if not isinstance(assets, list) or not 1 <= len(assets) <= 32 or sum(map(len, screen.values())) > 524288:
+        if not isinstance(assets, list) or not 1 <= len(assets) <= 32 or sum(map(len, screen.values())) > 2097152:
             raise PackageError("screen asset count/total exceeds bounds")
         names = set()
         media = {"js": "text/javascript", "css": "text/css", "svg": "image/svg+xml", "json": "application/json"}
