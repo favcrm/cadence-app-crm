@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 
-const host = process.env.CADENCE_APP_HOST ?? "127.0.0.1";
+// app-kit admits an http parent only on localhost/*.localhost, never an IP
+// literal, so the synthetic preview must use the hostname by default.
+const host = process.env.CADENCE_APP_HOST ?? "localhost";
 const portText = process.env.CADENCE_APP_PORT ?? "3186";
-if (!["127.0.0.1", "localhost", "::1"].includes(host)) throw new Error("CRM preview requires a loopback host.");
+if (host !== "localhost" && !host.endsWith(".localhost")) throw new Error("CRM preview requires localhost or *.localhost; app-kit rejects HTTP IP literals.");
 if (!/^\d+$/.test(portText) || Number(portText) < 3110 || Number(portText) > 3199) throw new Error("CRM preview port must be 3110–3199.");
 const server = await createServer({
   root: fileURLToPath(new URL("../", import.meta.url)),

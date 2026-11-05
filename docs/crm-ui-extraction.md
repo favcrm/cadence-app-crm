@@ -1,10 +1,23 @@
 # CRM UI ownership and host boundary
 
-Development in progress under CRM-1, paired with Cadence CAD-811. The metadata and fixtures on main are not an implemented CRM screen.
+The app-owned surface is Customers, Segments and Campaigns, including the CSV
+and email-composer flows. The app consumes the actual host-owned
+`@cadence/screen-ui` controls and resource hooks; it does not vendor their
+implementation or import the board's API, session, router, settings or chat
+modules.
 
-The intended app-owned surface is Customers, Segments and Campaigns, including the existing CSV and email-composer flows. The app consumes the actual host-owned `@cadence/screen-ui` controls and resource hooks; it does not vendor their implementation or import the board's API, session, router, settings or chat modules.
+## Screen receiver
 
-The paired host change proposes `screen-records.v1` over the existing opaque app-screen runtime. It supplies a closed operation set, server-derived installation/context scope and current session/mount/digest/permission checks. The frame receives no board credentials, action token, SMTP secret or confirmation token. Approvals, credential configuration and sends require authoritative host-drawn controls. Existing backend revisions, consent validation and effect safeguards remain authoritative.
+`src/bridge/channel.ts` uses the released `@cadence/app-kit` receiver, vendored
+at `app-kit/` from `cadence-app-toolchain-v0.3.20` (source `a54525c93`, archive
+`0115d32d…`). `app-kit.lock.json` pins every vendored file and the toolchain
+archive. The receiver owns boot/init/ready, PUSH identity, `call`/`slot`
+bookkeeping and teardown; CRM keeps its own eight-request/one-CSV limits, 65s
+timeout, response/secret guards and `ApiError` mapping. The synthetic preview
+uses `localhost` because app-kit accepts an HTTP parent only on localhost or
+`*.localhost`, never an IP literal.
+
+The host serves `screen-records.v1` over the opaque app-screen runtime. It supplies a closed operation set, server-derived installation/context scope and current session/mount/digest/permission checks. The frame receives no board credentials, action token, SMTP secret or confirmation token. Approvals, credential configuration and sends require authoritative host-drawn controls. Existing backend revisions, consent validation and effect safeguards remain authoritative.
 
 Routing stays app-owned behind a closed host query adapter. Customer data and search state are not persisted in browser storage/history. Eligible ordinary read observations can be retained in bounded host session/scope memory while fresh authorized reads run; cached data never authorizes a write or approval.
 
@@ -30,8 +43,8 @@ invalid order, missing/duplicate assets, unsafe inline text or failed integrity
 must refuse rather than partially activate. Digest changes require fresh
 approval and mounting; this is not an in-place runtime update mechanism.
 
-Current build raw UTF-8 sizes: runtime 191,016 bytes, client 264,106 bytes,
-CSS 42,466 bytes; assets total 497,588 bytes and manifest 2,662 bytes. The build
+Current build raw UTF-8 sizes: runtime 191,016 bytes, client 276,648 bytes,
+CSS 42,466 bytes; assets total 510,130 bytes and manifest 2,662 bytes. The build
 and verifier enforce the host's bundle grammar v4 screen caps: 2 MiB per asset,
 2 MiB total, 32 assets and a 32 KiB manifest. Offline verification checks all script
 bodies for `</script`, `<!--` and `-->` before packaging; none occur in these

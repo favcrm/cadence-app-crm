@@ -6,7 +6,9 @@ App identity stays `crm`; repository names do not change installation or data id
 ## Local development
 
 Use the Node version in `screen-ui.lock.json` and pnpm version in `package.json`.
-The shared screen SDK archive is committed; no Cadence checkout or SDK rebuild is needed.
+The shared screen SDK archive is committed; the released app-kit receiver is
+vendored at `app-kit/` and pinned by `app-kit.lock.json`; no Cadence checkout or
+SDK rebuild is needed.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -16,7 +18,8 @@ pnpm dev
 Bun 1.4.3 runs the screen unit and contract tests (`pnpm test`); the publisher
 test still runs under Node.
 
-Open the printed `/dev/preview/` URL. For Cadence versions supporting package development:
+Open the printed `/dev/preview/` URL (it defaults to `localhost`; app-kit rejects
+HTTP IP-literal parents). For Cadence versions supporting package development:
 
 ```sh
 cadence app dev --package . --port 3186
@@ -43,6 +46,8 @@ See [development-loop.md](docs/development-loop.md) for behavior and limits.
 ## Ownership and shipping
 
 - `src/` owns CRM screens and typed bridge clients; shared controls come from the versioned SDK.
+- `app-kit/` is the released receiver vendored from the pinned app toolchain;
+  `app-kit.lock.json` pins the archive and every file.
 - `app/` is the installable package, including generated screen assets, app declarations and
   the app-owned `app-storage.json` + `storage/*.json` schema plan.
 - `dev/preview/` is local-only tooling; it is not a production host or part of the screen build.
