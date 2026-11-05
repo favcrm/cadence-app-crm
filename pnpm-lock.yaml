@@ -109,6 +109,9 @@ importers:
 
   .:
     dependencies:
+      '@cadence/app-kit':
+        specifier: file:app-kit
+        version: file:app-kit
       '@cadence/screen-ui':
         specifier: file:.cadence-ui/cadence-screen-ui-1.0.0.tgz
         version: file:.cadence-ui/cadence-screen-ui-1.0.0.tgz(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -148,6 +151,10 @@ importers:
         version: 2.8.1
 
 packages:
+
+  '@cadence/app-kit@file:app-kit':
+    resolution: {directory: app-kit, type: directory}
+    engines: {node: '>=22'}
 
   '@cadence/screen-ui@file:.cadence-ui/cadence-screen-ui-1.0.0.tgz':
     resolution: {integrity: sha512-qob3EiLHTfTwzyUEFu/fpHptQK2z2Bt9y0NNWyoRrWTzGThL3NwCOoZMUrl4Mh947pU6XObK5I1SVN8ISLMVBw==, tarball: file:.cadence-ui/cadence-screen-ui-1.0.0.tgz}
@@ -563,6 +570,8 @@ packages:
     hasBin: true
 
 snapshots:
+
+  '@cadence/app-kit@file:app-kit': {}
 
   '@cadence/screen-ui@file:.cadence-ui/cadence-screen-ui-1.0.0.tgz(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:

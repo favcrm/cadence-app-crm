@@ -42,9 +42,19 @@ const manifest=decoder.decode(readFileSync(safePath(root,'app/app.md'))).split('
 if (!/^    contracts: \{app-screens: \[1\], screen-records: \[1\], screen-startup: \[1\], app-storage: \[1\]\}$/m.test(manifest)) fail('CRM manifest must demand app-screens, screen-records, screen-startup and app-storage v1');
 const actual=files(out).map(p=>relative(out,p));
 if (actual.length !== names.size+1 || actual.some(p=>p !== 'screens.json' && !names.has(p))) fail('Unspecified screen assets');
+// The vendored receiver is the released app-toolchain app-kit, not a fork.
+const kitLock=parseJson(decoder.decode(readFileSync(safePath(root,'app-kit.lock.json'))),65536);
+exact(kitLock,['schema','tag','source_sha','archive','archive_sha256','version','files']);
+if (kitLock.schema!=='cadence-crm-app-kit-lock/1' || kitLock.tag!=='v0.3.20' || !/^[0-9a-f]{40}$/.test(kitLock.source_sha) || kitLock.version!=='0.2.0' || kitLock.archive!=='cadence-app-toolchain-v0.3.20.tar.gz' || kitLock.archive_sha256!=='0115d32dc1bdd256c4ccdc3848b46ec67bb2788b370e65409b5152a06c06d570') fail('app-kit lock identity mismatch');
+const kitDir=safePath(root,'app-kit'), kitFiles=Object.keys(kitLock.files).sort();
+const actualKit=files(kitDir).map(p=>relative(kitDir,p)).sort();
+if (JSON.stringify(actualKit)!==JSON.stringify(kitFiles)) fail('app-kit file set differs from its lock');
+for (const rel of kitFiles) if (kitLock.files[rel]!==hash(readFileSync(safePath(kitDir,rel)))) fail(`app-kit integrity mismatch: ${rel}`);
+const kitPackage=parseJson(decoder.decode(readFileSync(safePath(kitDir,'package.json'))),65536);
+if (kitPackage.name!=='@cadence/app-kit' || kitPackage.version!==kitLock.version) fail('app-kit package identity/version mismatch');
 // Offline source audit, not a replacement for the real sandbox/CSP guard.
 const ts=env.require('typescript');
-const allowed=new Set(['@cadence/screen-ui','@cadence/screen-ui/styles.css','react','react-dom','react-dom/client','react/jsx-runtime','@hugeicons/react','@hugeicons/core-free-icons']);
+const allowed=new Set(['@cadence/app-kit','@cadence/screen-ui','@cadence/screen-ui/styles.css','react','react-dom','react-dom/client','react/jsx-runtime','@hugeicons/react','@hugeicons/core-free-icons']);
 const network=new Set(['fetch','XMLHttpRequest','WebSocket','EventSource','sendBeacon','Worker','SharedWorker','importScripts']);
 for (const path of files(join(root,'src'))) {
   const raw=decoder.decode(readFileSync(path));

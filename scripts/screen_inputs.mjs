@@ -107,6 +107,6 @@ if not set(expected).issubset(seen): raise ValueError("missing SDK archive membe
   return { pin, toolchain, require, kit, packages, dev };
 }
 export function sourceDigest() {
-  const names = [...files(join(root,"src")), ...files(join(root,"scripts")).filter(p=>p.endsWith('.mjs') || p.endsWith('.py')), ...['app/app.md','package.json','pnpm-lock.yaml','tsconfig.json','screen-ui.lock.json'].map(p=>safePath(root,p))];
+  const names = [...files(join(root,"src")), ...files(join(root,"scripts")).filter(p=>p.endsWith('.mjs') || p.endsWith('.py')), ...files(join(root,"app-kit")), ...['app/app.md','app-kit.lock.json','package.json','pnpm-lock.yaml','tsconfig.json','screen-ui.lock.json'].map(p=>safePath(root,p))];
   return hash(JSON.stringify(names.sort().map(p=>({path:relative(root,p),sha256:hash(readFileSync(p))}))));
 }

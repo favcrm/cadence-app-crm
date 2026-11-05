@@ -1,9 +1,19 @@
 import { ApiError } from "@cadence/screen-ui";
+import {
+  createScreenReceiver,
+  ScreenClosedError,
+  ScreenRefusalError,
+  ScreenTimeoutError,
+  type ScreenBoot,
+  type ScreenReceiver,
+} from "@cadence/app-kit";
 import { acceptPush,clearScope,getScope } from "./scope";
 import { OPERATIONS } from "./services";
 
 type CampaignLeaveState = { publish: (unsaved: boolean) => void; release: () => void };
-type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: ReturnType<typeof setTimeout>; kind: "call" | "slot"; large: boolean };
+const MAX_PUSH_BYTES = 131072;
+const MAX_DATA_BYTES = 1048576;
+const SECRET_KEYS = ["confirmation_nonce", "confirmation_token", "confirm_token", "action_token"];
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 export function exact(v: Record<string, unknown>, keys: readonly string[]): boolean { return Object.keys(v).every(k => keys.includes(k)); }
 const bytes = (v: unknown) => new TextEncoder().encode(JSON.stringify(v)).length;
@@ -14,111 +24,120 @@ function refusal(v: unknown): ApiError {
   const status = ({ not_found: 404, missing: 404, stale_revision: 409, conflict: 409, unauthorized: 401, forbidden: 403, unavailable: 503 } as Record<string, number>)[v.code] ?? 400;
   return new ApiError(v.text, status, { code: v.code });
 }
+
+function guardData(value: unknown): unknown {
+  if (bytes(value) > MAX_DATA_BYTES) throw invalid();
+  if (object(value) && SECRET_KEYS.some(k => k in value)) throw invalid();
+  return value;
+}
+
 class Channel {
-  private port: MessagePort | null = null;
+  private receiver: ScreenReceiver | null = null;
   private retired = false;
   private leaveOwner: symbol | null = null;
-  private serial = 0;
-  private pending = new Map<string, Pending>();
+  private inFlight = 0;
+  private csvInFlight = false;
+  private cause: ApiError | null = null;
+
   start(): void {
-    if (this.port || this.retired) return;
+    if (this.receiver || this.retired) return;
     const node = document.getElementById("cadence-screen-boot");
     if (!node?.textContent || node.textContent.length > 2048) throw invalid();
     const boot: unknown = JSON.parse(node.textContent);
-    if (!object(boot) || !exact(boot, ["tag", "bridge_nonce", "generation", "parent_origin"]) || boot.tag !== "crm" || typeof boot.bridge_nonce !== "string" || !/^[a-f0-9]{64}$/.test(boot.bridge_nonce) || !Number.isSafeInteger(boot.generation) || (boot.generation as number) < 0 || typeof boot.parent_origin !== "string") throw invalid();
+    if (!object(boot) || !exact(boot, ["tag", "bridge_nonce", "generation", "parent_origin"]) || boot.tag !== "crm" ||
+        typeof boot.bridge_nonce !== "string" || !/^[a-f0-9]{64}$/.test(boot.bridge_nonce) ||
+        !Number.isSafeInteger(boot.generation) || (boot.generation as number) < 0 || typeof boot.parent_origin !== "string") throw invalid();
     const origin = new URL(boot.parent_origin);
     if (origin.origin !== boot.parent_origin || !["http:", "https:"].includes(origin.protocol) || window.parent === window) throw invalid();
-    const pair = new MessageChannel();
-    this.port = pair.port1;
-    pair.port1.onmessage = e => {
-      try { this.receive(e.data); } catch { this.retire(invalid()); }
-    };
-    pair.port1.onmessageerror = () => this.retire(invalid());
-    pair.port1.start();
-    window.parent.postMessage({ v: 1, op: "init", tag: boot.tag, bridge_nonce: boot.bridge_nonce, generation: boot.generation }, boot.parent_origin, [pair.port2]);
-    pair.port1.postMessage({ v: 1, op: "ready", accepts: ["screen.v2", "screen-records.v1", "crm-locale.v1"] });
-    window.addEventListener("pagehide", () => this.retire(new ApiError("CRM mount retired", 403)), { once: true });
+
+    const receiver = createScreenReceiver({
+      boot: boot as unknown as ScreenBoot,
+      accepts: ["screen.v2", "screen-records.v1", "crm-locale.v1"],
+      timeoutMs: 65000,
+      maxArgsBytes: 327680,
+      onPush: (push) => {
+        if (bytes(push) > MAX_PUSH_BYTES) throw invalid();
+        acceptPush(push);
+      },
+      onError: (reason) => {
+        this.retire(new ApiError(reason, 502));
+      },
+    });
+    // app-kit reports a refused boot through an inert receiver; keep the app's
+    // own tag check here so a different app's boot can never mount CRM.
+    if (!receiver.boot || receiver.boot.tag !== "crm") {
+      receiver.teardown();
+      throw invalid();
+    }
+    this.receiver = receiver;
   }
+
   /** A live editor owns only a boolean warning hint, not a navigation request. */
   ownCampaignLeaveState(): CampaignLeaveState | null {
-    const port = this.port;
+    const receiver = this.receiver;
     const scope = getScope();
     // A validated scope PUSH must precede any warning publication.
-    if (!port || this.retired || !scope) return null;
+    if (!receiver?.accepted() || this.retired || !scope) return null;
     const owner = Symbol();
     this.leaveOwner = owner;
     const live = () => {
       const current = getScope();
-      return !this.retired && this.port === port && this.leaveOwner === owner && !!current &&
+      return !this.retired && this.receiver === receiver && this.leaveOwner === owner && !!current &&
         current.scope.installId === scope.scope.installId &&
         current.digest === scope.digest;
     };
     const publish = (unsaved: boolean) => {
       if (typeof unsaved !== "boolean" || !live()) return;
-      try { port.postMessage({ v: 1, op: "state", data: JSON.stringify({ contract: "crm-leave.v1", unsaved }) }); }
-      catch { /* Best effort; never allocate an RPC or retry on a retired port. */ }
+      receiver.state(JSON.stringify({ contract: "crm-leave.v1", unsaved }));
     };
     return { publish, release: () => { if (live()) { publish(false); this.leaveOwner = null; } } };
   }
+
   request(kind: "call" | "slot", verb: string, args: Record<string, unknown>): Promise<unknown> {
-    if (!this.port || this.retired) return Promise.reject(new ApiError("CRM bridge is unavailable", 503));
-    if (this.pending.size >= 8) return Promise.reject(new ApiError("CRM bridge is busy; wait for the current request", 429));
+    const receiver = this.receiver;
+    if (!receiver || this.retired) return Promise.reject(new ApiError("CRM bridge is unavailable", 503));
+    if (this.inFlight >= 8) return Promise.reject(new ApiError("CRM bridge is busy; wait for the current request", 429));
     const large = verb.startsWith("records.csv.");
-    if (large && [...this.pending.values()].some(p => p.large)) return Promise.reject(new ApiError("A CSV request is already pending", 429));
-    const id = `crm-${++this.serial}`;
-    return new Promise((resolve, reject) => {
-      // No automatic retries: a timed-out protected operation may have executed.
-      const timer = setTimeout(() => {
-        this.retire(new ApiError("CRM request did not answer. Inspect fresh status before retrying an effect.", 504));
-      }, 65000);
-      this.pending.set(id, { resolve, reject, timer, kind, large });
-      this.port!.postMessage({ v: 2, op: kind, id, verb, args, ...(kind === "slot" ? { anchor: "footer" } : {}) });
-    });
+    if (large && this.csvInFlight) return Promise.reject(new ApiError("A CSV request is already pending", 429));
+    this.inFlight += 1;
+    if (large) this.csvInFlight = true;
+    const settle = () => { this.inFlight -= 1; if (large) this.csvInFlight = false; };
+    const result = kind === "call"
+      ? receiver.call(verb, args)
+      : receiver.slot(verb, args, "footer").then(event => {
+          if (event.state !== "done") throw refusal(event.refusal);
+          return event.data;
+        });
+    return result.then(
+      value => {
+        settle();
+        try { return guardData(value); }
+        catch (error) { const mapped = this.mapError(error); this.retire(mapped); throw mapped; }
+      },
+      error => {
+        settle();
+        const mapped = this.mapError(error);
+        if ([401, 403, 504, 502].includes(mapped.status)) this.retire(mapped);
+        return Promise.reject(mapped);
+      },
+    );
   }
-  private receive(data: unknown): void {
-    if (this.retired || !object(data)) throw invalid();
-    if (data.v !== 2) throw invalid();
-    if (data.op === "screen") {
-      if (bytes(data) > 131072) throw invalid();
-      acceptPush(data);
-      return;
+
+  private mapError(error: unknown): ApiError {
+    if (error instanceof ApiError) return error;
+    if (error instanceof ScreenRefusalError) return new ApiError(error.text || error.code, error.status, { code: error.code });
+    if (error instanceof ScreenTimeoutError) {
+      return new ApiError("CRM request did not answer. Inspect fresh status before retrying an effect.", 504);
     }
-    if (data.op !== "reply" && data.op !== "slot-state") throw invalid();
-    if (bytes(data) > 1049600 || typeof data.id !== "string") throw invalid();
-    const p = this.pending.get(data.id);
-    if (!p || (data.op === "reply" ? p.kind !== "call" : p.kind !== "slot")) throw invalid();
-    if (data.op === "reply") {
-      if (data.ok === true && exact(data, ["v", "op", "id", "ok", "data"]) && "data" in data) {
-        if (bytes(data.data) > 1048576) throw invalid();
-        this.finish(data.id, data.data);
-      }
-      else if (data.ok === false && exact(data, ["v", "op", "id", "ok", "refusal"])) this.fail(data.id, refusal(data.refusal));
-      else throw invalid();
-    } else {
-      if (!exact(data, ["v", "op", "id", "state", "refusal", "data"])) throw invalid();
-      if (data.state === "pending" && data.data === undefined && data.refusal === undefined) return;
-      if (data.state === "done" && data.refusal === undefined) {
-        if ("data" in data && bytes(data.data) > 1048576) throw invalid();
-        if (object(data.data) && ["confirmation_nonce", "confirmation_token", "confirm_token", "action_token"].some(k => k in (data.data as Record<string, unknown>))) throw invalid();
-        this.finish(data.id, data.data);
-      } else if (data.state === "refused" && data.data === undefined) this.fail(data.id, refusal(data.refusal));
-      else throw invalid();
-    }
+    if (error instanceof ScreenClosedError) return this.cause ?? new ApiError("CRM bridge is unavailable", 503);
+    return invalid();
   }
-  private finish(id: string, value: unknown): void {
-    const p = this.pending.get(id)!; clearTimeout(p.timer); this.pending.delete(id); p.resolve(value);
-  }
-  private fail(id: string, error: ApiError): void {
-    const p = this.pending.get(id)!; clearTimeout(p.timer); this.pending.delete(id);
-    if ([401, 403].includes(error.status)) { p.reject(error); this.retire(error); }
-    else p.reject(error);
-  }
+
   retire(error: ApiError): void {
     if (this.retired) return;
-    this.retired = true; this.leaveOwner = null;
-    this.port?.close(); this.port = null;
-    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(error); }
-    this.pending.clear(); clearScope(error.message);
+    this.retired = true; this.leaveOwner = null; this.cause = error;
+    this.receiver?.teardown(); this.receiver = null;
+    clearScope(error.message);
   }
 }
 export const channel = new Channel();
