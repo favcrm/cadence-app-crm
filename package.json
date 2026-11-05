@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "build": "node scripts/build_screen.mjs",
     "verify": "node scripts/verify_screen.mjs",
-    "test": "bun test tests/unit/campaign_polish.test.mjs && bun test tests/unit/customer_profile.test.mjs && bun test tests/unit/send_chain.test.mjs && bun test tests/contract/scope_push.test.mjs && bun test tests/contract/check_app_views.test.mjs && node --test tests/unit/publish-candidate.test.mjs"
+    "test": "bun test tests/unit/campaign_polish.test.mjs && bun test tests/unit/customer_profile.test.mjs && bun test tests/unit/send_chain.test.mjs && bun test tests/contract/scope_push.test.mjs && bun test tests/contract/check_app_views.test.mjs && bun test tests/contract/appkit_channel.test.mjs && node --test tests/unit/publish-candidate.test.mjs"
   },
   "cadence": {
     "app": "crm",

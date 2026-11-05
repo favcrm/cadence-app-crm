@@ -140,5 +140,6 @@ class Channel {
     clearScope(error.message);
   }
 }
-export const channel = new Channel();
+export const createChannel = (): Channel => new Channel();
+export const channel = createChannel();
 export function admitted(verb: string, actions: readonly string[]): boolean { return OPERATIONS.includes(verb) && actions.includes(verb); }
