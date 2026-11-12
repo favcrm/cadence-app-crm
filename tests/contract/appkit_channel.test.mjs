@@ -24,7 +24,7 @@ const push = (extra = {}) => ({
   install_id: "install-test",
   digest: DIGEST,
   tag: "crm",
-  installation: { install_id: "install-test", name: "crm", title: "CRM", version: "0.3.6", digest: DIGEST, summary: "s" },
+  installation: { install_id: "install-test", name: "crm", title: "CRM", version: "0.4.0", digest: DIGEST, summary: "s" },
   contexts: [],
   runs: [],
   outbox: [],
@@ -76,7 +76,7 @@ async function mount() {
   const channel = createChannel();
   channel.start();
   const ready = await waitFor(() => env.events.find((event) => event.op === "ready"), "ready");
-  expect(ready.accepts).toEqual(["screen.v2", "screen-records.v1", "crm-locale.v1"]);
+  expect(ready.accepts).toEqual(["screen.v2", "screen-records.v1", "screen-locale.v1"]);
   env.host().postMessage(push());
   await waitFor(() => getScope()?.scope.installId === "install-test", "PUSH scope");
   return { channel, ...env };
@@ -164,6 +164,23 @@ test("secret fields in a reply refuse and retire the mount", async () => {
     host().postMessage({ v: 2, op: "reply", id: request.id, ok: true, data: { confirmation_token: "nope" } });
     await expect(pending).rejects.toMatchObject({ status: 502 });
     expect(getScope()).toBeNull();
+  } finally {
+    retire(channel);
+  }
+});
+
+test("ownCampaignLeaveState publishes generic v2 leave hints and clears on release", async () => {
+  const { channel, events } = await mount();
+  try {
+    const leave = channel.ownCampaignLeaveState();
+    expect(leave).toBeTruthy();
+    leave.publish(true);
+    leave.release();
+    await waitFor(() => events.filter((event) => event.op === "leave").length === 2, "leave events");
+    expect(events.filter((event) => event.op === "leave")).toEqual([
+      { v: 2, op: "leave", unsaved: true },
+      { v: 2, op: "leave", unsaved: false },
+    ]);
   } finally {
     retire(channel);
   }

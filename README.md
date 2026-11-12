@@ -46,8 +46,8 @@ See [development-loop.md](docs/development-loop.md) for behavior and limits.
 ## Ownership and shipping
 
 - `src/` owns CRM screens and typed bridge clients; shared controls come from the versioned SDK.
-- `app-kit/` is the released receiver vendored from the pinned app toolchain;
-  `app-kit.lock.json` pins the archive and every file.
+- `app-kit/` is the released receiver vendored from `favcrm/cadence`;
+  `app-kit.lock.json` pins the source commit and every file.
 - `app/` is the installable package, including generated screen assets, app declarations and
   the app-owned `app-storage.json` + `storage/*.json` schema plan.
 - `dev/preview/` is local-only tooling; it is not a production host or part of the screen build.

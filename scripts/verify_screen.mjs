@@ -44,8 +44,9 @@ const actual=files(out).map(p=>relative(out,p));
 if (actual.length !== names.size+1 || actual.some(p=>p !== 'screens.json' && !names.has(p))) fail('Unspecified screen assets');
 // The vendored receiver is the released app-toolchain app-kit, not a fork.
 const kitLock=parseJson(decoder.decode(readFileSync(safePath(root,'app-kit.lock.json'))),65536);
-exact(kitLock,['schema','tag','source_sha','archive','archive_sha256','version','files']);
-if (kitLock.schema!=='cadence-crm-app-kit-lock/1' || kitLock.tag!=='v0.3.20' || !/^[0-9a-f]{40}$/.test(kitLock.source_sha) || kitLock.version!=='0.2.0' || kitLock.archive!=='cadence-app-toolchain-v0.3.20.tar.gz' || kitLock.archive_sha256!=='0115d32dc1bdd256c4ccdc3848b46ec67bb2788b370e65409b5152a06c06d570') fail('app-kit lock identity mismatch');
+exact(kitLock,['schema','source','version','files']);
+exact(kitLock.source,['kind','repo','source_sha']);
+if (kitLock.schema!=='cadence-crm-app-kit-lock/1' || kitLock.source.kind!=='commit' || kitLock.source.repo!=='favcrm/cadence' || kitLock.source.source_sha!=='ec37956158f88a53d372f2c29495665dbe48dd97' || kitLock.version!=='0.3.0') fail('app-kit lock identity mismatch');
 const kitDir=safePath(root,'app-kit'), kitFiles=Object.keys(kitLock.files).sort();
 const actualKit=files(kitDir).map(p=>relative(kitDir,p)).sort();
 if (JSON.stringify(actualKit)!==JSON.stringify(kitFiles)) fail('app-kit file set differs from its lock');
