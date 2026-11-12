@@ -119,6 +119,7 @@ function handle(conn: Conn, request: Record<string, unknown>) {
     status.textContent = "Local fixture data · editing enabled";
     return;
   }
+  if (request?.v === 2 && request.op === "leave") return;
   if (request?.v !== 2 || !["call", "slot"].includes(request.op as string) || typeof request.id !== "string") return;
   const call = request as { op: "call" | "slot"; id: string; verb: string; args: Record<string, unknown> };
   try {

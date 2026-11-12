@@ -84,18 +84,19 @@ export function cleanArgs(verb: string, args: Bag, slot: boolean): Bag {
   if (new TextEncoder().encode(JSON.stringify(value)).length > cap) throw new ApiError("CRM request exceeds its operation budget", 413);
   return value;
 }
-const writeListeners = new Set<() => void>();
-export const onWrite = (f: () => void) => { writeListeners.add(f); return () => { writeListeners.delete(f); }; };
-const written = () => writeListeners.forEach(f => f());
+export const WRITE_VERBS: readonly string[] = [
+  "records.create", "records.update", "segments.save", "exclusions.save", "suppressions.add",
+  "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard",
+  "sender-bindings.save", "records.csv.import", "records.csv.confirm", "content.approve",
+  "smtp.bind", "smtp.rebind", "smtp.revoke", "smtp.test-send", "sends.approve", "sends.resolve",
+  "origin.manage",
+];
+export const onWrite = (f: () => void) => channel.onWrite(f);
 export async function serviceCall<T = unknown, K extends keyof CallArgs = keyof CallArgs>(scope: DisplayScope, verb: K, args: CallArgs[K]): Promise<T> {
   assertCurrentScope(scope); requireOperation(verb);
-  const result = await channel.request("call", verb, cleanArgs(verb, args as Bag, false)) as T;
-  if (["records.create", "records.update", "segments.save", "exclusions.save", "suppressions.add", "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard", "sender-bindings.save"].includes(verb)) written();
-  return result;
+  return channel.call<T>(scope, verb, cleanArgs(verb, args as Bag, false));
 }
 export async function serviceSlot<T = unknown, K extends keyof SlotArgs = keyof SlotArgs>(scope: DisplayScope, verb: K, args: SlotArgs[K]): Promise<T> {
   assertCurrentScope(scope); requireOperation(verb);
-  const result = await channel.request("slot", verb, cleanArgs(verb, args as Bag, true)) as T;
-  if (!["smtp.manage", "chat.campaign.open", "chat.campaign.brief"].includes(verb)) written();
-  return result;
+  return channel.slot<T>(scope, verb, cleanArgs(verb, args as Bag, true));
 }
