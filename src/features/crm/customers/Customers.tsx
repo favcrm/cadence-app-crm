@@ -62,18 +62,33 @@ export default function Customers({
   onRecordCreated?: (recordId: string) => void;
 }) {
   const canWrite = viewer.operator === true && !viewer.readOnly;
+  const returningToList = useRef(false);
+  useEffect(() => {
+    if (recordId !== null) returningToList.current = true;
+  }, [recordId]);
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
       <div className="crm-surface">
-        {view === "list" && (
+        {view === "list" && recordId === null && (
           <CustomerList
             scope={scope}
             viewer={viewer}
             onSelect={onSelect}
             onNew={() => onView("new")}
+            focusOnMount={returningToList.current}
+          />
+        )}
+        {view === "list" && recordId !== null && (
+          <CustomerWorkspace
+            key={recordId}
+            scope={scope}
+            recordId={recordId}
+            viewer={viewer}
+            canWrite={canWrite}
+            onClose={() => onSelect(null)}
           />
         )}
         {view === "new" && (
@@ -93,15 +108,6 @@ export default function Customers({
           />
         )}
       </div>
-      {recordId !== null && (
-        <CustomerDrawer
-          scope={scope}
-          recordId={recordId}
-          viewer={viewer}
-          canWrite={canWrite}
-          onClose={() => onSelect(null)}
-        />
-      )}
     </div>
   );
 }
@@ -113,14 +119,20 @@ function CustomerList({
   viewer,
   onSelect,
   onNew,
+  focusOnMount,
 }: {
   scope: HostScope;
   viewer: Viewer;
   onSelect: (recordId: string) => void;
   onNew: () => void;
+  focusOnMount: boolean;
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
+  }, [focusOnMount]);
   const [initialList] = useState(() => readCustomerList(scope));
   const [query, setQuery] = useState(initialList?.query ?? "");
   const [committed, setCommitted] = useState(initialList?.committed ?? "");
@@ -249,7 +261,7 @@ function CustomerList({
 
   return (
     <section ref={listRef} aria-label={t("Customers list")} className="crm-list crm-list-controls">
-      <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+      <h3 ref={headingRef} tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Customers")}
       </h3>
       <div className="crm-toolbar crm-list-toolbar">
@@ -720,7 +732,7 @@ function ConsentForm({
               id={c.id}
               value={email}
               onChange={(v) => { setEmail(asSetting(v)); setFieldError(null); }}
-              options={CONSENT_SETTINGS}
+              options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("Email marketing consent")}
               full
             />
@@ -732,7 +744,7 @@ function ConsentForm({
               id={c.id}
               value={sms}
               onChange={(v) => { setSms(asSetting(v)); setFieldError(null); }}
-              options={CONSENT_SETTINGS}
+              options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("SMS marketing consent")}
               full
             />
@@ -837,7 +849,7 @@ function CustomerNew({
   );
 }
 
-export function CustomerDrawer({
+function CustomerWorkspace({
   scope,
   recordId,
   viewer,
@@ -851,6 +863,9 @@ export function CustomerDrawer({
   onClose: () => void;
 }) {
   const { t, formatDate } = useLocale();
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
+  useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
   const [mode, setMode] = useState<"view" | "edit" | "consent">("view");
@@ -867,9 +882,14 @@ export function CustomerDrawer({
     ? view.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
     : "";
   const reload = () => { void queryState.store.refresh(); };
-  const ready = record !== null && view !== null;
-
-  const when = (at: number) => formatDate(at * 1000, { dateStyle: "medium" });
+  const ready = !loading && error === null && viewer.operator === true && record !== null && view !== null;
+  const activity = timeline.find((item) => item.key === selectedActivity);
+  const when = (at: number, withTime = false) => {
+    const time = at * 1000;
+    return Number.isFinite(time) && !Number.isNaN(new Date(time).getTime())
+      ? formatDate(time, withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" })
+      : t("Not recorded");
+  };
   const tabs: DrawerTab[] =
     ready && record !== null && view !== null
       ? [
@@ -878,6 +898,19 @@ export function CustomerDrawer({
             label: t("Overview"),
             panel: (
               <>
+                <section className="crm-sect" aria-label={t("Profile")}>
+                  <h4>{t("Profile")}</h4>
+                  <Detail
+                    className="crm-detail"
+                    label={t("Customer fields")}
+                    items={[
+                      { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
+                      { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
+                      { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
+                      ...(view.source ? [{ key: "source", term: t("Source"), value: view.source }] : []),
+                    ]}
+                  />
+                </section>
                 <section className="crm-sect" aria-label={t("Consent")}>
                   <h4>{t("Consent")}</h4>
                   <div className="crm-consent-cards">
@@ -895,19 +928,6 @@ export function CustomerDrawer({
                     </div>
                   </div>
                 </section>
-                <section className="crm-sect" aria-label={t("Profile")}>
-                  <h4>{t("Profile")}</h4>
-                  <Detail
-                    className="crm-detail"
-                    label={t("Customer fields")}
-                    items={[
-                      { key: "email", term: "Email", value: <span className="num">{view.email ?? "—"}</span> },
-                      { key: "phone", term: "Phone", value: <span className="num">{view.phone ?? "—"}</span> },
-                      { key: "tags", term: "Tags", value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
-                      { key: "source", term: "Source", value: view.source ?? "—" },
-                    ]}
-                  />
-                </section>
               </>
             ),
           },
@@ -919,9 +939,13 @@ export function CustomerDrawer({
                 <ol className="crm-timeline" aria-label={t("Activity")}>
                   {timeline.map((item) => (
                     <li key={item.key}>
-                      <span>{item.text}</span>
-                      {item.note && <span className="text-micro text-ink-400"> — “{item.note}”</span>}
-                      <div className="num text-micro text-ink-500">{when(item.at)}</div>
+                      <button type="button" className="customer-activity-row" onClick={() => setSelectedActivity(item.key)}>
+                        <span className="customer-activity-copy">
+                          <span>{item.text}</span>
+                          <span className="num text-micro text-ink-500">{when(item.at)}</span>
+                        </span>
+                        <span aria-hidden="true">›</span>
+                      </button>
                     </li>
                   ))}
                 </ol>
@@ -962,46 +986,56 @@ export function CustomerDrawer({
   };
 
   return (
-    <FrameDrawer
-      kind="customer"
-      kicker={t("Customer")}
-      label={t("Customer details")}
-      title={loading ? t("Customer details") : (view?.displayName ?? t("Customer details"))}
-      avatar={initials || undefined}
-      subtitle={view?.email ?? undefined}
-      pills={
-        view && ready ? (
-          <>
-            <span className="chip" title={t("Email consent")}>{t("Email")}: {t(consentLabel(view.consentEmail))}</span>
-            <span className="chip" title={t("SMS consent")}>{t("SMS:")} {t(consentLabel(view.consentSms))}</span>
-            {view.tags.map((tag) => (
-              <span key={tag} className="chip">{tag}</span>
-            ))}
-          </>
-        ) : undefined
-      }
-      tabs={tabs}
-      state={
-        loading ? (
-          <Loading>{t("Reading the record…")}</Loading>
-        ) : error !== null ? (
-          <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
-        ) : queryState.updating ? <span role="status"><QueryRefresh updating /></span> : undefined
-      }
-      warning={
-        ready && view !== null && view.consentEmail !== "granted" ? (
-          <>
-            <b>{view.displayName} {t("can't receive campaigns.")}</b>{" "}
-            {view.consentEmail === "denied" ? t("Email consent was withdrawn.") : t("No email consent recorded.")}
-          </>
-        ) : undefined
-      }
-      edit={
-        mode !== "view" && canWrite && ready && record !== null
-          ? mode === "edit"
+    <section className="customer-workspace" aria-label={t("Customer details")}>
+      <button type="button" className="lnk customer-back" onClick={onClose}>← {t("Customers")}</button>
+      <header className="customer-header">
+        <div className="customer-heading">
+          {ready && initials && <span className="customer-avatar" aria-hidden="true">{initials}</span>}
+          <div>
+            <p className="text-micro text-ink-500">{t("Customer")}</p>
+            <h3 ref={headingRef} tabIndex={-1} data-outlet-heading className="text-cardtitle font-medium text-ink-100">
+              {ready && view ? view.displayName : t("Customer details")}
+            </h3>
+            {ready && view && <p className="customer-contact text-label text-ink-400">{[view.email, view.phone].filter(Boolean).join(" · ")}</p>}
+          </div>
+        </div>
+        {ready && canWrite && (
+          <div className="customer-actions">
+            <Button size="sm" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
+            <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
+          </div>
+        )}
+      </header>
+      {loading ? <Loading>{t("Reading the record…")}</Loading>
+        : error !== null ? <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
+          : !ready ? <Notice>{t("Sign in as the operator to inspect customer records.")}</Notice>
+            : (
+              <>
+                <span role="status"><QueryRefresh updating={queryState.updating} /></span>
+                {!canWrite && <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>}
+                <div className="customer-workspace-grid">
+                  <aside className="customer-profile-panel">{tabs[0]?.panel}</aside>
+                  <section className="customer-activity-panel" aria-label={t("Activity")}>
+                    <h4>{t("Activity")}</h4>
+                    {tabs[1]?.panel}
+                  </section>
+                </div>
+                <details className="crm-diag">
+                  <summary>{t("Details")}</summary>
+                  {tabs[2]?.panel}
+                </details>
+              </>
+            )}
+      {mode !== "view" && canWrite && ready && record !== null && (
+        <FrameDrawer
+          kind="customer-edit"
+          label={t("Customer details")}
+          title={view?.displayName ?? t("Customer details")}
+          tabs={[]}
+          edit={mode === "edit"
             ? {
                 formId: "crm-customer-edit",
-                title: "Edit profile — saving is refused if the record changed since you opened it",
+                title: t("Edit profile — saving is refused if the record changed since you opened it"),
                 pending,
                 onCancel: () => setMode("view"),
                 body: (
@@ -1028,8 +1062,8 @@ export function CustomerDrawer({
               }
             : {
                 formId: "crm-customer-consent",
-                title: "Record consent",
-                saveLabel: "Save consent",
+                title: t("Record consent"),
+                saveLabel: t("Save consent"),
                 pending,
                 onCancel: () => setMode("view"),
                 body: (
@@ -1042,37 +1076,37 @@ export function CustomerDrawer({
                   />
                 ),
               }
-          : null
-      }
-      secondary={
-        ready ? (
-          <>
-            {view?.email ? (
-              <Button size="sm" onClick={() => void navigator.clipboard?.writeText(view.email ?? "")}>
-                {t("Copy email")}
-              </Button>
-            ) : null}
-            {canWrite ? (
-              <Button size="sm" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>
-                {t("Edit")}
-              </Button>
-            ) : null}
-          </>
-        ) : undefined
-      }
-      primary={
-        ready && canWrite ? (
-          <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>
-            {t("Record consent")}
-          </Button>
-        ) : undefined
-      }
-      note={
-        ready && !canWrite
-          ? `Read-only view. ${viewer.operator ? "Edits are disabled on this board." : "Sign in as the operator to edit."}`
-          : undefined
-      }
-      onClose={onClose}
-    />
+          }
+          onClose={() => setMode("view")}
+        />
+      )}
+      {ready && mode === "view" && activity && (
+        <FrameDrawer
+          kind="customer-activity"
+          label={t("Activity details")}
+          title={t("Activity details")}
+          tabs={[{
+            id: "details",
+            label: t("Details"),
+            panel: (
+              <div className="customer-activity-details">
+                <section>
+                  <h4>{t("Activity summary")}</h4>
+                  <p>{activity.text}</p>
+                </section>
+                {activity.note && <section><h4>{t("Note")}</h4><p>{activity.note}</p></section>}
+                <Detail className="crm-detail" label={t("Activity details")} items={[
+                  { key: "type", term: t("Type"), value: t(activity.kind === "note" ? "Note" : "Record change") },
+                  { key: "actor", term: t("Recorded by"), value: activity.actor === "operator" ? t("the operator") : (activity.actor || t("Not recorded")) },
+                  { key: "date", term: t("Recorded at"), value: when(activity.at, true) },
+                  ...(activity.revision === undefined ? [] : [{ key: "revision", term: t("Revision"), value: `r${activity.revision}` }]),
+                ]} />
+              </div>
+            ),
+          }]}
+          onClose={() => setSelectedActivity(null)}
+        />
+      )}
+    </section>
   );
 }

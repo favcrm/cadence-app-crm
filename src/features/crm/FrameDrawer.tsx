@@ -4,8 +4,8 @@ import { useEffect,useRef } from "react";
 const FOCUSABLE = "button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex=\"0\"]";
 
 /**
- * The Customer and Segment detail drawer: the shared shell, always drawn in
- * this frame as a full-height right drawer over a frame-wide scrim. While it
+ * The in-frame detail drawer: the shared shell, always drawn as a
+ * full-height right drawer over a frame-wide scrim. While it
  * is open the document behind it does not scroll and Tab stays inside it.
  * Escape, the scrim and the close control are the shell's own.
  */

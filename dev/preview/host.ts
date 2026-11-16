@@ -4,6 +4,7 @@ import "./shell";
 import type { Route } from "../../src/bridge/scope";
 
 const sections = ["customers", "segments", "campaigns"] as const;
+const locale = new URLSearchParams(location.search).get("locale") === "zh-TW" ? "zh-TW" : "en";
 const unavailable = () => new ApiError("Unavailable offline. No live data was changed, sent or approved.", 503, { code: "unavailable" });
 
 const frame = document.querySelector<HTMLIFrameElement>("#crm-frame")!;
@@ -30,7 +31,7 @@ function sendProjection(conn: Conn) {
   conn.port?.postMessage({
     v: 2, op: "screen", tag: "crm", install_id: installId, digest,
     installation: { install_id: installId, name: "crm", title: "CRM fixtures", version: "development", digest, summary: "Local browser-memory fixtures" },
-    actions: fixtureActions, route, presentation_locale: "en",
+    actions: fixtureActions, route, presentation_locale: locale,
   });
 }
 

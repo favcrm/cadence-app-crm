@@ -2,7 +2,7 @@
 app: crm
 title: CRM
 version: '0.4.0'
-summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
+summary: Customer records, activity, segments and scoped campaign workflows; sending stays an operator-run host action.
 needs:
   connections: []
   requires:
@@ -30,7 +30,7 @@ listing:
     personal: true
 ---
 
-# CRM — reviewed email briefs
+# CRM — customer workspace and campaigns
 
 This development bundle preserves the installed app identity `crm` and
 carries app-owned Customers, Segments and Campaigns screens, including
@@ -151,6 +151,30 @@ Agent procedure:
 
 Upload is not import or consent. There is no consent inference, no custom
 attributes and no sending from this app.
+
+### Hosted agent tools
+
+When the host offers `app_describe` and `app_call`, discover the installed
+CRM's current operations and storage fields before using them. Use
+`records.list` and `records.show` to find the exact customer and its current
+revision. `records.create` and `records.update` put fields inside `profile`;
+an update includes the revision returned by `records.show`. A hosted write is
+staged for the owner's review, not proof that a record changed. Read the
+resulting status and record after approval; a stale revision must be read
+again rather than overwritten. The host's current grants and approval policy,
+not this guidance or a selected customer, determine access.
+
+The same discovery and read can be called from an authorized hosted CLI
+without putting customer data in a shell command:
+
+```sh
+cadence --org "$ORG" platform call app_describe --input '{"app":"crm"}'
+cadence --org "$ORG" platform call app_call --input '{"app":"crm","operation":"records.list","args":"{\"limit\":1}"}'
+```
+
+Do not infer marketing consent from a customer profile or note. Do not claim
+contacts, custom fields, cross-app links or per-customer sharing exist unless
+the installed host's discovered contract actually provides them.
 
 ## Campaign work metadata (CRM-12)
 

@@ -145,3 +145,30 @@ test("unchanged consent and malformed history are not projected", () => {
   );
   expect(entries).toEqual([]);
 });
+
+test("activity details retain the recorded actor, revision and note", () => {
+  const items = profile.activityItems(record({
+    history: [{ revision: 2, digest: DIGEST, actor: "Morgan", at: 20 }],
+    consentHistory: [
+      { revision: 2, channel: "email", state: "granted", actor: "Morgan", at: 20, method: "written", note: "Signed form" },
+    ],
+    notes: [{ id: "note-1", recordId: "cust-1", body: "Discussed renewal", actor: "assistant", created: 30 }],
+  }));
+  expect(items.map(({ key, kind, actor, revision, note }) => ({ key, kind, actor, revision, note }))).toEqual([
+    { key: "n:note-1", kind: "note", actor: "assistant", revision: undefined, note: undefined },
+    { key: "r2", kind: "revision", actor: "Morgan", revision: 2, note: "Signed form" },
+  ]);
+});
+
+test("activity translates the recorded unknown consent state", () => {
+  const t = (value) => ({
+    Email: "電郵",
+    unknown: "未知",
+    "{channel} consent recorded as {state}": "{channel}：{state}",
+  })[value] ?? value;
+  const [item] = profile.activityItems(record({
+    history: [{ revision: 1, digest: DIGEST, actor: "operator", at: 10 }],
+    consentHistory: [{ revision: 1, channel: "email", state: "unknown", actor: "operator", at: 10 }],
+  }), t);
+  expect(item.text).toContain("電郵：未知");
+});

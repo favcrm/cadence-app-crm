@@ -297,7 +297,9 @@ export interface ActivityItem {
   text: string;
   note?: string;
   at: number;
-  agent: boolean;
+  kind: "note" | "revision";
+  actor: string;
+  revision?: number;
 }
 
 /** Plain-language timeline, newest first. Ids and digests stay in Details.
@@ -331,20 +333,21 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
             : t("{channel} consent granted ({method})").replace("{channel}", () => channel).replace("{method}", () => method)
           : c.state === "denied"
             ? t("{channel} consent withdrawn").replace("{channel}", () => channel)
-            : t("{channel} consent recorded as {state}").replace("{channel}", () => channel).replace("{state}", () => c.state);
+            : t("{channel} consent recorded as {state}").replace("{channel}", () => channel).replace("{state}", () => t(c.state));
       });
       const who = rev.actor === "operator" ? t("the operator") : rev.actor;
       const lead = rev.revision === 1 ? t("Created") : parts.length === 0 ? t("Profile edited") : "";
       const text = [lead, ...parts].filter(Boolean).join(" · ") + ` ${t("by {who}").replace("{who}", () => who)}`;
       const note = here.find((c) => c.note)?.note;
-      return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), at: rev.at, agent: rev.actor !== "operator" };
+      return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), at: rev.at, kind: "revision" as const, actor: rev.actor, revision: rev.revision };
     })
     .reverse();
   const notes: ActivityItem[] = (record.notes ?? []).map((note) => ({
     key: `n:${note.id}`,
     text: `${t("Note")}: ${note.body}`,
     at: note.created,
-    agent: note.actor !== "operator",
+    kind: "note",
+    actor: note.actor,
   }));
   return [...notes, ...revisions].sort((a, b) => b.at - a.at);
 }
