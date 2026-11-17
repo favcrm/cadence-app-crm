@@ -95,9 +95,21 @@ export function inertHtml(raw: string) {
   }
   return template.innerHTML;
 }
+function pagedHistory<T extends LocalRecord>(record: T, cursor: unknown) {
+  const ordered = [...record.history].reverse();
+  const anchor = typeof cursor === "string" ? parseInt(cursor, 16) : null;
+  if (anchor !== null && !ordered.some((entry) => entry.revision === anchor)) {
+    throw new ApiError("That local history cursor is not available.", 400, { code: "invalid_cursor" });
+  }
+  const older = anchor === null ? ordered : ordered.filter((entry) => entry.revision < anchor);
+  const history = older.slice(0, 20);
+  const truncated = older.length > history.length;
+  return { ...record, history, history_truncated: truncated,
+    ...(truncated ? { history_next_cursor: history.at(-1)!.revision.toString(16).padStart(32, "0") } : {}) };
+}
+
 /** The same contract shape the paired host serves: recorded facts only.
  *  `next_decision` is never serialized — the app derives it. */
-
 export function fixtureCall(verb: string, args: Record<string, unknown>): unknown {
   switch (verb) {
     case "records.list": {
@@ -116,16 +128,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const visible = recordAccess === "read" || recordAccess === "write"
         ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
       if (params.get("history") === "paged" && record.id === "ada") {
-        const ordered = [...record.history].reverse();
-        const anchor = typeof args.history_cursor === "string" ? parseInt(args.history_cursor, 16) : null;
-        if (anchor !== null && !ordered.some((entry) => entry.revision === anchor)) {
-          throw new ApiError("That local history cursor is not available.", 400, { code: "invalid_cursor" });
-        }
-        const older = anchor === null ? ordered : ordered.filter((entry) => entry.revision < anchor);
-        const history = older.slice(0, 20);
-        const truncated = older.length > history.length;
-        return { record: { ...visible, history, history_truncated: truncated,
-          ...(truncated ? { history_next_cursor: history.at(-1)!.revision.toString(16).padStart(32, "0") } : {}) } };
+        return { record: pagedHistory(visible, args.history_cursor) };
       }
       return { record: params.get("history") === "truncated" ? { ...visible, history_truncated: true } : visible };
     }
@@ -165,7 +168,9 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       if (hostAssigned) ownedRecordIds.add(recordId);
       changed(existing ? "Customer updated locally." : "Customer created locally.");
       if (verb === "records.create" && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
-      return { record };
+      const visible = recordAccess === "read" || recordAccess === "write"
+        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
+      return { record: params.get("history") === "paged" && record.id === "ada" ? pagedHistory(visible, undefined) : visible };
     }
     case "segments.list": return { segments };
     case "segments.show": return { segment: segments.find(s => s.id === args.segment_id) ?? missing() };
