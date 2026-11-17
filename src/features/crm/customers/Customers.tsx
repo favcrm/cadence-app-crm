@@ -1146,8 +1146,10 @@ function CustomerWorkspace({
           {
             id: "activity",
             label: t("Activity"),
-            panel:
-              timeline.length > 0 ? (
+            panel: (
+              <>
+                {record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
+                {timeline.length > 0 ? (
                 <ol className="crm-timeline" aria-label={t("Activity")}>
                   {timeline.map((item) => (
                     <li key={item.key}>
@@ -1162,8 +1164,10 @@ function CustomerWorkspace({
                   ))}
                 </ol>
               ) : (
-                <p className="text-secondary text-ink-400">{t("No activity recorded yet.")}</p>
-              ),
+                  <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+                )}
+              </>
+            ),
           },
           {
             id: "details",
