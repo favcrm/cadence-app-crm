@@ -816,4 +816,5 @@ export const zhTW: Record<string, string> = {
   "Choose a valid field type": "請選擇有效的欄位類型",
   "Earlier activity may not be shown when customer access is enabled.": "啟用客戶存取控制後，較早的活動記錄可能不會顯示。",
   "No visible activity.": "沒有可顯示的活動記錄。",
+  "Shows profile changes and available notes only.": "只顯示資料變更及可用的備註。",
 };

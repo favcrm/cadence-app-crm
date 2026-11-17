@@ -1148,6 +1148,7 @@ function CustomerWorkspace({
             label: t("Activity"),
             panel: (
               <>
+                <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
                 {record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
                 {timeline.length > 0 ? (
                 <ol className="crm-timeline" aria-label={t("Activity")}>
