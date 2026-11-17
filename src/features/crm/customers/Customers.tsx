@@ -1062,6 +1062,22 @@ function CustomerWorkspace({
                   <p>{activity.text}</p>
                 </section>
                 {activity.note && <section><h4>{t("Note")}</h4><p>{activity.note}</p></section>}
+                {activity.changes && activity.changes.length > 0 && (
+                  <section aria-label={t("Changed fields")}>
+                    <h4>{t("Changed fields")}</h4>
+                    <ul className="customer-changes">
+                      {activity.changes.map((change) => (
+                        <li key={change.field}>
+                          <h5>{change.field}</h5>
+                          <dl>
+                            <div><dt>{t("Before")}</dt><dd>{change.before}</dd></div>
+                            <div><dt>{t("After")}</dt><dd>{change.after}</dd></div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
                 <Detail className="crm-detail" label={t("Activity details")} items={[
                   { key: "type", term: t("Type"), value: t(activity.kind === "note" ? "Note" : "Record change") },
                   { key: "actor", term: t("Recorded by"), value: activity.actor === "operator" ? t("the operator") : (activity.actor || t("Not recorded")) },

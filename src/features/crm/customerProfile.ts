@@ -291,6 +291,54 @@ export interface ActivityItem {
   kind: "note" | "revision";
   actor: string;
   revision?: number;
+  changes?: { field: string; before: string; after: string }[];
+}
+
+/** Compare only fields the current profile and both journal snapshots actually expose. */
+function activityChanges(before: unknown, after: unknown, current: unknown, t: Translate): NonNullable<ActivityItem["changes"]> {
+  const object = (value: unknown): Record<string, unknown> | null =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
+  const previous = object(before);
+  const next = object(after);
+  const visible = object(current);
+  if (!previous || !next || !visible) return [];
+  const changes: NonNullable<ActivityItem["changes"]> = [];
+  const add = (field: string, left: string | undefined, right: string | undefined) => {
+    if (left !== undefined && right !== undefined && left !== right) {
+      changes.push({ field: t(field), before: left, after: right });
+    }
+  };
+  const text = (value: unknown): string | undefined =>
+    value === null || value === "" ? t("Not provided") : typeof value === "string" ? value : undefined;
+  for (const [key, label] of [["display_name", "Display name"], ["email", "Email"], ["phone", "Phone"]] as const) {
+    if (Object.hasOwn(visible, key) && Object.hasOwn(previous, key) && Object.hasOwn(next, key)) {
+      add(label, text(previous[key]), text(next[key]));
+    }
+  }
+  const tags = (value: unknown): string | undefined =>
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+      ? value.length === 0 ? t("Not provided") : value.join(", ")
+      : undefined;
+  if (Object.hasOwn(visible, "tags") && Object.hasOwn(previous, "tags") && Object.hasOwn(next, "tags")) {
+    add("Tags", tags(previous.tags), tags(next.tags));
+  }
+  const visibleConsent = object(visible.consent);
+  const previousConsent = object(previous.consent);
+  const nextConsent = object(next.consent);
+  const consent = (value: unknown): string | undefined =>
+    value === null || value === "unknown" || value === "granted" || value === "denied"
+      ? consentLabel(value, t)
+      : undefined;
+  if (visibleConsent && previousConsent && nextConsent) {
+    for (const [channel, label] of [["email", "Email marketing"], ["sms", "SMS marketing"]] as const) {
+      if (Object.hasOwn(visibleConsent, channel) && Object.hasOwn(previousConsent, channel) && Object.hasOwn(nextConsent, channel)) {
+        add(label, consent(previousConsent[channel]), consent(nextConsent[channel]));
+      }
+    }
+  }
+  return changes;
 }
 
 /** Plain-language timeline, newest first. Ids and digests stay in Details.
@@ -298,6 +346,16 @@ export interface ActivityItem {
  *  literally), so word order can change per locale. English is unchanged. */
 export function activityItems(record: HostRecord, t: Translate = identity): ActivityItem[] {
   const consent = consentEntries(record);
+  const changesByRevision = new Map<number, NonNullable<ActivityItem["changes"]>>();
+  if (Array.isArray(record.history)) {
+    for (const item of record.history) {
+      if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+      const row = item as Record<string, unknown>;
+      if (typeof row.revision !== "number") continue;
+      const changes = activityChanges(row.before, row.after, record.profile, t);
+      if (changes.length > 0) changesByRevision.set(row.revision, changes);
+    }
+  }
   const revisions = revisionEntries(record)
     .map((rev) => {
       const here = consent.filter((c) => c.revision === rev.revision);
@@ -330,7 +388,8 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
       const lead = rev.revision === 1 ? t("Created") : parts.length === 0 ? t("Profile edited") : "";
       const text = [lead, ...parts].filter(Boolean).join(" · ") + ` ${t("by {who}").replace("{who}", () => who)}`;
       const note = here.find((c) => c.note)?.note;
-      return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), at: rev.at, kind: "revision" as const, actor: rev.actor, revision: rev.revision };
+      const changes = changesByRevision.get(rev.revision);
+      return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), ...(changes ? { changes } : {}), at: rev.at, kind: "revision" as const, actor: rev.actor, revision: rev.revision };
     })
     .reverse();
   const notes: ActivityItem[] = (record.notes ?? []).map((note) => ({

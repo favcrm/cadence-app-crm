@@ -11,8 +11,8 @@ export const fixtureActions = [
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
 ];
-type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
-type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
+type Profile = { schema: number; display_name: string; email?: string | null; phone?: string | null; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
+type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number; before: Profile | null; after: Profile }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
 type Content = { draft_audience_full?: unknown; campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
@@ -20,7 +20,7 @@ const records: LocalRecord[] = [
   { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
-].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
 const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };
@@ -113,7 +113,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       } as Profile;
       const revision = (existing?.revision ?? 0) + 1;
       const at = Math.floor(Date.now() / 1000);
-      const history = [...(existing?.history ?? []), { revision, digest: fixtureDigest, actor: "local-preview", at }];
+      const history = [...(existing?.history ?? []), { revision, digest: fixtureDigest, actor: "local-preview", at, before: existing ? structuredClone(existing.profile) : null, after: structuredClone(profile) }];
       const consent_history = [...(existing?.consent_history ?? [])];
       const provenance = args.consent_provenance as { method?: string; note?: string } | undefined;
       for (const channel of ["email", "sms"] as const) if (profile.consent[channel] !== existing?.profile.consent[channel]) consent_history.push({ revision, channel, state: profile.consent[channel], actor: "local-preview", at, ...(typeof provenance?.method === "string" ? { method: provenance.method } : {}), ...(typeof provenance?.note === "string" ? { note: provenance.note } : {}) });

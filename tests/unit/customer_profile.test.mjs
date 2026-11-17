@@ -192,3 +192,59 @@ test("activity translates the recorded unknown consent state", () => {
   }), t);
   expect(item.text).toContain("電郵：未知");
 });
+
+test("activity details show recorded field changes without exposing other fields", () => {
+  const before = {
+    display_name: "Ada",
+    email: "old@example.test",
+    phone: null,
+    tags: ["vip"],
+    consent: { email: "unknown", sms: "unknown" },
+    source: "private-source",
+    internal_note: "private-note",
+  };
+  const after = {
+    ...before,
+    phone: "+1 202 555 0126",
+    tags: ["vip", "renewal"],
+    consent: { email: "granted", sms: "unknown" },
+  };
+  const [item] = profile.activityItems(record({
+    profile: after,
+    history: [{ revision: 2, digest: DIGEST, actor: "Morgan", at: 20, before, after }],
+  }));
+  expect(item.changes).toEqual([
+    { field: "Phone", before: "Not provided", after: "+1 202 555 0126" },
+    { field: "Tags", before: "vip", after: "vip, renewal" },
+    { field: "Email marketing", before: "Unknown", after: "Granted" },
+  ]);
+  expect(JSON.stringify(item)).not.toContain("private-source");
+  expect(JSON.stringify(item)).not.toContain("private-note");
+});
+
+test("activity does not infer a change when one side was not returned", () => {
+  const [missingBefore] = profile.activityItems(record({
+    profile: { display_name: "Ada", phone: "+1 202 555 0126" },
+    history: [{
+      revision: 2,
+      digest: DIGEST,
+      actor: "Morgan",
+      at: 20,
+      before: { display_name: "Ada" },
+      after: { display_name: "Ada", phone: "+1 202 555 0126" },
+    }],
+  }));
+  expect(missingBefore.changes ?? []).toEqual([]);
+  const [hiddenNow] = profile.activityItems(record({
+    profile: { display_name: "Ada" },
+    history: [{
+      revision: 2,
+      digest: DIGEST,
+      actor: "Morgan",
+      at: 20,
+      before: { phone: null },
+      after: { phone: "+1 202 555 0126" },
+    }],
+  }));
+  expect(hiddenNow.changes ?? []).toEqual([]);
+});

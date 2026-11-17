@@ -98,9 +98,10 @@ process; do not edit `node_modules` or copy primitives into the preview.
 ## Detail drawers
 
 Customer records open as full pages in the CRM outlet; profile and consent
-edits and individual activity details use the in-frame drawer. Segment
-details continue to open in that drawer. The shared `DrawerShell` spans the
-frame height, with a frame-wide scrim and a width of `min(30rem, 100vw)`;
+edits and individual activity details use the in-frame drawer. A recorded
+profile edit shows available before/after values for supported fields.
+Segment details continue to open in that drawer. The shared `DrawerShell` spans
+the frame height, with a frame-wide scrim and a width of `min(30rem, 100vw)`;
 only its body scrolls. While open, Tab stays inside and Escape or the close
 control dismisses it. Opening a customer sets the record route, so direct
 routes and Back work. CRM sends no host drawer request.

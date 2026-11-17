@@ -240,6 +240,9 @@ validates these server-side, so browser shaping is not authority. The
 customer timeline uses an explicit `consent_history` when present and
 otherwise projects the generic before/after journal (with reported
 provenance), because the host reports no derived consent semantics.
+The activity drawer shows changed customer fields only when the current
+profile and both journal snapshots contain them. Missing or withheld values
+are not inferred; the host remains responsible for authorizing history.
 `record_search_columns` names the text/json columns the host generic
 search may use — `display_name`, `email`, `tags`, `phone` and `source` —
 so tag-only queries do not silently become name-only queries; the host

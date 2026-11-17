@@ -391,6 +391,12 @@ button.chip:focus-visible {
 }
 .customer-activity-details { display: grid; gap: 1.25rem; }
 .customer-activity-details p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.customer-changes { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-ink-700); }
+.customer-changes li { padding: 0.75rem 0; border-bottom: 1px solid var(--color-ink-700); }
+.customer-changes h5 { margin: 0 0 0.5rem; font-size: var(--text-label); font-weight: 500; }
+.customer-changes dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin: 0; }
+.customer-changes dt { color: var(--color-ink-400); font-size: var(--text-micro); }
+.customer-changes dd { margin: 0.25rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 @container (max-width: 42rem) {
   .customer-workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }
