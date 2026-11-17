@@ -1,13 +1,14 @@
 import { beforeAll, expect, mock, test } from "bun:test";
-import { sdkMock } from "../support/sdk-mock.mjs";
+import { ApiError, sdkMock } from "../support/sdk-mock.mjs";
 
 mock.module("@cadence/screen-ui", sdkMock);
 
-let parseRecord;
-let canEditCustomer;
+let parseRecord, parseRecordList;
+let canEditCustomer, isDefiniteCreateRefusal;
 beforeAll(async () => {
-  ({ parseRecord } = await import("../../src/features/crm/hostActions.ts"));
+  ({ parseRecord, parseRecordList } = await import("../../src/features/crm/hostActions.ts"));
   ({ canEditCustomer } = await import("../../src/features/crm/viewer.ts"));
+  ({ isDefiniteCreateRefusal } = await import("../../src/features/crm/hostErrors.ts"));
 });
 
 const receipt = (recordAccess) => ({
@@ -35,4 +36,19 @@ test("malformed record access decisions fail closed", () => {
   for (const access of [null, {}, { can_write: "true" }, { can_write: 1 }, []]) {
     expect(() => parseRecord(receipt(access))).toThrow();
   }
+});
+
+test("create ID negotiation accepts only the host-assigned policy", () => {
+  expect(parseRecordList({ records: [] }).hostAssignedCreateId).toBe(false);
+  expect(parseRecordList({ records: [], record_access: { create_id: "host" } }).hostAssignedCreateId).toBe(true);
+  for (const access of [null, {}, { create_id: "client" }, { create_id: true }, []]) {
+    expect(() => parseRecordList({ records: [], record_access: access })).toThrow();
+  }
+});
+
+test("only explicit pre-write refusals permit retrying a host-assigned create", () => {
+  expect(isDefiniteCreateRefusal(new ApiError("Invalid", 400, { code: "validation_failed" }))).toBe(true);
+  expect(isDefiniteCreateRefusal(new ApiError("Unknown outcome", 400, { code: "outcome_uncertain" }))).toBe(false);
+  expect(isDefiniteCreateRefusal(new ApiError("Unavailable", 400, { code: "storage_unavailable" }))).toBe(false);
+  expect(isDefiniteCreateRefusal(new TypeError("network failed"))).toBe(false);
 });

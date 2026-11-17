@@ -23,6 +23,7 @@ type ConsentSetting,
 type CustomerFormFields,
 } from "../customerProfile";
 import { QueryRefresh,useCrmQuery } from "../resources";
+import { isDefiniteCreateRefusal } from "../hostErrors";
 import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
@@ -796,9 +797,12 @@ function CustomerNew({
 }) {
   const { t } = useLocale();
   const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
+  const creationPolicy = useCrmQuery(scope, "records.list", { limit: 1 }, parseRecordList);
+  const hostAssignedCreateId = creationPolicy.data?.hostAssignedCreateId ?? null;
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [creationUncertain, setCreationUncertain] = useState(false);
   // Keyboard users land on the heading when the route changes.
   useEffect(() => {
     headRef.current?.focus();
@@ -817,6 +821,14 @@ function CustomerNew({
         <Notice className="mt-2" state="read-only">
           {t("Creating customers is unavailable.")}
         </Notice>
+      ) : creationUncertain ? (
+        <Notice>
+          {t("Creation could not be confirmed. Check the customer list before trying again.")}
+        </Notice>
+      ) : hostAssignedCreateId === null && creationPolicy.error !== null ? (
+        <ErrorNotice onRetry={() => void creationPolicy.store.refresh()}>{creationPolicy.error}</ErrorNotice>
+      ) : hostAssignedCreateId === null ? (
+        <Loading>{t("Checking customer creation…")}</Loading>
       ) : (
         <div className="mt-2">
           <CustomerForm
@@ -837,9 +849,12 @@ function CustomerNew({
                 return;
               }
               void hostActions
-                .create(scope, newCustomerId(), profile, provenance ?? undefined)
+                .create(scope, hostAssignedCreateId ? null : newCustomerId(), profile, provenance ?? undefined)
                 .then((record) => onCreated(record.id))
-                .catch((e: unknown) => setFormError(friendlyError(e)))
+                .catch((e: unknown) => {
+                  if (hostAssignedCreateId && !isDefiniteCreateRefusal(e)) setCreationUncertain(true);
+                  else setFormError(friendlyError(e));
+                })
                 .finally(() => setPending(false));
             }}
           />

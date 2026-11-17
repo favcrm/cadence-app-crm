@@ -21,6 +21,7 @@ const records: LocalRecord[] = [
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
 ].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
 const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };
@@ -36,7 +37,8 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  older board that cannot. `?sends=sending|sent|partial|uncertain` seeds one
  *  READ-ONLY send row so the status chip and result view can be seen. No send,
  *  approval or test is ever simulated: slots stay refused. `?access=read`
- *  or `?access=write` shows the host's per-record edit decision. */
+ *  or `?access=write` shows the host's per-record edit decision. With either,
+ *  `?create=uncertain` simulates a lost response after creating a fixture. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
 const keepsAudience = params.get("board") === "audience";
 const seededSend = params.get("sends");
@@ -95,18 +97,22 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
       const page = rows.slice(start, start + limit);
       const truncated = start + page.length < rows.length;
-      return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
+      return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null,
+        ...(recordAccess === "read" || recordAccess === "write" ? { record_access: { create_id: "host" } } : {}) };
     }
     case "records.show": {
       const record = records.find(r => r.id === args.record_id) ?? missing();
       return { record: recordAccess === "read" || recordAccess === "write"
-        ? { ...record, record_access: { can_write: recordAccess === "write" } } : record };
+        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record };
     }
     case "records.create":
     case "records.update": {
-      if (verb === "records.update" && recordAccess === "read") throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
-      requireId(args.record_id);
-      const existing = records.find(r => r.id === args.record_id);
+      if (verb === "records.update" && recordAccess === "read" && (typeof args.record_id !== "string" || !ownedRecordIds.has(args.record_id))) throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
+      const hostAssigned = verb === "records.create" && (recordAccess === "read" || recordAccess === "write");
+      if (hostAssigned && args.record_id !== undefined) throw new ApiError("The host assigns this customer ID.", 400, { code: "invalid_body" });
+      const recordId = hostAssigned ? `mem_${crypto.randomUUID().replaceAll("-", "")}` : args.record_id;
+      requireId(recordId);
+      const existing = records.find(r => r.id === recordId);
       if (verb === "records.create" && existing) throw new ApiError("That local customer already exists.", 409, { code: "conflict" });
       if (verb === "records.update" && !existing) missing();
       requireRevision(existing, args.expected_revision);
@@ -124,9 +130,11 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const consent_history = [...(existing?.consent_history ?? [])];
       const provenance = args.consent_provenance as { method?: string; note?: string } | undefined;
       for (const channel of ["email", "sms"] as const) if (profile.consent[channel] !== existing?.profile.consent[channel]) consent_history.push({ revision, channel, state: profile.consent[channel], actor: "local-preview", at, ...(typeof provenance?.method === "string" ? { method: provenance.method } : {}), ...(typeof provenance?.note === "string" ? { note: provenance.note } : {}) });
-      const record = { id: args.record_id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision, digest: fixtureDigest, profile, history, consent_history };
+      const record = { id: recordId, install_id: fixtureInstallId, context_id: "", kind: "customer", revision, digest: fixtureDigest, profile, history, consent_history };
       if (existing) records.splice(records.indexOf(existing), 1, record); else records.push(record);
+      if (hostAssigned) ownedRecordIds.add(recordId);
       changed(existing ? "Customer updated locally." : "Customer created locally.");
+      if (hostAssigned && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
       return { record };
     }
     case "segments.list": return { segments };

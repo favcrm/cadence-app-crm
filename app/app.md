@@ -171,6 +171,10 @@ On hosts with customer-level access, `records.show` may include
 customer, even if the app declares `records.update`. Permissions can change;
 the host rechecks them on every write. Older unprotected hosts omit the field.
 
+For a protected table, `records.list` reports `record_access.create_id: "host"`;
+the screen then omits `record_id` on create. If the result is uncertain, check
+the customer list before trying again. This capability does not grant access.
+
 In particular, do not assume `customers.notes.*` is callable through hosted
 `app_call` merely because `app-assistant.json` declares it. Use only operations
 the host advertises; a record update is not a substitute for logging a note.

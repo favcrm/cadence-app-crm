@@ -33,6 +33,7 @@ export interface ListReceipt {
   total: number | null;
   truncated: boolean;
   nextCursor: string | null;
+  hostAssignedCreateId: boolean;
 }
 
 /** One record row as the daemon returns it: identity plus profile. */
@@ -164,8 +165,13 @@ export function parseRecord(value: unknown): HostRecord {
 }
 
 export function parseRecordList(value: unknown): ListReceipt {
-  const page = value as { records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown } | null;
+  const page = value as { records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown; record_access?: unknown } | null;
   if (!Array.isArray(page?.records)) throw new ApiError("The server returned an invalid app receipt", 502);
+  const access = page.record_access;
+  if (Object.hasOwn(page, "record_access") && (
+    access === null || typeof access !== "object" || Array.isArray(access) ||
+    (access as Record<string, unknown>).create_id !== "host"
+  )) throw new ApiError("The server returned an invalid customer creation policy", 502);
   const total = typeof page.total === "number" && Number.isSafeInteger(page.total) && page.total >= page.records.length
     ? page.total : null;
   return {
@@ -173,6 +179,7 @@ export function parseRecordList(value: unknown): ListReceipt {
     total,
     truncated: page.truncated === true,
     nextCursor: typeof page.next_cursor === "string" ? page.next_cursor : null,
+    hostAssignedCreateId: access !== undefined,
   };
 }
 
@@ -211,16 +218,15 @@ export const hostActions = {
     assertRecordId(recordId);
     return parseRecord(await serviceCall<unknown>(scope, "records.show", { record_id: recordId }));
   },
-  /** `POST …/records` — body is `{record_id, profile}` plus optional
-   *  `consent_provenance` when the new customer is created Granted. */
+  /** On supporting hosts the record ID is allocated by the host. */
   async create(
     scope: HostScope,
-    recordId: string,
+    recordId: string | null,
     profile: unknown,
     consentProvenance?: ConsentProvenance,
   ): Promise<HostRecord> {
-    assertRecordId(recordId);
-    const body: Record<string, unknown> = { record_id: recordId, profile };
+    if (recordId !== null) assertRecordId(recordId);
+    const body: Record<string, unknown> = { ...(recordId === null ? {} : { record_id: recordId }), profile };
     if (consentProvenance !== undefined) body.consent_provenance = consentProvenance;
     assertCleanBody(body, CREATE_KEYS);
     return parseRecord(await serviceCall<unknown>(scope, "records.create", body));

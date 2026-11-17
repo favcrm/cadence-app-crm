@@ -8,7 +8,7 @@ export type Base = { mode: "all" } | { mode: "segment"; segment_id: string } | {
 export interface CallArgs {
   "records.list": { query?: string; limit?: number; cursor?: string };
   "records.show": { record_id: string };
-  "records.create": { record_id: string; profile: unknown; consent_provenance?: unknown };
+  "records.create": { record_id?: string; profile: unknown; consent_provenance?: unknown };
   "records.update": { record_id: string; expected_revision: number; profile: unknown; consent_provenance?: unknown };
   "records.csv.preview": { csv_text: string };
   "segments.list": Bag; "segments.show": { segment_id: string };

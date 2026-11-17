@@ -37,6 +37,8 @@ export const zhTW: Record<string, string> = {
   "Customer details": "客戶資料",
   "You do not have access to customer records.": "你沒有權限查看客戶記錄。",
   "Creating customers is unavailable.": "你目前無法新增客戶。",
+  "Checking customer creation…": "正在確認新增客戶的權限…",
+  "Creation could not be confirmed. Check the customer list before trying again.": "無法確認是否已新增客戶。請先查看客戶清單，再決定是否重試。",
   "You can view this customer, but cannot edit it.": "你可以查看此客戶，但無法編輯。",
   "Create segment": "建立客群",
   "New segment": "新增客群",
