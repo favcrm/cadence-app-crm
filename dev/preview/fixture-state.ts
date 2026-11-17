@@ -1,5 +1,6 @@
 import { ApiError } from "@cadence/screen-ui";
 import { buildCustomerProfile, formFromProfile, readCustomerContacts, type CustomerContact } from "../../src/features/crm/customerProfile";
+import { readCustomerCustomFields, type CustomerCustomFields } from "../../src/features/crm/customerCustomFields";
 import { checkPredicate, checkSegmentName } from "../../src/features/crm/segmentGrammar";
 import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, type CampaignBlock } from "../../src/features/crm/campaignGrammar";
 
@@ -11,7 +12,7 @@ export const fixtureActions = [
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
 ];
-type Profile = { schema: number; display_name: string; email?: string | null; phone?: string | null; customer_type?: "person" | "organization" | null; website?: string | null; contacts: CustomerContact[]; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
+type Profile = { schema: number; display_name: string; email?: string | null; phone?: string | null; customer_type?: "person" | "organization" | null; website?: string | null; contacts: CustomerContact[]; custom_fields: CustomerCustomFields; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
 type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number; before: Profile | null; after: Profile }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
@@ -20,7 +21,7 @@ const records: LocalRecord[] = [
   { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
-].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, contacts: row.id === "ada" ? [{ name: "Alex Demo", title: "Operations", email: "alex@example.invalid", phone: null }] : [], tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, contacts: row.id === "ada" ? [{ name: "Alex Demo", title: "Operations", email: "alex@example.invalid", phone: null }] : [], custom_fields: (row.id === "ada" ? { customer_segment: { label: "Customer segment", type: "text", value: "Local fixture" } } : {}) as CustomerCustomFields, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
 const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
@@ -122,9 +123,12 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const source = Object.hasOwn(patch, "source") ? patch.source : existing?.profile.source;
       const contacts = readCustomerContacts({ contacts: Object.hasOwn(patch, "contacts") ? patch.contacts : existing?.profile.contacts ?? [] });
       if (contacts === null) throw new ApiError("Invalid fixture contacts.", 400, { code: "validation_failed" });
+      const customFields = readCustomerCustomFields({ custom_fields: Object.hasOwn(patch, "custom_fields") ? patch.custom_fields : existing?.profile.custom_fields ?? {} });
+      if (customFields === null) throw new ApiError("Invalid fixture custom fields.", 400, { code: "validation_failed" });
       const profile = {
         ...buildCustomerProfile(formFromProfile({ ...existing?.profile, ...patch })),
         contacts,
+        custom_fields: customFields,
         ...(source === undefined ? {} : { source }),
       } as Profile;
       const revision = (existing?.revision ?? 0) + 1;

@@ -25,6 +25,7 @@ type ConsentSetting,
 type CustomerContactFields,
 type CustomerFormFields,
 } from "../customerProfile";
+import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
 import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
@@ -841,6 +842,76 @@ function ContactForm({
   );
 }
 
+const CUSTOM_FIELD_TYPES: { value: CustomerCustomFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "boolean", label: "Yes or no" },
+  { value: "date", label: "Date" },
+];
+
+function CustomFieldForm({
+  initial, editing, pending, formError, onSubmit, onRemove,
+}: {
+  initial: CustomerCustomFieldForm;
+  editing: boolean;
+  pending: boolean;
+  formError: string | null;
+  onSubmit: (fields: CustomerCustomFieldForm) => void;
+  onRemove?: () => void;
+}) {
+  const { t } = useLocale();
+  const [fields, setFields] = useState(initial);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const set = (patch: Partial<CustomerCustomFieldForm>) => setFields((current) => ({ ...current, ...patch }));
+  return (
+    <form id="crm-customer-custom-field" className="grid gap-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) onSubmit(fields);
+    }}>
+      <Field label={t("Field label")} id="crm-custom-label" required className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.label} onChange={(event) => set({ label: event.target.value })} maxLength={80} autoComplete="off" />}
+      </Field>
+      <Field label={t("Field key")} id="crm-custom-key" required hint={t("Stable identifier used by agents")} className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.key} onChange={(event) => set({ key: event.target.value })} disabled={editing} maxLength={40} autoComplete="off" placeholder="renewal_date" />}
+      </Field>
+      {editing ? (
+        <p className="text-micro text-ink-500">{t("Type")}: {t(CUSTOM_FIELD_TYPES.find((option) => option.value === fields.type)?.label ?? "Text")}</p>
+      ) : (
+        <Field label={t("Type")} id="crm-custom-type" className="crm-field">
+          {(c) => <Select id={c.id} aria-label={t("Type")} value={fields.type} full
+            onChange={(value) => {
+              if (CUSTOM_FIELD_TYPES.some((option) => option.value === value))
+                set({ type: value as CustomerCustomFieldType, value: "" });
+            }}
+            options={CUSTOM_FIELD_TYPES.map((option) => ({ ...option, label: t(option.label) }))} />}
+        </Field>
+      )}
+      <Field label={t("Value")} id="crm-custom-value" className="crm-field">
+        {(c) => fields.type === "boolean" ? (
+          <Select id={c.id} aria-label={t("Value")} value={fields.value} full
+            onChange={(value) => set({ value })}
+            options={[{ value: "", label: t("Choose") }, { value: "true", label: t("Yes") }, { value: "false", label: t("No") }]} />
+        ) : (
+          <input {...c} className="field" type={fields.type === "date" ? "date" : "text"}
+            inputMode={fields.type === "number" ? "decimal" : undefined} value={fields.value}
+            onChange={(event) => set({ value: event.target.value })} maxLength={fields.type === "text" ? 1000 : undefined} autoComplete="off" />
+        )}
+      </Field>
+      <p className="text-micro text-ink-500">{t("Custom fields share this customer's access. Use consistent keys across your team.")}</p>
+      {formError && <ErrorNotice bare>{formError}</ErrorNotice>}
+      {onRemove && (confirmRemove ? (
+        <div className="customer-remove-confirm">
+          <p>{t("Remove this field from the customer?")}</p>
+          <Button type="button" size="sm" disabled={pending} onClick={onRemove}>{t("Confirm removal")}</Button>
+          <Button type="button" size="sm" disabled={pending} onClick={() => setConfirmRemove(false)}>{t("Keep field")}</Button>
+        </div>
+      ) : (
+        <div><button type="button" className="lnk" disabled={pending} onClick={() => setConfirmRemove(true)}>{t("Remove field")}</button></div>
+      ))}
+    </form>
+  );
+}
+
 function CustomerNew({
   scope,
   viewer,
@@ -939,9 +1010,10 @@ function CustomerWorkspace({
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
   const canWrite = canEditCustomer(viewer, queryState.data);
-  const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact">("view");
+  const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact" | "custom">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
   const [contactIndex, setContactIndex] = useState<number | null>(null);
+  const [customKey, setCustomKey] = useState<string | null>(null);
   const record = mode === "view" ? queryState.data : editRecord;
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -949,6 +1021,7 @@ function CustomerWorkspace({
 
   const view = record ? viewProfile(record.profile) : null;
   const contacts = record ? readCustomerContacts(record.profile) : null;
+  const customFields = record ? readCustomerCustomFields(record.profile) : null;
   const timeline = record ? activityItems(record, t) : [];
 
   const initials = view
@@ -962,6 +1035,12 @@ function CustomerWorkspace({
     setContactIndex(index);
     setFormError(null);
     setMode("contact");
+  };
+  const openCustomField = (key: string | null) => {
+    setEditRecord(record);
+    setCustomKey(key);
+    setFormError(null);
+    setMode("custom");
   };
   const when = (at: number, withTime = false) => {
     const time = at * 1000;
@@ -1013,6 +1092,32 @@ function CustomerWorkspace({
                             {contact.phone && <p className="num">{contact.phone}</p>}
                           </div>
                           {canWrite && <Button size="sm" aria-label={`${t("Edit contact")} ${contact.name}`} onClick={() => openContact(index)}>{t("Edit")}</Button>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+                <section className="crm-sect" aria-label={t("Custom fields")}>
+                  <div className="customer-section-heading">
+                    <h4>{t("Custom fields")}</h4>
+                    {canWrite && customFields !== null && Object.keys(customFields).length < 64 && (
+                      <Button size="sm" onClick={() => openCustomField(null)}>{t("Add field")}</Button>
+                    )}
+                  </div>
+                  {customFields === null ? (
+                    <p className="text-secondary text-ink-400">{t("Custom fields are unavailable for this record.")}</p>
+                  ) : Object.keys(customFields).length === 0 ? (
+                    <p className="text-secondary text-ink-400">{t("No custom fields recorded yet.")}</p>
+                  ) : (
+                    <ul className="customer-contacts">
+                      {Object.entries(customFields).map(([key, field]) => (
+                        <li key={key}>
+                          <div>
+                            <strong>{field.label}</strong>
+                            <p>{field.type === "boolean" ? t(field.value ? "Yes" : "No") : String(field.value)}</p>
+                            <p className="num">{key}</p>
+                          </div>
+                          {canWrite && <Button size="sm" aria-label={`${t("Edit field")} ${field.label}`} onClick={() => openCustomField(key)}>{t("Edit")}</Button>}
                         </li>
                       ))}
                     </ul>
@@ -1183,7 +1288,7 @@ function CustomerWorkspace({
                   />
                 ),
               }
-            : {
+            : mode === "contact" ? {
                 formId: "crm-customer-contact",
                 title: t(contactIndex === null ? "Add contact" : "Edit contact"),
                 saveLabel: t("Save contact"),
@@ -1211,6 +1316,41 @@ function CustomerWorkspace({
                     {...(contactIndex === null ? {} : { onRemove: () => {
                       try {
                         save(changeCustomerContacts(contacts, contactIndex, null));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    } })}
+                  />
+                ),
+              }
+            : {
+                formId: "crm-customer-custom-field",
+                title: t(customKey === null ? "Add field" : "Edit field"),
+                saveLabel: t("Save field"),
+                pending,
+                onCancel: () => setMode("view"),
+                body: customFields === null ? <Notice>{t("Custom fields are unavailable for this record.")}</Notice> : (
+                  <CustomFieldForm
+                    key={`${record.revision}-${customKey ?? "new"}`}
+                    editing={customKey !== null}
+                    initial={{
+                      key: customKey ?? "",
+                      label: customKey === null ? "" : customFields[customKey]?.label ?? "",
+                      type: customKey === null ? "text" : customFields[customKey]?.type ?? "text",
+                      value: customKey === null ? "" : String(customFields[customKey]?.value ?? ""),
+                    }}
+                    pending={pending}
+                    formError={formError}
+                    onSubmit={(fields) => {
+                      try {
+                        save(changeCustomerCustomFields(customFields, customKey, fields));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    }}
+                    {...(customKey === null ? {} : { onRemove: () => {
+                      try {
+                        save(changeCustomerCustomFields(customFields, customKey, null));
                       } catch (e: unknown) {
                         setFormError(friendlyError(e, t));
                       }

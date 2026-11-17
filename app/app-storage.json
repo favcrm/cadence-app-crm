@@ -2,12 +2,13 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 4,
+  "schema_version": 5,
   "compatible_schema_versions": [
     1,
     2,
     3,
-    4
+    4,
+    5
   ],
   "default_table": "customers",
   "migrations": [
@@ -30,6 +31,11 @@
       "version": 4,
       "path": "storage/004-customer-contacts.json",
       "sha256": "sha256:44523af26a6c77f4644b24d3e1ea2d439a529e3fe8200237388e8c6a53b0595c"
+    },
+    {
+      "version": 5,
+      "path": "storage/005-customer-custom-fields.json",
+      "sha256": "sha256:778ed6c96056ce4bc1c93ba5fb06321fbdcd48b13a67bbb1d411e0dad483d5a0"
     }
   ],
   "record_search_columns": ["display_name", "email", "tags", "phone", "source"],

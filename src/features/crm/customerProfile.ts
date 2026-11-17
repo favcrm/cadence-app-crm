@@ -1,6 +1,7 @@
 import { ApiError } from "@cadence/screen-ui";
 import type { ConsentMethod,ConsentProvenance,HostRecord } from "./hostActions";
 import { hostErrorText } from "./hostErrors";
+import { readCustomerCustomFields } from "./customerCustomFields";
 
 /**
  * Allowlisted customer profile shaping for the CRM Customers screens
@@ -448,6 +449,17 @@ function activityChanges(before: unknown, after: unknown, current: unknown, t: T
   };
   if (Object.hasOwn(visible, "contacts") && Object.hasOwn(previous, "contacts") && Object.hasOwn(next, "contacts")) {
     add("Contacts", contactSummary(previous.contacts), contactSummary(next.contacts));
+  }
+  const customSummary = (value: unknown): string | undefined => {
+    const fields = readCustomerCustomFields({ custom_fields: value });
+    if (fields === null) return undefined;
+    const entries = Object.entries(fields).sort(([left], [right]) => left.localeCompare(right));
+    return entries.length === 0
+      ? t("Not provided")
+      : entries.map(([key, field]) => `${field.label} (${key}): ${field.type === "boolean" ? t(field.value ? "Yes" : "No") : String(field.value)}`).join("\n");
+  };
+  if (Object.hasOwn(visible, "custom_fields") && Object.hasOwn(previous, "custom_fields") && Object.hasOwn(next, "custom_fields")) {
+    add("Custom fields", customSummary(previous.custom_fields), customSummary(next.custom_fields));
   }
   const visibleConsent = object(visible.consent);
   const previousConsent = object(previous.consent);

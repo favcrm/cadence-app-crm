@@ -151,8 +151,8 @@ Agent procedure:
 8. `sends.list` and `sends.show` are read-only. This bundle declares no send
    or SMTP action; the final send remains the host operator's guarded action.
 
-Upload is not import or consent. There is no consent inference, no custom
-attributes and no sending from this app.
+Upload is not import or consent. There is no consent inference and no sending
+from this app.
 
 ### Hosted agent tools
 
@@ -189,6 +189,17 @@ preserve the other entries, and submit the complete revised array through
 and phone syntax before proposing them: the host's nested JSON schema enforces
 types and lengths, not email or phone formats. Never infer consent from a
 contact's details.
+
+`custom_fields` is a customer-local object keyed by stable lowercase
+letters/digits/underscores (starting with a letter, at most 40 characters).
+Each value is `{label, type, value}` with `type` equal to `text`, `number`,
+`boolean` or `date`; dates use `YYYY-MM-DD`. To change one, preserve the other
+entries and submit the whole object with the current customer revision. These
+fields share the customer's access. Coordinate keys and types across the team:
+there is no workspace-wide definition registry or cross-customer uniqueness
+policy yet. The host validates value types and bounds, but its generic JSON
+schema does not validate object-key grammar or calendar dates; agents must do so
+before staging a write.
 
 In particular, do not assume `customers.notes.*` is callable through hosted
 `app_call` merely because `app-assistant.json` declares it. Use only operations
@@ -253,8 +264,9 @@ edits omit it so a partial update preserves any stored value. Schema v3 adds
 an optional `customer_type` (`person` or `organization`) and an optional
 website. Both kinds remain customers; a person representing an organization is
 a separate contact, not a second name for that organization. Schema v4 adds a
-bounded `contacts` array to the customer record; its entries inherit the
-customer's visibility. Cross-app links are not implemented by these fields.
+bounded `contacts` array to the customer record; schema v5 adds typed
+`custom_fields`. Both inherit the customer's visibility. Cross-app links are
+not implemented by these fields.
 `campaigns` and `proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The

@@ -47,3 +47,18 @@ test("activity shows contact changes only when the current record and both snaps
   const [hidden] = contacts.activityItems({ ...record, profile: {} });
   expect(hidden.changes ?? []).toEqual([]);
 });
+
+test("activity details show only currently visible structured field changes", () => {
+  const custom_fields = { renewal_date: { label: "Renewal date", type: "date", value: "2027-02-28" } };
+  const history = [{
+    revision: 2, digest: "sha256:" + "a".repeat(64), actor: "Morgan", at: 20,
+    before: { custom_fields: {} }, after: { custom_fields },
+  }];
+  const record = { id: "cust-1", revision: 2, profile: { custom_fields }, history };
+  const [visible] = contacts.activityItems(record);
+  expect(visible.changes).toEqual([{
+    field: "Custom fields", before: "Not provided", after: "Renewal date (renewal_date): 2027-02-28",
+  }]);
+  const [hidden] = contacts.activityItems({ ...record, profile: {} });
+  expect(hidden.changes ?? []).toEqual([]);
+});
