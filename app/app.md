@@ -175,6 +175,12 @@ For a protected table, `records.list` reports `record_access.create_id: "host"`;
 the screen then omits `record_id` on create. If the result is uncertain, check
 the customer list before trying again. This capability does not grant access.
 
+Workspace-visible customers remain readable to callers with the app's existing
+read capability; visibility alone is not permission to write. A private customer
+requires the agent's own live record grant. To update an existing customer, a
+paired agent needs its own write grant, rechecked when an owner approves the
+action; approval does not confer access.
+
 For a protected agent create, omit `record_id` and supply the intended human
 workspace member as `record_owner_id` to `app_call`. The owner reviews the
 request; the host verifies the assignee's current membership. The new customer
