@@ -217,10 +217,10 @@ Schema v1 creates the app tables `customers`, `segments`, `campaigns` and
 `proposals.campaign_id` relation, its index and a `synthetic` flag that
 keeps seeded legacy rows distinguishable. Schema v2 adds persisted,
 nullable `phone` and `source` columns to `customers` plus a
-`customers_phone` index. The accepted customer form already collects both
-values, so they travel through the existing `records.create`/
-`records.update` profile — this release adds no new bridge operation, wire
-field or screen design. `campaigns` and `proposals` declare the host
+`customers_phone` index. The customer form collects phone but leaves
+`source` to authorized platform and agent operations; profile and consent
+edits omit it so a partial update preserves any stored value. `campaigns`
+and `proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The
 host-owned `id`, `context_id`, `revision`,
@@ -231,8 +231,8 @@ Credentials and effect authority stay out of app-owned tables. SMTP
 credentials, approval gates, audience-freeze and send authority and actual
 sends remain host-owned; this bundle declares no send or SMTP operation.
 
-Blank optional customer fields are sent as explicit `null`, so an update
-clears `email`, `phone` or `source` instead of preserving an older value.
+Blank email and phone fields are sent as explicit `null`, so an update clears
+those values instead of preserving older ones.
 Columns carry `format`/`json_schema` declarations and the root
 `record_write_schema` declares that an update which moves either consent
 channel from not granted to granted must report provenance; the host

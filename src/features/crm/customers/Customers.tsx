@@ -198,20 +198,15 @@ function CustomerList({
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
-  const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
   const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
   const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
-    queryState.failure, { query, committed, cursors, page, consentFilter, sourceFilter, tagFilter },
-    JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
+    queryState.failure, { query, committed, cursors, page, consentFilter, tagFilter },
+    JSON.stringify([committed, cursor, consentFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const sources = Array.from(
-    new Set(records.map((r) => viewProfile(r.profile).source).filter((v): v is string => v !== null)),
-  ).sort();
   const shown = records.filter((r) => {
     const v = viewProfile(r.profile);
     return (
       (consentFilter === "" || v.consentEmail === consentFilter) &&
-      (sourceFilter === "" || v.source === sourceFilter) &&
       (tagFilter === "" || v.tags.includes(tagFilter))
     );
   });
@@ -253,7 +248,7 @@ function CustomerList({
       jumpRef.current += 1;
       setJumping(null);
       setQuery(""); setCommitted(""); setCursors([]); setPage(0);
-      setConsentFilter(""); setSourceFilter(""); setTagFilter("");
+      setConsentFilter(""); setTagFilter("");
       setSelected(new Set());
     }
   }, [viewer.operator, queryState.failure]);
@@ -292,12 +287,6 @@ function CustomerList({
                 { value: "denied", label: "Withdrawn" },
               ]}
               aria-label={t("Filter by email consent")}
-            />
-            <Select
-              value={sourceFilter}
-              onChange={setSourceFilter}
-              options={[{ value: "", label: t("Source: any") }, ...sources.map((v) => ({ value: v, label: v }))]}
-              aria-label={t("Filter by source")}
             />
             {tagFilter !== "" && (
               <button type="button" className="chip crm-chip-on" onClick={() => setTagFilter("")} aria-label={t("Clear tag filter {tag}").replace("{tag}", () => tagFilter)}>
@@ -440,12 +429,6 @@ function CustomerList({
                 },
               },
               {
-                key: "source",
-                header: t("Source"),
-                cellClassName: "text-ink-300",
-                cell: (record) => viewProfile(record.profile).source ?? "—",
-              },
-              {
                 key: "consent",
                 header: t("Email consent"),
                 cell: (record) => {
@@ -580,34 +563,19 @@ function CustomerForm({
           )}
         </Field>
       </div>
-      <div className="crm-field-row">
-        <Field label={t("Tags (optional)")} id="crm-tags" hint={t("Comma separated")} className="crm-field">
-          {(c) => (
-            <input
-              {...c}
-              className="field"
-              value={fields.tags}
-              onChange={(e) => set({ tags: e.target.value })}
-              maxLength={400}
-              autoComplete="off"
-              placeholder={t("vip, newsletter")}
-            />
-          )}
-        </Field>
-        <Field label={t("Source (optional)")} id="crm-source" className="crm-field">
-          {(c) => (
-            <input
-              {...c}
-              className="field"
-              value={fields.source}
-              onChange={(e) => set({ source: e.target.value })}
-              maxLength={40}
-              autoComplete="off"
-              placeholder={t("import")}
-            />
-          )}
-        </Field>
-      </div>
+      <Field label={t("Tags (optional)")} id="crm-tags" hint={t("Comma separated")} className="crm-field">
+        {(c) => (
+          <input
+            {...c}
+            className="field"
+            value={fields.tags}
+            onChange={(e) => set({ tags: e.target.value })}
+            maxLength={400}
+            autoComplete="off"
+            placeholder={t("vip, newsletter")}
+          />
+        )}
+      </Field>
       {!hideConsent && (
       <div className="crm-field-row">
         <Field label={t("Email consent (explicit)")} id="crm-consent-email" hint={t("No marketing until granted")} className="crm-field">
@@ -907,7 +875,6 @@ function CustomerWorkspace({
                       { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
                       { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
                       { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
-                      ...(view.source ? [{ key: "source", term: t("Source"), value: view.source }] : []),
                     ]}
                   />
                 </section>

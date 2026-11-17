@@ -21,7 +21,6 @@ const fields = (overrides = {}) => ({
   email: "",
   phone: "",
   tags: "",
-  source: "",
   consentEmail: "unknown",
   consentSms: "unknown",
   ...overrides,
@@ -43,17 +42,38 @@ test("blank optional profile values are explicit null", () => {
   expect(built.schema).toBe(1);
   expect(built.email).toBeNull();
   expect(built.phone).toBeNull();
-  expect(built.source).toBeNull();
+  expect(built).not.toHaveProperty("source");
   expect(built.consent).toEqual({ email: "unknown", sms: "unknown" });
 });
 
 test("non-blank optional profile values are carried", () => {
   const built = profile.buildCustomerProfile(
-    fields({ email: "ada@example.test", phone: "+44 20 7946 0000", source: "event" }),
+    fields({ email: "ada@example.test", phone: "+44 20 7946 0000" }),
   );
   expect(built.email).toBe("ada@example.test");
   expect(built.phone).toBe("+44 20 7946 0000");
-  expect(built.source).toBe("event");
+});
+
+test("profile edits leave platform-managed source untouched", () => {
+  const existing = {
+    display_name: "Ada Lovelace",
+    email: "ada@example.test",
+    phone: null,
+    source: "platform_import",
+    tags: [],
+    consent: { email: "unknown", sms: "unknown" },
+  };
+  const patch = profile.buildCustomerProfile(profile.formFromProfile(existing));
+  expect(patch).not.toHaveProperty("source");
+  expect({ ...existing, ...patch }.source).toBe("platform_import");
+  const consent = profile.buildConsentChange(existing, {
+    email: "granted",
+    sms: "unknown",
+    method: "written",
+    note: "",
+  });
+  expect(consent.profile).not.toHaveProperty("source");
+  expect({ ...existing, ...consent.profile }.source).toBe("platform_import");
 });
 
 test("a real explicit consent_history wins over the generic journal", () => {

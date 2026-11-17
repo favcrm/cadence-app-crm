@@ -11,7 +11,7 @@ export const fixtureActions = [
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
 ];
-type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string; consent: { email: string; sms: string } };
+type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
 type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
@@ -103,7 +103,14 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       if (verb === "records.create" && existing) throw new ApiError("That local customer already exists.", 409, { code: "conflict" });
       if (verb === "records.update" && !existing) missing();
       requireRevision(existing, args.expected_revision);
-      const profile = buildCustomerProfile(formFromProfile(args.profile)) as Profile;
+      const patch = args.profile !== null && typeof args.profile === "object" && !Array.isArray(args.profile)
+        ? args.profile as Partial<Profile>
+        : {};
+      const source = Object.hasOwn(patch, "source") ? patch.source : existing?.profile.source;
+      const profile = {
+        ...buildCustomerProfile(formFromProfile({ ...existing?.profile, ...patch })),
+        ...(source === undefined ? {} : { source }),
+      } as Profile;
       const revision = (existing?.revision ?? 0) + 1;
       const at = Math.floor(Date.now() / 1000);
       const history = [...(existing?.history ?? []), { revision, digest: fixtureDigest, actor: "local-preview", at }];

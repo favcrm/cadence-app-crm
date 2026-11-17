@@ -19,7 +19,6 @@ export interface CustomerFormFields {
   phone: string;
   /** Raw tag text; separators are commas, semicolons or whitespace. */
   tags: string;
-  source: string;
   consentEmail: ConsentChoice;
   consentSms: ConsentChoice;
 }
@@ -29,7 +28,6 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormFields = {
   email: "",
   phone: "",
   tags: "",
-  source: "",
   consentEmail: "unknown",
   consentSms: "unknown",
 };
@@ -113,10 +111,6 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
   if (phone !== "" && !phoneShapeValid(phone)) {
     throw new ApiError("Phone needs at least 7 digits (7–24 characters)", 400);
   }
-  const source = fields.source.trim();
-  if (source !== "" && !tagValid(source)) {
-    throw new ApiError("Source uses letters, digits, dash or underscore (up to 40 characters)", 400);
-  }
   const tags = parseTags(fields.tags);
   if (!isConsentChoice(fields.consentEmail) || !isConsentChoice(fields.consentSms)) {
     throw new ApiError("Consent must be granted, denied or unknown", 400);
@@ -130,7 +124,7 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
     // field must clear the stored value instead of preserving it.
     email: email !== "" ? email : null,
     phone: phone !== "" ? phone : null,
-    source: source !== "" ? source : null,
+    // Source is platform-managed; omitting it preserves it on a PATCH.
   };
   return profile;
 }
@@ -152,7 +146,6 @@ export interface CustomerView {
   email: string | null;
   phone: string | null;
   tags: string[];
-  source: string | null;
   consentEmail: string;
   consentSms: string | null;
 }
@@ -174,7 +167,6 @@ export function viewProfile(profile: unknown): CustomerView {
     email: text(row.email),
     phone: text(row.phone),
     tags: Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === "string") : [],
-    source: text(row.source),
     consentEmail: text(consent.email) ?? "unknown",
     consentSms: text(consent.sms),
   };
@@ -188,7 +180,6 @@ export function formFromProfile(profile: unknown): CustomerFormFields {
     email: view.email ?? "",
     phone: view.phone ?? "",
     tags: view.tags.join(", "),
-    source: view.source ?? "",
     consentEmail: isConsentChoice(view.consentEmail) ? view.consentEmail : "unknown",
     consentSms: view.consentSms !== null && isConsentChoice(view.consentSms) ? view.consentSms : "unknown",
   };
@@ -457,7 +448,7 @@ export function friendlyError(error: unknown, t: Translate = identity): string {
     return `${message} ${t("— pick a different id or address, or open the existing record.")}`;
   }
   if (/supported shape or bounds/i.test(message)) {
-    return `${message} ${t("— check display name, email, phone, tags and source against the field hints.")}`;
+    return `${message} ${t("— check display name, email, phone and tags against the field hints.")}`;
   }
   if (/refused app record field/i.test(message)) {
     return `${message} ${t("— the client refused a field the server never accepts.")}`;
