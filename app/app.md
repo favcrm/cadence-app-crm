@@ -131,10 +131,11 @@ Agent procedure:
 
 1. Search or show customers first; read the current `revision` before any update.
 2. If a search is ambiguous, ask the operator to select one customer. Never guess.
-3. Propose exactly one reviewed change with the exact field values. Only the
-   listed fields are writable; no consent, identity or revision fields exist.
-   The host applies the change through its action policy; consent stays unknown
-   on create and is preserved on update.
+3. For the declared `app-actions` proposal, include only its listed fields;
+   its input does not contain consent, identity or revision fields. The host
+   applies the proposal through its action policy; the proposal does not grant
+   consent. Hosted `records.update` uses a different contract and requires the
+   current revision.
 4. After the operation, verify the durable receipt before reporting success.
 5. A static segment is an explicit member list (`segments.save_static`); a
    rule segment keeps the existing predicate grammar. `segments.delete` keeps
@@ -143,9 +144,10 @@ Agent procedure:
    `campaigns.approve` pins the exact content revision and `audiences.prepare`
    freezes the audience. These are host-authorized internal actions; the
    host decides whether the current autonomy policy runs them directly.
-7. A note is plain text on the customer timeline: `customers.notes.create`
-   appends, `customers.notes.list` reads and `customers.notes.delete` soft-deletes.
-   A note never changes the profile digest, a segment or a frozen audience.
+7. Where the host advertises `customers.notes.create`, `customers.notes.list`
+   and `customers.notes.delete`, they append, read and soft-delete plain-text
+   notes. A declaration alone does not make those actions available. A note
+   never changes the profile digest, a segment or a frozen audience.
 8. `sends.list` and `sends.show` are read-only. This bundle declares no send
    or SMTP action; the final send remains the host operator's guarded action.
 
@@ -163,6 +165,10 @@ staged for the owner's review, not proof that a record changed. Read the
 resulting status and record after approval; a stale revision must be read
 again rather than overwritten. The host's current grants and approval policy,
 not this guidance or a selected customer, determine access.
+
+In particular, do not assume `customers.notes.*` is callable through hosted
+`app_call` merely because `app-assistant.json` declares it. Use only operations
+the host advertises; a record update is not a substitute for logging a note.
 
 The same discovery and read can be called from an authorized hosted CLI
 without putting customer data in a shell command:
