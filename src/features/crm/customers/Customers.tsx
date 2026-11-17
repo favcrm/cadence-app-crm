@@ -476,6 +476,7 @@ function CustomerForm({
   initial,
   submitLabel,
   pending,
+  submitBlocked = false,
   formError,
   formId,
   hideConsent,
@@ -491,6 +492,7 @@ function CustomerForm({
   /** Edit hides consent: it changes only through Record consent, with provenance. */
   hideConsent?: boolean;
   pending: boolean;
+  submitBlocked?: boolean;
   formError: string | null;
   onSubmit: (fields: CustomerFormFields, provenance: ConsentProvenance | null) => void;
 }) {
@@ -510,6 +512,7 @@ function CustomerForm({
       className={formId ? "grid gap-3" : "card px-4 py-4 grid gap-3"}
       onSubmit={(e) => {
         e.preventDefault();
+        if (pending || submitBlocked) return;
         let provenance: ConsentProvenance | null = null;
         try {
           buildCustomerProfile(fields);
@@ -672,7 +675,7 @@ function CustomerForm({
       )}
       {formId === undefined && (
         <div>
-          <Button type="submit" variant="primary" loading={pending} disabled={pending}>
+          <Button type="submit" variant="primary" loading={pending} disabled={pending || submitBlocked}>
             {t(submitLabel)}
           </Button>
         </div>
@@ -821,21 +824,21 @@ function CustomerNew({
         <Notice className="mt-2" state="read-only">
           {t("Creating customers is unavailable.")}
         </Notice>
-      ) : creationUncertain ? (
-        <Notice>
-          {t("Creation could not be confirmed. Check the customer list before trying again.")}
-        </Notice>
       ) : hostAssignedCreateId === null && creationPolicy.error !== null ? (
         <ErrorNotice onRetry={() => void creationPolicy.store.refresh()}>{creationPolicy.error}</ErrorNotice>
       ) : hostAssignedCreateId === null ? (
         <Loading>{t("Checking customer creation…")}</Loading>
       ) : (
         <div className="mt-2">
+          {creationUncertain && (
+            <Notice>{t("Creation could not be confirmed. Check the customer list before trying again.")}</Notice>
+          )}
           <CustomerForm
             initial={EMPTY_CUSTOMER_FORM}
             submitLabel="Create customer"
             consentMethod
             pending={pending}
+            submitBlocked={creationUncertain}
             formError={formError}
             onSubmit={(fields, provenance) => {
               setPending(true);
