@@ -821,5 +821,9 @@ export const zhTW: Record<string, string> = {
   "No visible activity.": "沒有可顯示的活動記錄。",
   "Shows profile changes and available notes only.": "只顯示資料變更及可用的備註。",
   "Only recent record changes are shown.": "只顯示最近的資料變更。",
+  "Load earlier activity": "載入較早的活動記錄",
+  "Earlier activity loaded.": "已載入較早的活動記錄。",
+  "Could not load earlier activity. Reload the customer and try again.": "無法載入較早的活動記錄，請重新載入客戶資料後再試。",
+  "Customer access changed. Reload to continue.": "客戶存取權限已變更，請重新載入以繼續。",
   "Only recent changes are shown; earlier history may be unavailable after access is enabled.": "只顯示最近的變更；啟用存取控制後，較早的歷程可能無法顯示。",
 };

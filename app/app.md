@@ -167,10 +167,12 @@ again rather than overwritten. The host's current grants and approval policy,
 not this guidance or a selected customer, determine access.
 
 `records.show` history describes recorded profile changes, not every customer
-interaction. If `history_truncated` is true, only recent changes are included;
-protected history can also omit changes from before access was enabled. Do not
-claim the returned activity is complete or infer that no other interaction
-occurred.
+interaction. When a supporting host returns `history_next_cursor`, pass it as
+`history_cursor` to `records.show` to request older visible changes. Older hosts
+may report `history_truncated` without a cursor; then only recent changes are
+available. Protected history can also omit changes from before access was
+enabled. Do not claim the returned activity is complete or infer that no other
+interaction occurred.
 
 Consent notes require a recorded method; a withdrawal without a note does not.
 Consent entries and profile-change entries are separate evidence, even when

@@ -40,8 +40,17 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  approval or test is ever simulated: slots stay refused. `?access=read`
  *  or `?access=write` shows the host's per-record edit decision. With either,
  *  `?create=uncertain` simulates a lost response after creating a fixture.
- *  `?history=truncated` reports that earlier record changes are unavailable. */
+ *  `?history=truncated` reports that earlier record changes are unavailable;
+ *  `?history=paged` supplies synthetic paged activity for Ada. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+if (params.get("history") === "paged") {
+  const ada = records[0]!;
+  ada.revision = 23;
+  ada.history = Array.from({ length: 23 }, (_, index) => ({
+    revision: index + 1, digest: fixtureDigest, actor: `Fixture ${index + 1}`, at: 1700000000 + index * 60,
+    before: index === 0 ? null : structuredClone(ada.profile), after: structuredClone(ada.profile),
+  }));
+}
 const keepsAudience = params.get("board") === "audience";
 const seededSend = params.get("sends");
 const recordAccess = params.get("access");
@@ -106,6 +115,18 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const record = records.find(r => r.id === args.record_id) ?? missing();
       const visible = recordAccess === "read" || recordAccess === "write"
         ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
+      if (params.get("history") === "paged" && record.id === "ada") {
+        const ordered = [...record.history].reverse();
+        const anchor = typeof args.history_cursor === "string" ? parseInt(args.history_cursor, 16) : null;
+        if (anchor !== null && !ordered.some((entry) => entry.revision === anchor)) {
+          throw new ApiError("That local history cursor is not available.", 400, { code: "invalid_cursor" });
+        }
+        const older = anchor === null ? ordered : ordered.filter((entry) => entry.revision < anchor);
+        const history = older.slice(0, 20);
+        const truncated = older.length > history.length;
+        return { record: { ...visible, history, history_truncated: truncated,
+          ...(truncated ? { history_next_cursor: history.at(-1)!.revision.toString(16).padStart(32, "0") } : {}) } };
+      }
       return { record: params.get("history") === "truncated" ? { ...visible, history_truncated: true } : visible };
     }
     case "records.create":

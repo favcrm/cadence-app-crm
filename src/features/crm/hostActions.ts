@@ -48,6 +48,7 @@ export interface HostRecord {
   profile: unknown;
   history?: unknown;
   historyTruncated?: boolean;
+  historyNextCursor?: string;
   consentHistory?: unknown;
   notes?: CustomerNote[];
 }
@@ -141,6 +142,11 @@ export function parseRecord(value: unknown): HostRecord {
   if (Object.hasOwn(row, "history_truncated") && typeof historyTruncated !== "boolean") {
     throw new ApiError("The server returned an invalid history decision", 502);
   }
+  const historyNextCursor = row.history_next_cursor;
+  if (Object.hasOwn(row, "history_next_cursor") && (
+    typeof historyNextCursor !== "string" || !/^[a-f0-9]{32}$/.test(historyNextCursor) ||
+    historyTruncated !== true || !Array.isArray(row.history) || row.history.length === 0
+  )) throw new ApiError("The server returned an invalid history cursor", 502);
   return {
     id: row.id,
     install_id: typeof row.install_id === "string" ? row.install_id : "",
@@ -152,6 +158,7 @@ export function parseRecord(value: unknown): HostRecord {
     profile: row.profile,
     history: row.history,
     ...(typeof historyTruncated === "boolean" ? { historyTruncated } : {}),
+    ...(typeof historyNextCursor === "string" ? { historyNextCursor } : {}),
     consentHistory: (row as Record<string, unknown>).consent_history,
     notes: Array.isArray(row.notes)
       ? row.notes.flatMap((item): CustomerNote[] => {
@@ -167,6 +174,25 @@ export function parseRecord(value: unknown): HostRecord {
           return [{ id: note.id, recordId: note.record_id, body: note.body, actor: note.actor, created: note.created }];
         })
       : [],
+  };
+}
+
+/** Never combine pages from different records, revisions or access decisions. */
+export function appendHistoryPage(current: HostRecord, page: HostRecord): HostRecord {
+  if (
+    !current.historyNextCursor || !Array.isArray(current.history) || !Array.isArray(page.history) ||
+    page.id !== current.id || page.install_id !== current.install_id ||
+    page.context_id !== current.context_id || page.kind !== current.kind ||
+    page.revision !== current.revision || page.digest !== current.digest ||
+    page.recordAccess?.canWrite !== current.recordAccess?.canWrite ||
+    typeof page.historyTruncated !== "boolean" ||
+    page.historyNextCursor === current.historyNextCursor
+  ) throw new ApiError("Customer changed while loading activity; reload it.", 409, { code: "record_changed" });
+  return {
+    ...current,
+    history: [...current.history, ...page.history],
+    historyTruncated: page.historyTruncated,
+    historyNextCursor: page.historyNextCursor,
   };
 }
 
@@ -220,9 +246,14 @@ export const hostActions = {
     return parseRecordList(value);
   },
   /** `GET …/records/:id` — one row under the same URL scope. */
-  async show(scope: HostScope, recordId: string): Promise<HostRecord> {
+  async show(scope: HostScope, recordId: string, historyCursor?: string): Promise<HostRecord> {
     assertRecordId(recordId);
-    return parseRecord(await serviceCall<unknown>(scope, "records.show", { record_id: recordId }));
+    if (historyCursor !== undefined && !/^[a-f0-9]{32}$/.test(historyCursor)) {
+      throw new ApiError("invalid history cursor", 400);
+    }
+    return parseRecord(await serviceCall<unknown>(scope, "records.show", {
+      record_id: recordId, ...(historyCursor === undefined ? {} : { history_cursor: historyCursor }),
+    }));
   },
   /** On supporting hosts the record ID is allocated by the host. */
   async create(

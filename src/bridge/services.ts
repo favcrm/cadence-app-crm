@@ -7,7 +7,7 @@ type CsvDecision = { row: number; action: string; expected_revision?: number };
 export type Base = { mode: "all" } | { mode: "segment"; segment_id: string } | { mode: "custom"; customer_ids: string[] };
 export interface CallArgs {
   "records.list": { query?: string; limit?: number; cursor?: string };
-  "records.show": { record_id: string };
+  "records.show": { record_id: string; history_cursor?: string };
   "records.create": { record_id?: string; profile: unknown; consent_provenance?: unknown };
   "records.update": { record_id: string; expected_revision: number; profile: unknown; consent_provenance?: unknown };
   "records.csv.preview": { csv_text: string };
@@ -55,7 +55,7 @@ export interface SlotArgs {
 }
 // A closed field allowlist is checked again at runtime before serialization.
 export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
-  "records.list": ["query", "limit", "cursor"], "records.show": ["record_id"],
+  "records.list": ["query", "limit", "cursor"], "records.show": ["record_id", "history_cursor"],
   "records.create": ["record_id", "profile", "consent_provenance"], "records.update": ["record_id", "expected_revision", "profile", "consent_provenance"],
   "records.csv.preview": ["csv_text"], "segments.list": [], "segments.show": ["segment_id"], "segments.save": ["segment_id", "name", "predicates", "expected_revision"],
   "exclusions.list": [], "exclusions.show": ["list_id"], "exclusions.save": ["list_id", "name", "member_ids", "expected_revision"],

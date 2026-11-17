@@ -3,10 +3,10 @@ import { ApiError, sdkMock } from "../support/sdk-mock.mjs";
 
 mock.module("@cadence/screen-ui", sdkMock);
 
-let parseRecord, parseRecordList;
+let parseRecord, parseRecordList, appendHistoryPage;
 let canEditCustomer, isDefiniteCreateRefusal;
 beforeAll(async () => {
-  ({ parseRecord, parseRecordList } = await import("../../src/features/crm/hostActions.ts"));
+  ({ parseRecord, parseRecordList, appendHistoryPage } = await import("../../src/features/crm/hostActions.ts"));
   ({ canEditCustomer } = await import("../../src/features/crm/viewer.ts"));
   ({ isDefiniteCreateRefusal } = await import("../../src/features/crm/hostErrors.ts"));
 });
@@ -50,6 +50,39 @@ test("customer history preserves the host's truncation decision", () => {
     value.record.history_truncated = invalid;
     expect(() => parseRecord(value)).toThrow();
   }
+});
+
+test("history cursors require a nonempty truncated page and valid opaque anchor", () => {
+  const value = receipt(undefined);
+  value.record.history = [{ revision: 1 }];
+  value.record.history_truncated = true;
+  value.record.history_next_cursor = "a".repeat(32);
+  expect(parseRecord(value).historyNextCursor).toBe("a".repeat(32));
+  for (const invalid of [null, "", "a".repeat(31), "g".repeat(32), 1, {}]) {
+    value.record.history_next_cursor = invalid;
+    expect(() => parseRecord(value)).toThrow();
+  }
+  value.record.history_next_cursor = "a".repeat(32);
+  value.record.history_truncated = false;
+  expect(() => parseRecord(value)).toThrow();
+  value.record.history_truncated = true;
+  value.record.history = [];
+  expect(() => parseRecord(value)).toThrow();
+});
+
+test("older activity is appended only to the same current record and permission", () => {
+  const first = receipt({ can_write: true });
+  Object.assign(first.record, { history: [{ revision: 2 }], history_truncated: true, history_next_cursor: "a".repeat(32) });
+  const older = receipt({ can_write: true });
+  Object.assign(older.record, { history: [{ revision: 1 }], history_truncated: false });
+  const base = parseRecord(first);
+  const page = parseRecord(older);
+  expect(appendHistoryPage(base, page).history).toEqual([{ revision: 2 }, { revision: 1 }]);
+  expect(appendHistoryPage(base, page).historyTruncated).toBe(false);
+  expect(() => appendHistoryPage(base, { ...page, revision: 2 })).toThrow();
+  expect(() => appendHistoryPage(base, { ...page, id: "another" })).toThrow();
+  expect(() => appendHistoryPage(base, { ...page, recordAccess: { canWrite: false } })).toThrow();
+  expect(() => appendHistoryPage(base, { ...page, historyTruncated: true, historyNextCursor: "a".repeat(32) })).toThrow();
 });
 
 test("create ID negotiation accepts only the host-assigned policy", () => {

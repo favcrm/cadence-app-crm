@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
+import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
@@ -28,7 +28,7 @@ type CustomerFormFields,
 import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
-import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
+import { appendHistoryPage,hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
@@ -1009,6 +1009,35 @@ function CustomerWorkspace({
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
+  const latestRecord = useRef<HostRecord | null>(null);
+  latestRecord.current = queryState.data;
+  const historyRequest = useRef(0);
+  const activityListRef = useRef<HTMLOListElement>(null);
+  const historyKeyboardTrigger = useRef<{ element: HTMLElement; previous: Set<string> } | null>(null);
+  const [olderHistory, setOlderHistory] = useState<{ base: HostRecord; value: HostRecord } | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAnnouncement, setHistoryAnnouncement] = useState("");
+  const [historyAccessLost, setHistoryAccessLost] = useState(false);
+  useEffect(() => () => { historyRequest.current += 1; }, []);
+  useEffect(() => {
+    historyRequest.current += 1;
+    setOlderHistory(null);
+    setHistoryBusy(false);
+    setHistoryError(null);
+    setHistoryAnnouncement("");
+    historyKeyboardTrigger.current = null;
+    setHistoryAccessLost(false);
+  }, [queryState.data]);
+  useEffect(() => {
+    const trigger = historyKeyboardTrigger.current;
+    if (olderHistory && trigger && (document.activeElement === trigger.element || document.activeElement === document.body)) {
+      const firstAdded = [...(activityListRef.current?.querySelectorAll<HTMLButtonElement>("[data-activity-key]") ?? [])]
+        .find((button) => !trigger.previous.has(button.dataset.activityKey ?? ""));
+      (firstAdded ?? activityListRef.current)?.focus();
+    }
+    historyKeyboardTrigger.current = null;
+  }, [olderHistory]);
   const canWrite = canEditCustomer(viewer, queryState.data);
   const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact" | "custom">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
@@ -1022,16 +1051,48 @@ function CustomerWorkspace({
   const view = record ? viewProfile(record.profile) : null;
   const contacts = record ? readCustomerContacts(record.profile) : null;
   const customFields = record ? readCustomerCustomFields(record.profile) : null;
-  const timeline = record ? activityItems(record, t) : [];
+  const activityRecord = olderHistory?.base === record ? olderHistory.value : record;
+  const timeline = activityRecord ? activityItems(activityRecord, t) : [];
 
   const initials = view
     ? view.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
     : "";
   const reload = () => { void queryState.store.refresh(); };
-  const ready = !loading && error === null && viewer.operator === true && record !== null && view !== null;
+  const ready = !loading && error === null && !historyAccessLost && viewer.operator === true && record !== null && view !== null;
   const activity = selectedActivity?.record === record
     ? timeline.find((item) => item.key === selectedActivity.key)
     : undefined;
+  const loadOlder = (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    if (mode !== "view" || !record || !activityRecord?.historyNextCursor || historyBusy) return;
+    const base = record;
+    const page = activityRecord;
+    historyKeyboardTrigger.current = event.detail === 0
+      ? { element: event.currentTarget, previous: new Set(timeline.map((item) => item.key)) }
+      : null;
+    const request = ++historyRequest.current;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    setHistoryAnnouncement("");
+    void hostActions.show(scope, recordId, page.historyNextCursor)
+      .then((next) => {
+        if (historyRequest.current !== request || latestRecord.current !== base) return;
+        setOlderHistory({ base, value: appendHistoryPage(page, next) });
+        setHistoryAnnouncement(t("Earlier activity loaded."));
+      })
+      .catch((error: unknown) => {
+        if (historyRequest.current !== request || latestRecord.current !== base) return;
+        setOlderHistory(null);
+        historyKeyboardTrigger.current = null;
+        setHistoryError(t("Could not load earlier activity. Reload the customer and try again."));
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+          setHistoryAccessLost(true);
+          void queryState.store.refresh();
+        }
+      })
+      .finally(() => {
+        if (historyRequest.current === request) setHistoryBusy(false);
+      });
+  };
   const openContact = (index: number | null) => {
     setEditRecord(record);
     setContactIndex(index);
@@ -1151,14 +1212,15 @@ function CustomerWorkspace({
             panel: (
               <>
                 <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
-                {record.historyTruncated
+                {activityRecord?.historyTruncated && !activityRecord.historyNextCursor
                   ? <p className="text-micro text-ink-500">{t(record.recordAccess ? "Only recent changes are shown; earlier history may be unavailable after access is enabled." : "Only recent record changes are shown.")}</p>
                   : record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
+                <span role="status" className="sr-only">{historyAnnouncement}</span>
                 {timeline.length > 0 ? (
-                <ol className="crm-timeline" aria-label={t("Activity")}>
+                <ol ref={activityListRef} tabIndex={-1} className="crm-timeline" aria-label={t("Activity")}>
                   {timeline.map((item) => (
                     <li key={item.key}>
-                      <button type="button" className="customer-activity-row" onClick={() => setSelectedActivity({ key: item.key, record })}>
+                      <button type="button" className="customer-activity-row" data-activity-key={item.key} onClick={() => setSelectedActivity({ key: item.key, record })}>
                         <span className="customer-activity-copy">
                           <span>{item.text}</span>
                           <span className="num text-micro text-ink-500">{when(item.at)}</span>
@@ -1170,6 +1232,12 @@ function CustomerWorkspace({
                 </ol>
               ) : (
                   <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+                )}
+                {historyError && <ErrorNotice onRetry={reload}>{historyError}</ErrorNotice>}
+                {activityRecord?.historyNextCursor && (
+                  <Button size="sm" loading={historyBusy} disabled={historyBusy || mode !== "view"} onClick={loadOlder}>
+                    {t("Load earlier activity")}
+                  </Button>
                 )}
               </>
             ),
@@ -1229,6 +1297,7 @@ function CustomerWorkspace({
       </header>
       {loading ? <Loading>{t("Reading the record…")}</Loading>
         : error !== null ? <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
+          : historyAccessLost ? <ErrorNotice onRetry={reload}>{t("Customer access changed. Reload to continue.")}</ErrorNotice>
           : !ready ? <Notice>{t("You do not have access to customer records.")}</Notice>
             : (
               <>
