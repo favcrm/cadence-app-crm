@@ -184,8 +184,9 @@ customer, even if the app declares `records.update`. Permissions can change;
 the host rechecks them on every write. Older unprotected hosts omit the field.
 
 For a protected table, `records.list` reports `record_access.create_id: "host"`;
-the screen then omits `record_id` on create. If the result is uncertain, check
-the customer list before trying again. This capability does not grant access.
+the screen then omits `record_id` on create. This capability does not grant
+access. On any host, if a create result is uncertain, check the customer list
+before trying again; a new request can create a duplicate.
 
 Workspace-visible customers remain readable to callers with the app's existing
 read capability; visibility alone is not permission to write. A private customer

@@ -980,7 +980,7 @@ function CustomerNew({
                 .create(scope, hostAssignedCreateId ? null : newCustomerId(), profile, provenance ?? undefined)
                 .then((record) => onCreated(record.id))
                 .catch((e: unknown) => {
-                  if (hostAssignedCreateId && !isDefiniteCreateRefusal(e)) setCreationUncertain(true);
+                  if (!isDefiniteCreateRefusal(e)) setCreationUncertain(true);
                   else setFormError(friendlyError(e));
                 })
                 .finally(() => setPending(false));

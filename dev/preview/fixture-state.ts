@@ -38,7 +38,7 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  older board that cannot. `?sends=sending|sent|partial|uncertain` seeds one
  *  READ-ONLY send row so the status chip and result view can be seen. No send,
  *  approval or test is ever simulated: slots stay refused. `?access=read`
- *  or `?access=write` shows the host's per-record edit decision. With either,
+ *  or `?access=write` shows the host's per-record edit decision.
  *  `?create=uncertain` simulates a lost response after creating a fixture.
  *  `?history=truncated` reports that earlier record changes are unavailable;
  *  `?history=paged` supplies synthetic paged activity for Ada. */
@@ -164,7 +164,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       if (existing) records.splice(records.indexOf(existing), 1, record); else records.push(record);
       if (hostAssigned) ownedRecordIds.add(recordId);
       changed(existing ? "Customer updated locally." : "Customer created locally.");
-      if (hostAssigned && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
+      if (verb === "records.create" && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
       return { record };
     }
     case "segments.list": return { segments };
