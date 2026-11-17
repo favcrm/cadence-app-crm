@@ -817,4 +817,6 @@ export const zhTW: Record<string, string> = {
   "Earlier activity may not be shown when customer access is enabled.": "啟用客戶存取控制後，較早的活動記錄可能不會顯示。",
   "No visible activity.": "沒有可顯示的活動記錄。",
   "Shows profile changes and available notes only.": "只顯示資料變更及可用的備註。",
+  "Only recent record changes are shown.": "只顯示最近的資料變更。",
+  "Only recent changes are shown; earlier history may be unavailable after access is enabled.": "只顯示最近的變更；啟用存取控制後，較早的歷程可能無法顯示。",
 };

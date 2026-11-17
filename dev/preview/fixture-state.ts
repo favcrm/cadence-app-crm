@@ -39,7 +39,8 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  READ-ONLY send row so the status chip and result view can be seen. No send,
  *  approval or test is ever simulated: slots stay refused. `?access=read`
  *  or `?access=write` shows the host's per-record edit decision. With either,
- *  `?create=uncertain` simulates a lost response after creating a fixture. */
+ *  `?create=uncertain` simulates a lost response after creating a fixture.
+ *  `?history=truncated` reports that earlier record changes are unavailable. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
 const keepsAudience = params.get("board") === "audience";
 const seededSend = params.get("sends");
@@ -103,8 +104,9 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     }
     case "records.show": {
       const record = records.find(r => r.id === args.record_id) ?? missing();
-      return { record: recordAccess === "read" || recordAccess === "write"
-        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record };
+      const visible = recordAccess === "read" || recordAccess === "write"
+        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
+      return { record: params.get("history") === "truncated" ? { ...visible, history_truncated: true } : visible };
     }
     case "records.create":
     case "records.update": {

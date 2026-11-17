@@ -47,6 +47,7 @@ export interface HostRecord {
   recordAccess?: { canWrite: boolean };
   profile: unknown;
   history?: unknown;
+  historyTruncated?: boolean;
   consentHistory?: unknown;
   notes?: CustomerNote[];
 }
@@ -136,6 +137,10 @@ export function parseRecord(value: unknown): HostRecord {
     access === null || typeof access !== "object" || Array.isArray(access) ||
     typeof (access as Record<string, unknown>).can_write !== "boolean"
   )) throw new ApiError("The server returned an invalid record access decision", 502);
+  const historyTruncated = row.history_truncated;
+  if (Object.hasOwn(row, "history_truncated") && typeof historyTruncated !== "boolean") {
+    throw new ApiError("The server returned an invalid history decision", 502);
+  }
   return {
     id: row.id,
     install_id: typeof row.install_id === "string" ? row.install_id : "",
@@ -146,6 +151,7 @@ export function parseRecord(value: unknown): HostRecord {
     ...(access === undefined ? {} : { recordAccess: { canWrite: (access as { can_write: boolean }).can_write } }),
     profile: row.profile,
     history: row.history,
+    ...(typeof historyTruncated === "boolean" ? { historyTruncated } : {}),
     consentHistory: (row as Record<string, unknown>).consent_history,
     notes: Array.isArray(row.notes)
       ? row.notes.flatMap((item): CustomerNote[] => {

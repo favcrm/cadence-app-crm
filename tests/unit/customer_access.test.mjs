@@ -38,6 +38,20 @@ test("malformed record access decisions fail closed", () => {
   }
 });
 
+test("customer history preserves the host's truncation decision", () => {
+  for (const truncated of [true, false]) {
+    const value = receipt(undefined);
+    value.record.history_truncated = truncated;
+    expect(parseRecord(value).historyTruncated).toBe(truncated);
+  }
+  expect(parseRecord(receipt(undefined)).historyTruncated).toBeUndefined();
+  for (const invalid of [null, "false", 0, {}]) {
+    const value = receipt(undefined);
+    value.record.history_truncated = invalid;
+    expect(() => parseRecord(value)).toThrow();
+  }
+});
+
 test("create ID negotiation accepts only the host-assigned policy", () => {
   expect(parseRecordList({ records: [] }).hostAssignedCreateId).toBe(false);
   expect(parseRecordList({ records: [], record_access: { create_id: "host" } }).hostAssignedCreateId).toBe(true);

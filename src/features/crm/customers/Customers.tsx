@@ -1149,7 +1149,9 @@ function CustomerWorkspace({
             panel: (
               <>
                 <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
-                {record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
+                {record.historyTruncated
+                  ? <p className="text-micro text-ink-500">{t(record.recordAccess ? "Only recent changes are shown; earlier history may be unavailable after access is enabled." : "Only recent record changes are shown.")}</p>
+                  : record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
                 {timeline.length > 0 ? (
                 <ol className="crm-timeline" aria-label={t("Activity")}>
                   {timeline.map((item) => (

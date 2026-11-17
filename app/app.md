@@ -166,6 +166,12 @@ resulting status and record after approval; a stale revision must be read
 again rather than overwritten. The host's current grants and approval policy,
 not this guidance or a selected customer, determine access.
 
+`records.show` history describes recorded profile changes, not every customer
+interaction. If `history_truncated` is true, only recent changes are included;
+protected history can also omit changes from before access was enabled. Do not
+claim the returned activity is complete or infer that no other interaction
+occurred.
+
 On hosts with customer-level access, `records.show` may include
 `record_access.can_write`. A false value means this caller cannot edit that
 customer, even if the app declares `records.update`. Permissions can change;
