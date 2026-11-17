@@ -183,7 +183,7 @@ action; approval does not confer access.
 
 Paired-agent CLI chat uses that agent's own live credential and grants; a
 different agent's grant does not transfer. Ordinary browser chat does not yet
-have a separate customer-access identity and cannot use private customer data
+have a separate customer-access identity and cannot use protected customer data
 through this path.
 
 For a protected agent create, omit `record_id` and supply the intended human
