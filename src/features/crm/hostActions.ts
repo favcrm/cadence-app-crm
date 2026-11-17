@@ -43,6 +43,7 @@ export interface HostRecord {
   kind: string;
   revision: number;
   digest: string;
+  recordAccess?: { canWrite: boolean };
   profile: unknown;
   history?: unknown;
   consentHistory?: unknown;
@@ -129,6 +130,11 @@ export function parseRecord(value: unknown): HostRecord {
   if (typeof row.id !== "string" || !Number.isSafeInteger(row.revision) || (row.revision as number) < 1 || typeof row.digest !== "string") {
     throw new ApiError("The server returned an invalid app receipt", 502);
   }
+  const access = row.record_access;
+  if (Object.hasOwn(row, "record_access") && (
+    access === null || typeof access !== "object" || Array.isArray(access) ||
+    typeof (access as Record<string, unknown>).can_write !== "boolean"
+  )) throw new ApiError("The server returned an invalid record access decision", 502);
   return {
     id: row.id,
     install_id: typeof row.install_id === "string" ? row.install_id : "",
@@ -136,6 +142,7 @@ export function parseRecord(value: unknown): HostRecord {
     kind: typeof row.kind === "string" ? row.kind : "",
     revision: row.revision as number,
     digest: row.digest,
+    ...(access === undefined ? {} : { recordAccess: { canWrite: (access as { can_write: boolean }).can_write } }),
     profile: row.profile,
     history: row.history,
     consentHistory: (row as Record<string, unknown>).consent_history,

@@ -35,10 +35,12 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  AOS-521 board does (`draft_audience_full`); without it the fixture is an
  *  older board that cannot. `?sends=sending|sent|partial|uncertain` seeds one
  *  READ-ONLY send row so the status chip and result view can be seen. No send,
- *  approval or test is ever simulated: slots stay refused. */
+ *  approval or test is ever simulated: slots stay refused. `?access=read`
+ *  or `?access=write` shows the host's per-record edit decision. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
 const keepsAudience = params.get("board") === "audience";
 const seededSend = params.get("sends");
+const recordAccess = params.get("access");
 const sendCounts = { sending: { queued: 80, submitting: 3, accepted: 41, failed: 0, uncertain: 0, suppressed: 0, closed: 0 }, sent: { queued: 0, submitting: 0, accepted: 121, failed: 0, uncertain: 0, suppressed: 3, closed: 0 }, partial: { queued: 0, submitting: 0, accepted: 113, failed: 8, uncertain: 0, suppressed: 3, closed: 0 }, uncertain: { queued: 0, submitting: 0, accepted: 60, failed: 0, uncertain: 2, suppressed: 0, closed: 0 } } as const;
 function seededSendRow() {
   const key = seededSend as keyof typeof sendCounts | null;
@@ -95,9 +97,14 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const truncated = start + page.length < rows.length;
       return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
     }
-    case "records.show": return { record: records.find(r => r.id === args.record_id) ?? missing() };
+    case "records.show": {
+      const record = records.find(r => r.id === args.record_id) ?? missing();
+      return { record: recordAccess === "read" || recordAccess === "write"
+        ? { ...record, record_access: { can_write: recordAccess === "write" } } : record };
+    }
     case "records.create":
     case "records.update": {
+      if (verb === "records.update" && recordAccess === "read") throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
       requireId(args.record_id);
       const existing = records.find(r => r.id === args.record_id);
       if (verb === "records.create" && existing) throw new ApiError("That local customer already exists.", 409, { code: "conflict" });

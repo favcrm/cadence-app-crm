@@ -166,6 +166,11 @@ resulting status and record after approval; a stale revision must be read
 again rather than overwritten. The host's current grants and approval policy,
 not this guidance or a selected customer, determine access.
 
+On hosts with customer-level access, `records.show` may include
+`record_access.can_write`. A false value means this caller cannot edit that
+customer, even if the app declares `records.update`. Permissions can change;
+the host rechecks them on every write. Older unprotected hosts omit the field.
+
 In particular, do not assume `customers.notes.*` is callable through hosted
 `app_call` merely because `app-assistant.json` declares it. Use only operations
 the host advertises; a record update is not a substitute for logging a note.

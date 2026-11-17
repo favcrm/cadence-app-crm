@@ -24,7 +24,7 @@ type CustomerFormFields,
 } from "../customerProfile";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
-import type { Viewer } from "../viewer";
+import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
  * The CRM workspace inside the trusted shared App shell (CAD-781
@@ -61,7 +61,6 @@ export default function Customers({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
-  const canWrite = viewer.operator === true && !viewer.readOnly;
   const returningToList = useRef(false);
   useEffect(() => {
     if (recordId !== null) returningToList.current = true;
@@ -87,7 +86,6 @@ export default function Customers({
             scope={scope}
             recordId={recordId}
             viewer={viewer}
-            canWrite={canWrite}
             onClose={() => onSelect(null)}
           />
         )}
@@ -128,7 +126,7 @@ function CustomerList({
   focusOnMount: boolean;
 }) {
   const { t, formatNumber } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
+  const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
@@ -295,7 +293,7 @@ function CustomerList({
             )}
           </div>
         )}
-        {canWrite && (
+        {canCreate && (
           <Button variant="primary" className="crm-list-create" onClick={onNew}>
             {t("New customer")}
           </Button>
@@ -313,10 +311,10 @@ function CustomerList({
         )
       )}
       {viewer.operator === false && (
-        <Notice>{t("Sign in as the operator to inspect customer records.")}</Notice>
+        <Notice>{t("You do not have access to customer records.")}</Notice>
       )}
-      {viewer.operator && viewer.readOnly && (
-        <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>
+      {viewer.operator && !canCreate && (
+        <Notice state="read-only">{t("Creating customers is unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
         <Loading>{t("Reading customers…")}</Loading>
@@ -797,7 +795,7 @@ function CustomerNew({
   onCancel: () => void;
 }) {
   const { t } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
+  const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -815,9 +813,9 @@ function CustomerNew({
           ← {t("Customers")}
         </button>
       </p>
-      {!canWrite ? (
+      {!canCreate ? (
         <Notice className="mt-2" state="read-only">
-          {t("Read-only view. A verified operator creates customer records.")}
+          {t("Creating customers is unavailable.")}
         </Notice>
       ) : (
         <div className="mt-2">
@@ -855,13 +853,11 @@ function CustomerWorkspace({
   scope,
   recordId,
   viewer,
-  canWrite,
   onClose,
 }: {
   scope: HostScope;
   recordId: string;
   viewer: Viewer;
-  canWrite: boolean;
   onClose: () => void;
 }) {
   const { t, formatDate } = useLocale();
@@ -870,6 +866,7 @@ function CustomerWorkspace({
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
+  const canWrite = canEditCustomer(viewer, queryState.data);
   const [mode, setMode] = useState<"view" | "edit" | "consent">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
   const record = mode === "view" ? queryState.data : editRecord;
@@ -1011,11 +1008,11 @@ function CustomerWorkspace({
       </header>
       {loading ? <Loading>{t("Reading the record…")}</Loading>
         : error !== null ? <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
-          : !ready ? <Notice>{t("Sign in as the operator to inspect customer records.")}</Notice>
+          : !ready ? <Notice>{t("You do not have access to customer records.")}</Notice>
             : (
               <>
                 <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-                {!canWrite && <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>}
+                {!canWrite && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
                 <div className="customer-workspace-grid">
                   <aside className="customer-profile-panel">{tabs[0]?.panel}</aside>
                   <section className="customer-activity-panel" aria-label={t("Activity")}>

@@ -33,7 +33,12 @@ export default function CrmScreen() {
   }
   const { scope, route: current, actions } = snapshot;
   const prefix = current.section === "customers" ? "records" : current.section === "segments" ? "segments" : "content";
-  const viewer = { operator: actions.includes(`${prefix}.list`), readOnly: !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save") };
+  const viewer = {
+    operator: actions.includes(`${prefix}.list`),
+    readOnly: !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save"),
+    canCreate: actions.includes("records.create"),
+    canUpdate: actions.includes("records.update"),
+  };
   // The route selects a full customer page or an in-frame segment drawer.
   const props = {
     scope, viewer, view: current.view, recordId: detail !== null && detail === dismissed ? null : current.record_id,
