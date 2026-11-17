@@ -658,7 +658,7 @@ function CustomerForm({
               />
             )}
           </Field>
-          {method !== "" && (
+          {(method !== "" || note !== "") && (
             <Field label={t("Note (optional)")} id="crm-create-note" className="crm-field">
               {(c) => (
                 <input
@@ -727,9 +727,9 @@ function ConsentForm({
       onSubmit={(e) => {
         e.preventDefault();
         try {
-          onSubmit(buildConsentChange(profile, { email, sms, method: granting ? method : "", note }));
+          onSubmit(buildConsentChange(profile, { email, sms, method: granting || note.trim() !== "" ? method : "", note }));
         } catch (error: unknown) {
-          setFieldError(error instanceof ApiError ? error.message : String(error));
+          setFieldError(error instanceof ApiError ? t(error.message) : String(error));
         }
       }}
     >
@@ -739,7 +739,7 @@ function ConsentForm({
             <Select
               id={c.id}
               value={email}
-              onChange={(v) => { setEmail(asSetting(v)); setFieldError(null); }}
+              onChange={(v) => { setEmail(asSetting(v)); setMethod(""); setFieldError(null); }}
               options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("Email marketing consent")}
               full
@@ -751,7 +751,7 @@ function ConsentForm({
             <Select
               id={c.id}
               value={sms}
-              onChange={(v) => { setSms(asSetting(v)); setFieldError(null); }}
+              onChange={(v) => { setSms(asSetting(v)); setMethod(""); setFieldError(null); }}
               options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("SMS marketing consent")}
               full
@@ -759,15 +759,15 @@ function ConsentForm({
           )}
         </Field>
       </div>
-      {granting && (
-        <Field label={t("How was it given?")} id="crm-rc-method" hint={t("Kept in the customer's activity for audit")} className="crm-field">
+      {(granting || note.trim() !== "") && (
+        <Field label={t(granting ? "How was it given?" : "How was this recorded?")} id="crm-rc-method" hint={t("Kept in the customer's activity for audit")} className="crm-field">
           {(c) => (
             <Select
               id={c.id}
               value={method}
               onChange={(v) => { setMethod(v as ConsentMethod | ""); setFieldError(null); }}
               options={[{ value: "", label: t("Choose…") }, ...CONSENT_METHODS.map((option) => ({ ...option, label: t(option.label) }))]}
-              aria-label={t("How consent was given")}
+              aria-label={t(granting ? "How consent was given" : "How this was recorded")}
               full
             />
           )}
@@ -1005,7 +1005,7 @@ function CustomerWorkspace({
 }) {
   const { t, formatDate } = useLocale();
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<{ key: string; record: HostRecord } | null>(null);
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
@@ -1029,7 +1029,9 @@ function CustomerWorkspace({
     : "";
   const reload = () => { void queryState.store.refresh(); };
   const ready = !loading && error === null && viewer.operator === true && record !== null && view !== null;
-  const activity = timeline.find((item) => item.key === selectedActivity);
+  const activity = selectedActivity?.record === record
+    ? timeline.find((item) => item.key === selectedActivity.key)
+    : undefined;
   const openContact = (index: number | null) => {
     setEditRecord(record);
     setContactIndex(index);
@@ -1156,7 +1158,7 @@ function CustomerWorkspace({
                 <ol className="crm-timeline" aria-label={t("Activity")}>
                   {timeline.map((item) => (
                     <li key={item.key}>
-                      <button type="button" className="customer-activity-row" onClick={() => setSelectedActivity(item.key)}>
+                      <button type="button" className="customer-activity-row" onClick={() => setSelectedActivity({ key: item.key, record })}>
                         <span className="customer-activity-copy">
                           <span>{item.text}</span>
                           <span className="num text-micro text-ink-500">{when(item.at)}</span>
@@ -1401,7 +1403,7 @@ function CustomerWorkspace({
                   </section>
                 )}
                 <Detail className="crm-detail" label={t("Activity details")} items={[
-                  { key: "type", term: t("Type"), value: t(activity.kind === "note" ? "Note" : "Record change") },
+                  { key: "type", term: t("Type"), value: t(activity.kind === "note" ? "Note" : activity.kind === "consent" ? "Consent" : "Record change") },
                   { key: "actor", term: t("Recorded by"), value: activity.actor === "operator" ? t("the operator") : (activity.actor || t("Not recorded")) },
                   { key: "date", term: t("Recorded at"), value: when(activity.at, true) },
                   ...(activity.revision === undefined ? [] : [{ key: "revision", term: t("Revision"), value: `r${activity.revision}` }]),

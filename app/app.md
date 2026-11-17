@@ -172,6 +172,10 @@ protected history can also omit changes from before access was enabled. Do not
 claim the returned activity is complete or infer that no other interaction
 occurred.
 
+Consent notes require a recorded method; a withdrawal without a note does not.
+Consent entries and profile-change entries are separate evidence, even when
+their revision numbers match.
+
 On hosts with customer-level access, `records.show` may include
 `record_access.can_write`. A false value means this caller cannot edit that
 customer, even if the app declares `records.update`. Permissions can change;

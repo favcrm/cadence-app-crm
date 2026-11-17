@@ -294,32 +294,6 @@ export function formFromProfile(profile: unknown): CustomerFormFields {
   };
 }
 
-export interface RevisionEntry {
-  revision: number;
-  digest: string;
-  actor: string;
-  at: number;
-}
-
-/** Attributed revision history; malformed entries are dropped, never rendered raw. */
-export function revisionEntries(record: HostRecord): RevisionEntry[] {
-  if (!Array.isArray(record.history)) return [];
-  const entries: RevisionEntry[] = [];
-  for (const item of record.history) {
-    if (item === null || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    if (
-      typeof row.revision !== "number" ||
-      typeof row.digest !== "string" ||
-      typeof row.actor !== "string" ||
-      typeof row.at !== "number"
-    ) {
-      continue;
-    }
-    entries.push({ revision: row.revision, digest: row.digest, actor: row.actor, at: row.at });
-  }
-  return entries.sort((a, b) => a.revision - b.revision);
-}
 
 export interface ConsentEntry {
   revision: number;
@@ -333,7 +307,7 @@ export interface ConsentEntry {
 
 export const CONSENT_METHODS: { value: ConsentMethod; label: string }[] = [
   { value: "in_person", label: "In person (counter / event)" },
-  { value: "web_form", label: "Website sign-up form" },
+  { value: "web_form", label: "Website form" },
   { value: "written", label: "Written / email reply" },
   { value: "imported", label: "Imported list (source noted)" },
   { value: "other", label: "Other" },
@@ -355,7 +329,7 @@ export function consentLabel(state: string | null, t: Translate = identity): str
 /**
  * Build the update for the Record consent form: the loaded profile with
  * only its consent replaced, plus the provenance. Granting a channel
- * that is not already granted needs a method; withdrawing never does.
+ * needs a method; withdrawing only needs one when a note is recorded.
  * Throws a field-named ApiError, never an echo of the note.
  */
 export function buildConsentChange(
@@ -376,6 +350,9 @@ export function buildConsentChange(
   if (granting && next.method === "") {
     throw new ApiError("Say how consent was given", 400);
   }
+  if (note !== "" && next.method === "") {
+    throw new ApiError("Choose how this consent was recorded to save the note", 400);
+  }
   const base = formFromProfile(profile);
   const built = buildCustomerProfile({ ...base, consentEmail: next.email, consentSms: next.sms });
   const provenance: ConsentProvenance | null =
@@ -389,6 +366,9 @@ export function buildCreateProvenance(method: ConsentMethod | "", rawNote: strin
   if (note.length > CONSENT_NOTE_MAX || hasControl(note)) {
     throw new ApiError("Note is at most 280 characters", 400);
   }
+  if (note !== "" && method === "") {
+    throw new ApiError("Choose how this consent was recorded to save the note", 400);
+  }
   return method === "" ? null : { method, ...(note !== "" ? { note } : {}) };
 }
 
@@ -397,7 +377,7 @@ export interface ActivityItem {
   text: string;
   note?: string;
   at: number;
-  kind: "note" | "revision";
+  kind: "note" | "revision" | "consent";
   actor: string;
   revision?: number;
   changes?: { field: string; before: string; after: string }[];
@@ -478,57 +458,65 @@ function activityChanges(before: unknown, after: unknown, current: unknown, t: T
   return changes;
 }
 
-/** Plain-language timeline, newest first. Ids and digests stay in Details.
- *  Each sentence is one whole translated template (placeholders filled
- *  literally), so word order can change per locale. English is unchanged. */
+function activityConsentText(entry: ConsentEntry, t: Translate): string {
+  const channel = t(entry.channel === "sms" ? "SMS" : "Email");
+  const method = entry.method
+    ? t(
+        entry.method === "in_person" ? "in person"
+          : entry.method === "web_form" ? "on the website form"
+            : entry.method === "written" ? "in writing"
+              : entry.method === "imported" ? "from an imported list"
+                : entry.method === "other" ? "another way" : "",
+      )
+    : "";
+  return entry.state === "granted"
+    ? method === ""
+      ? t("{channel} consent granted").replace("{channel}", () => channel)
+      : t("{channel} consent granted ({method})").replace("{channel}", () => channel).replace("{method}", () => method)
+    : entry.state === "denied"
+      ? t("{channel} consent withdrawn").replace("{channel}", () => channel)
+      : t("{channel} consent recorded as {state}").replace("{channel}", () => channel).replace("{state}", () => t(entry.state));
+}
+
+/** Each journal row stays distinct even when a restore reuses revision numbers. */
 export function activityItems(record: HostRecord, t: Translate = identity): ActivityItem[] {
-  const consent = consentEntries(record);
-  const changesByRevision = new Map<number, NonNullable<ActivityItem["changes"]>>();
+  const explicit = explicitConsentEntries(record);
+  const revisions: ActivityItem[] = [];
   if (Array.isArray(record.history)) {
-    for (const item of record.history) {
-      if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+    record.history.forEach((item, index) => {
+      if (item === null || typeof item !== "object" || Array.isArray(item)) return;
       const row = item as Record<string, unknown>;
-      if (typeof row.revision !== "number") continue;
-      const changes = activityChanges(row.before, row.after, record.profile, t);
-      if (changes.length > 0) changesByRevision.set(row.revision, changes);
-    }
-  }
-  const revisions = revisionEntries(record)
-    .map((rev) => {
-      const here = consent.filter((c) => c.revision === rev.revision);
-      const parts = here.map((c) => {
-        const channel = t(c.channel === "sms" ? "SMS" : "Email");
-        const method = c.method
-          ? t(
-              c.method === "in_person"
-                ? "in person"
-                : c.method === "web_form"
-                  ? "on the website form"
-                  : c.method === "written"
-                    ? "in writing"
-                    : c.method === "imported"
-                      ? "from an imported list"
-                      : c.method === "other"
-                        ? "another way"
-                        : "",
-            )
-          : "";
-        return c.state === "granted"
-          ? method === ""
-            ? t("{channel} consent granted").replace("{channel}", () => channel)
-            : t("{channel} consent granted ({method})").replace("{channel}", () => channel).replace("{method}", () => method)
-          : c.state === "denied"
-            ? t("{channel} consent withdrawn").replace("{channel}", () => channel)
-            : t("{channel} consent recorded as {state}").replace("{channel}", () => channel).replace("{state}", () => t(c.state));
-      });
-      const who = rev.actor === "operator" ? t("the operator") : rev.actor;
-      const lead = rev.revision === 1 ? t("Created") : parts.length === 0 ? t("Profile edited") : "";
+      if (
+        typeof row.revision !== "number" || !Number.isSafeInteger(row.revision) || row.revision < 1 ||
+        typeof row.digest !== "string" || typeof row.actor !== "string" ||
+        typeof row.at !== "number" || !Number.isFinite(row.at)
+      ) return;
+      const here = explicit.length === 0 ? genericConsentEntriesForRow(row) : [];
+      const parts = here.map((entry) => activityConsentText(entry, t));
+      const who = row.actor === "operator" ? t("the operator") : row.actor;
+      const created = row.operation === "create" || (row.operation === undefined && row.revision === 1);
+      const lead = created ? t("Created") : parts.length === 0 ? t("Profile edited") : "";
       const text = [lead, ...parts].filter(Boolean).join(" · ") + ` ${t("by {who}").replace("{who}", () => who)}`;
-      const note = here.find((c) => c.note)?.note;
-      const changes = changesByRevision.get(rev.revision);
-      return { key: `r${rev.revision}`, text, ...(note ? { note } : {}), ...(changes ? { changes } : {}), at: rev.at, kind: "revision" as const, actor: rev.actor, revision: rev.revision };
-    })
-    .reverse();
+      const note = here.find((entry) => entry.note)?.note;
+      const changes = activityChanges(row.before, row.after, record.profile, t);
+      revisions.push({
+        key: `r:${index}`, text, ...(note ? { note } : {}),
+        ...(changes.length > 0 ? { changes } : {}), at: row.at,
+        kind: "revision", actor: row.actor, revision: row.revision,
+      });
+    });
+  }
+  // Explicit consent records are independent evidence. A revision number can
+  // repeat after restore, so never attach one to a journal row by revision.
+  const consent: ActivityItem[] = explicit.map((entry, index) => {
+    const who = entry.actor === "operator" ? t("the operator") : entry.actor;
+    return {
+      key: `c:${index}`,
+      text: `${activityConsentText(entry, t)} ${t("by {who}").replace("{who}", () => who)}`,
+      ...(entry.note ? { note: entry.note } : {}),
+      at: entry.at, kind: "consent", actor: entry.actor, revision: entry.revision,
+    };
+  });
   const notes: ActivityItem[] = (record.notes ?? []).map((note) => ({
     key: `n:${note.id}`,
     text: `${t("Note")}: ${note.body}`,
@@ -536,7 +524,7 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
     kind: "note",
     actor: note.actor,
   }));
-  return [...notes, ...revisions].sort((a, b) => b.at - a.at);
+  return [...notes, ...consent, ...revisions].sort((a, b) => b.at - a.at);
 }
 
 function explicitConsentEntries(record: HostRecord): ConsentEntry[] {
@@ -582,43 +570,43 @@ function genericConsentState(values: unknown, channel: "email" | "sms"): string 
  * host reports no explicit consent_history. Provenance stays reported
  * metadata, never proof of consent; the app never infers a grant.
  */
+function genericConsentEntriesForRow(item: unknown): ConsentEntry[] {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) return [];
+  const row = item as Record<string, unknown>;
+  if (
+    typeof row.revision !== "number" ||
+    typeof row.actor !== "string" ||
+    typeof row.at !== "number" ||
+    row.after === null ||
+    typeof row.after !== "object"
+  ) return [];
+  const entries: ConsentEntry[] = [];
+  const provenance =
+    row.provenance !== null && typeof row.provenance === "object"
+      ? (row.provenance as Record<string, unknown>)
+      : null;
+  const created = row.before === null || row.before === undefined;
+  for (const channel of ["email", "sms"] as const) {
+    const next = genericConsentState(row.after, channel);
+    if (next === null) continue;
+    const previous = genericConsentState(row.before, channel) ?? "unknown";
+    if (!created && previous === next) continue;
+    entries.push({
+      revision: row.revision,
+      channel,
+      state: next,
+      actor: row.actor,
+      at: row.at,
+      ...(provenance && typeof provenance.method === "string" ? { method: provenance.method } : {}),
+      ...(provenance && typeof provenance.note === "string" ? { note: provenance.note } : {}),
+    });
+  }
+  return entries;
+}
+
 function genericConsentEntries(record: HostRecord): ConsentEntry[] {
   if (!Array.isArray(record.history)) return [];
-  const entries: ConsentEntry[] = [];
-  for (const item of record.history) {
-    if (item === null || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    if (
-      typeof row.revision !== "number" ||
-      typeof row.actor !== "string" ||
-      typeof row.at !== "number" ||
-      row.after === null ||
-      typeof row.after !== "object"
-    ) {
-      continue;
-    }
-    const provenance =
-      row.provenance !== null && typeof row.provenance === "object"
-        ? (row.provenance as Record<string, unknown>)
-        : null;
-    const created = row.before === null || row.before === undefined;
-    for (const channel of ["email", "sms"] as const) {
-      const next = genericConsentState(row.after, channel);
-      if (next === null) continue; // this write carries no value for the channel
-      const previous = genericConsentState(row.before, channel) ?? "unknown";
-      if (!created && previous === next) continue;
-      entries.push({
-        revision: row.revision,
-        channel,
-        state: next,
-        actor: row.actor,
-        at: row.at,
-        ...(provenance && typeof provenance.method === "string" ? { method: provenance.method } : {}),
-        ...(provenance && typeof provenance.note === "string" ? { note: provenance.note } : {}),
-      });
-    }
-  }
-  return entries.sort((a, b) => a.revision - b.revision);
+  return record.history.flatMap(genericConsentEntriesForRow).sort((a, b) => a.revision - b.revision);
 }
 
 /** Per-channel consent/suppression transitions; malformed entries are dropped.

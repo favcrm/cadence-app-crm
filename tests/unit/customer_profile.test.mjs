@@ -91,6 +91,16 @@ test("profile edits leave platform-managed source untouched", () => {
   expect({ ...existing, ...consent.profile }.source).toBe("platform_import");
 });
 
+test("a consent note is never silently discarded when its method is missing", () => {
+  const current = { display_name: "Ada", tags: [], consent: { email: "granted", sms: "unknown" } };
+  const withdrawal = { email: "denied", sms: "unknown", method: "", note: "Opt-out request" };
+  expect(() => profile.buildConsentChange(current, withdrawal)).toThrow();
+  expect(profile.buildConsentChange(current, { ...withdrawal, method: "written" }).provenance)
+    .toEqual({ method: "written", note: "Opt-out request" });
+  expect(profile.buildConsentChange(current, { ...withdrawal, note: "" }).provenance).toBeNull();
+  expect(() => profile.buildCreateProvenance("", "Signed form")).toThrow();
+});
+
 test("a real explicit consent_history wins over the generic journal", () => {
   const entries = profile.consentEntries(
     record({
@@ -189,10 +199,34 @@ test("activity details retain the recorded actor, revision and note", () => {
     ],
     notes: [{ id: "note-1", recordId: "cust-1", body: "Discussed renewal", actor: "assistant", created: 30 }],
   }));
-  expect(items.map(({ key, kind, actor, revision, note }) => ({ key, kind, actor, revision, note }))).toEqual([
-    { key: "n:note-1", kind: "note", actor: "assistant", revision: undefined, note: undefined },
-    { key: "r2", kind: "revision", actor: "Morgan", revision: 2, note: "Signed form" },
+  expect(items.map(({ kind, actor, revision, note }) => ({ kind, actor, revision, note }))).toEqual([
+    { kind: "note", actor: "assistant", revision: undefined, note: undefined },
+    { kind: "consent", actor: "Morgan", revision: 2, note: "Signed form" },
+    { kind: "revision", actor: "Morgan", revision: 2, note: undefined },
   ]);
+});
+
+test("reused revision numbers do not mix another activity's changes or consent note", () => {
+  const state = (email, consent) => ({ email, consent: { email: consent, sms: "unknown" } });
+  const [newer, older] = profile.activityItems(record({
+    profile: state("new@example.test", "granted"),
+    history: [
+      { revision: 2, digest: DIGEST, actor: "Morgan", at: 30,
+        before: state("middle@example.test", "denied"), after: state("new@example.test", "granted"),
+        provenance: { method: "written", note: "Signed form" } },
+      { revision: 2, digest: DIGEST, actor: "Robin", at: 10,
+        before: state("old@example.test", "granted"), after: state("middle@example.test", "denied"),
+        provenance: { method: "written", note: "Opt-out request" } },
+    ],
+    consentHistory: [],
+  }));
+  expect(newer.key).not.toBe(older.key);
+  expect(newer.actor).toBe("Morgan");
+  expect(newer.note).toBe("Signed form");
+  expect(newer.changes).toContainEqual({ field: "Email", before: "middle@example.test", after: "new@example.test" });
+  expect(older.actor).toBe("Robin");
+  expect(older.note).toBe("Opt-out request");
+  expect(older.changes).toContainEqual({ field: "Email", before: "old@example.test", after: "middle@example.test" });
 });
 
 test("activity translates the recorded unknown consent state", () => {
