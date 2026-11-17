@@ -10,6 +10,7 @@ activityItems,
 buildConsentChange,
 buildCreateProvenance,
 buildCustomerProfile,
+changeCustomerContacts,
 CONSENT_METHODS,
 CONSENT_NOTE_MAX,
 consentLabel,
@@ -18,8 +19,10 @@ formFromProfile,
 friendlyError,
 isConsentChoice,
 newCustomerId,
+readCustomerContacts,
 viewProfile,
 type ConsentSetting,
+type CustomerContactFields,
 type CustomerFormFields,
 } from "../customerProfile";
 import { QueryRefresh,useCrmQuery } from "../resources";
@@ -787,6 +790,57 @@ function ConsentForm({
   );
 }
 
+function ContactForm({
+  initial,
+  formId,
+  formError,
+  pending,
+  onSubmit,
+  onRemove,
+}: {
+  initial: CustomerContactFields;
+  formId: string;
+  formError: string | null;
+  pending: boolean;
+  onSubmit: (fields: CustomerContactFields) => void;
+  onRemove?: () => void;
+}) {
+  const { t } = useLocale();
+  const [fields, setFields] = useState(initial);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const set = (patch: Partial<CustomerContactFields>) => setFields((current) => ({ ...current, ...patch }));
+  return (
+    <form id={formId} className="grid gap-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) onSubmit(fields);
+    }}>
+      <Field label={t("Contact name")} id="crm-contact-name" required className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.name} onChange={(event) => set({ name: event.target.value })} maxLength={120} autoComplete="off" />}
+      </Field>
+      <Field label={t("Job title (optional)")} id="crm-contact-title" className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.title} onChange={(event) => set({ title: event.target.value })} maxLength={120} autoComplete="off" />}
+      </Field>
+      <Field label={t("Email (optional)")} id="crm-contact-email" className="crm-field">
+        {(c) => <input {...c} className="field" type="email" value={fields.email} onChange={(event) => set({ email: event.target.value })} maxLength={254} autoComplete="off" />}
+      </Field>
+      <Field label={t("Phone (optional)")} id="crm-contact-phone" className="crm-field">
+        {(c) => <input {...c} className="field" type="tel" value={fields.phone} onChange={(event) => set({ phone: event.target.value })} maxLength={24} autoComplete="off" />}
+      </Field>
+      <p className="text-micro text-ink-500">{t("Contacts share this customer's access. Their marketing consent is not inferred.")}</p>
+      {formError && <ErrorNotice bare>{formError}</ErrorNotice>}
+      {onRemove && (confirmRemove ? (
+        <div className="customer-remove-confirm">
+          <p>{t("Remove this contact from the customer?")}</p>
+          <Button type="button" size="sm" disabled={pending} onClick={onRemove}>{t("Confirm removal")}</Button>
+          <Button type="button" size="sm" disabled={pending} onClick={() => setConfirmRemove(false)}>{t("Keep contact")}</Button>
+        </div>
+      ) : (
+        <div><button type="button" className="lnk" disabled={pending} onClick={() => setConfirmRemove(true)}>{t("Remove contact")}</button></div>
+      ))}
+    </form>
+  );
+}
+
 function CustomerNew({
   scope,
   viewer,
@@ -885,14 +939,16 @@ function CustomerWorkspace({
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
   const { loading, error } = queryState;
   const canWrite = canEditCustomer(viewer, queryState.data);
-  const [mode, setMode] = useState<"view" | "edit" | "consent">("view");
+  const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
+  const [contactIndex, setContactIndex] = useState<number | null>(null);
   const record = mode === "view" ? queryState.data : editRecord;
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => { setMode("view"); setEditRecord(null); setFormError(null); }, [recordId]);
 
   const view = record ? viewProfile(record.profile) : null;
+  const contacts = record ? readCustomerContacts(record.profile) : null;
   const timeline = record ? activityItems(record, t) : [];
 
   const initials = view
@@ -901,6 +957,12 @@ function CustomerWorkspace({
   const reload = () => { void queryState.store.refresh(); };
   const ready = !loading && error === null && viewer.operator === true && record !== null && view !== null;
   const activity = timeline.find((item) => item.key === selectedActivity);
+  const openContact = (index: number | null) => {
+    setEditRecord(record);
+    setContactIndex(index);
+    setFormError(null);
+    setMode("contact");
+  };
   const when = (at: number, withTime = false) => {
     const time = at * 1000;
     return Number.isFinite(time) && !Number.isNaN(new Date(time).getTime())
@@ -928,6 +990,33 @@ function CustomerWorkspace({
                       { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
                     ]}
                   />
+                </section>
+                <section className="crm-sect" aria-label={t("Contacts")}>
+                  <div className="customer-section-heading">
+                    <h4>{t("Contacts")}</h4>
+                    {canWrite && contacts !== null && contacts.length < 50 && (
+                      <Button size="sm" onClick={() => openContact(null)}>{t("Add contact")}</Button>
+                    )}
+                  </div>
+                  {contacts === null ? (
+                    <p className="text-secondary text-ink-400">{t("Contacts are unavailable for this record.")}</p>
+                  ) : contacts.length === 0 ? (
+                    <p className="text-secondary text-ink-400">{t("No contacts recorded yet.")}</p>
+                  ) : (
+                    <ul className="customer-contacts">
+                      {contacts.map((contact, index) => (
+                        <li key={index}>
+                          <div>
+                            <strong>{contact.name}</strong>
+                            {contact.title && <p>{contact.title}</p>}
+                            {contact.email && <p className="num">{contact.email}</p>}
+                            {contact.phone && <p className="num">{contact.phone}</p>}
+                          </div>
+                          {canWrite && <Button size="sm" aria-label={`${t("Edit contact")} ${contact.name}`} onClick={() => openContact(index)}>{t("Edit")}</Button>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
                 <section className="crm-sect" aria-label={t("Consent")}>
                   <h4>{t("Consent")}</h4>
@@ -1078,7 +1167,7 @@ function CustomerWorkspace({
                   />
                 ),
               }
-            : {
+            : mode === "consent" ? {
                 formId: "crm-customer-consent",
                 title: t("Record consent"),
                 saveLabel: t("Save consent"),
@@ -1091,6 +1180,41 @@ function CustomerWorkspace({
                     profile={record.profile}
                     formError={formError}
                     onSubmit={(change) => save(change.profile, change.provenance ?? undefined)}
+                  />
+                ),
+              }
+            : {
+                formId: "crm-customer-contact",
+                title: t(contactIndex === null ? "Add contact" : "Edit contact"),
+                saveLabel: t("Save contact"),
+                pending,
+                onCancel: () => setMode("view"),
+                body: contacts === null ? <Notice>{t("Contacts are unavailable for this record.")}</Notice> : (
+                  <ContactForm
+                    key={`${record.revision}-${contactIndex ?? "new"}`}
+                    formId="crm-customer-contact"
+                    initial={{
+                      name: contactIndex === null ? "" : contacts[contactIndex]?.name ?? "",
+                      title: contactIndex === null ? "" : contacts[contactIndex]?.title ?? "",
+                      email: contactIndex === null ? "" : contacts[contactIndex]?.email ?? "",
+                      phone: contactIndex === null ? "" : contacts[contactIndex]?.phone ?? "",
+                    }}
+                    pending={pending}
+                    formError={formError}
+                    onSubmit={(fields) => {
+                      try {
+                        save(changeCustomerContacts(contacts, contactIndex, fields));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    }}
+                    {...(contactIndex === null ? {} : { onRemove: () => {
+                      try {
+                        save(changeCustomerContacts(contacts, contactIndex, null));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    } })}
                   />
                 ),
               }

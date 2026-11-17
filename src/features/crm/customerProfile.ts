@@ -156,6 +156,81 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
   return profile;
 }
 
+/** Contacts share the customer record's visibility; they are not independent customers. */
+export interface CustomerContact {
+  name: string;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface CustomerContactFields {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+}
+
+/** An absent or malformed collection is unavailable, not an empty collection. */
+export function readCustomerContacts(profile: unknown): CustomerContact[] | null {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
+  const value = (profile as Record<string, unknown>).contacts;
+  if (!Array.isArray(value) || value.length > 50) return null;
+  const result: CustomerContact[] = [];
+  for (const row of value) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return null;
+    const contact = row as Record<string, unknown>;
+    if (
+      Object.keys(contact).some((key) => !["name", "title", "email", "phone"].includes(key)) ||
+      typeof contact.name !== "string" || contact.name.length === 0 || contact.name.length > 120 ||
+      hasControl(contact.name) ||
+      !(contact.title === null || (typeof contact.title === "string" && contact.title.length <= 120 && !hasControl(contact.title))) ||
+      !(contact.email === null || (typeof contact.email === "string" && contact.email.length <= 254 && !hasControl(contact.email))) ||
+      !(contact.phone === null || (typeof contact.phone === "string" && contact.phone.length <= 24 && !hasControl(contact.phone)))
+    ) return null;
+    result.push({
+      name: contact.name,
+      title: contact.title as string | null,
+      email: contact.email as string | null,
+      phone: contact.phone as string | null,
+    });
+  }
+  return result;
+}
+
+/** A contact edit is one revision-fenced patch to the enclosing customer. */
+export function changeCustomerContacts(
+  contacts: CustomerContact[],
+  index: number | null,
+  fields: CustomerContactFields | null,
+): { contacts: CustomerContact[] } {
+  if (index !== null && (!Number.isInteger(index) || index < 0 || index >= contacts.length))
+    throw new ApiError("Contact is no longer available", 400);
+  if (index === null && (fields === null || contacts.length >= 50))
+    throw new ApiError("A customer can hold at most 50 contacts", 400);
+  const next = contacts.slice();
+  if (fields === null) {
+    next.splice(index!, 1);
+  } else {
+    const name = fields.name.trim();
+    const title = fields.title.trim();
+    const email = fields.email.trim();
+    const phone = fields.phone.trim();
+    if (!name || name.length > 120 || hasControl(name))
+      throw new ApiError("Contact name is required (1–120 characters)", 400);
+    if (title.length > 120 || hasControl(title))
+      throw new ApiError("Contact title must be at most 120 characters", 400);
+    if (email && !emailShapeValid(email))
+      throw new ApiError("Email needs one @ and a dotted domain", 400);
+    if (phone && !phoneShapeValid(phone))
+      throw new ApiError("Phone needs at least 7 digits (7–24 characters)", 400);
+    const contact = { name, title: title || null, email: email || null, phone: phone || null };
+    if (index === null) next.push(contact);
+    else next[index] = contact;
+  }
+  return { contacts: next };
+}
+
 /** A fresh record id in the peer's segment grammar. Never derived from content. */
 export function newCustomerId(): string {
   const bytes = new Uint8Array(9);
@@ -363,6 +438,16 @@ function activityChanges(before: unknown, after: unknown, current: unknown, t: T
       : undefined;
   if (Object.hasOwn(visible, "tags") && Object.hasOwn(previous, "tags") && Object.hasOwn(next, "tags")) {
     add("Tags", tags(previous.tags), tags(next.tags));
+  }
+  const contactSummary = (value: unknown): string | undefined => {
+    const rows = readCustomerContacts({ contacts: value });
+    if (rows === null) return undefined;
+    return rows.length === 0
+      ? t("Not provided")
+      : rows.map((row) => [row.name, row.title, row.email, row.phone].filter(Boolean).join(" · ")).join("\n");
+  };
+  if (Object.hasOwn(visible, "contacts") && Object.hasOwn(previous, "contacts") && Object.hasOwn(next, "contacts")) {
+    add("Contacts", contactSummary(previous.contacts), contactSummary(next.contacts));
   }
   const visibleConsent = object(visible.consent);
   const previousConsent = object(previous.consent);

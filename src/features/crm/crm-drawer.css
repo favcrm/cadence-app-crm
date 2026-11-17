@@ -353,6 +353,27 @@ button.chip:focus-visible {
 }
 .customer-profile-panel,
 .customer-activity-panel { min-width: 0; }
+.customer-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.customer-section-heading h4 { margin-bottom: 0; }
+.customer-contacts { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.customer-contacts li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-ink-700);
+}
+.customer-contacts li > div { min-width: 0; overflow-wrap: anywhere; }
+.customer-contacts strong { font-weight: 500; }
+.customer-contacts p { margin: 0.2rem 0 0; color: var(--color-ink-400); font-size: var(--text-micro); }
+.customer-remove-confirm { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.customer-remove-confirm p { flex-basis: 100%; margin: 0; }
 .customer-activity-panel h4,
 .customer-activity-details h4 {
   margin: 0 0 0.5rem;

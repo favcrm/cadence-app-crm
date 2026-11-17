@@ -175,6 +175,21 @@ For a protected table, `records.list` reports `record_access.create_id: "host"`;
 the screen then omits `record_id` on create. If the result is uncertain, check
 the customer list before trying again. This capability does not grant access.
 
+For a protected agent create, omit `record_id` and supply the intended human
+workspace member as `record_owner_id` to `app_call`. The owner reviews the
+request; the host verifies the assignee's current membership. The new customer
+is private to that person, and creating it does not grant the agent access.
+
+Contacts are entries in the customer's `contacts` array and share that
+customer's access; they are not separate customers and do not carry independent
+marketing consent. To add, correct or remove one, read the customer first,
+preserve the other entries, and submit the complete revised array through
+`records.update` with the current revision. Each entry has `name` and nullable
+`title`, `email` and `phone`; at most 50 entries are supported. Validate email
+and phone syntax before proposing them: the host's nested JSON schema enforces
+types and lengths, not email or phone formats. Never infer consent from a
+contact's details.
+
 In particular, do not assume `customers.notes.*` is callable through hosted
 `app_call` merely because `app-assistant.json` declares it. Use only operations
 the host advertises; a record update is not a substitute for logging a note.
@@ -237,9 +252,10 @@ nullable `phone` and `source` columns to `customers` plus a
 edits omit it so a partial update preserves any stored value. Schema v3 adds
 an optional `customer_type` (`person` or `organization`) and an optional
 website. Both kinds remain customers; a person representing an organization is
-a separate contact, not a second name for that organization. Contacts and
-cross-app links are not implemented by these fields. `campaigns` and
-`proposals` declare the host
+a separate contact, not a second name for that organization. Schema v4 adds a
+bounded `contacts` array to the customer record; its entries inherit the
+customer's visibility. Cross-app links are not implemented by these fields.
+`campaigns` and `proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The
 host-owned `id`, `context_id`, `revision`,
