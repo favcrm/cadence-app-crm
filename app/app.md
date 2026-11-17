@@ -191,15 +191,15 @@ types and lengths, not email or phone formats. Never infer consent from a
 contact's details.
 
 `custom_fields` is a customer-local object keyed by stable lowercase
-letters/digits/underscores (starting with a letter, at most 40 characters).
-Each value is `{label, type, value}` with `type` equal to `text`, `number`,
-`boolean` or `date`; dates use `YYYY-MM-DD`. To change one, preserve the other
-entries and submit the whole object with the current customer revision. These
-fields share the customer's access. Coordinate keys and types across the team:
-there is no workspace-wide definition registry or cross-customer uniqueness
-policy yet. The host validates value types and bounds, but its generic JSON
-schema does not validate object-key grammar or calendar dates; agents must do so
-before staging a write.
+letters, digits or underscores (1–40 characters; reserved object names are
+excluded). Each value is `{label, type, value}` with `type` equal to `text`,
+`number`, `boolean` or `date`; dates use `YYYY-MM-DD`. To change one, preserve
+the other entries and submit the whole object with the current customer
+revision. These fields share the customer's access. Coordinate keys and types
+across the team: there is no workspace-wide definition registry or
+cross-customer uniqueness policy. The host validates keys, value types, bounds
+and calendar dates. Hosts predating this schema validation must be upgraded
+before installing this version of the CRM.
 
 In particular, do not assume `customers.notes.*` is callable through hosted
 `app_call` merely because `app-assistant.json` declares it. Use only operations

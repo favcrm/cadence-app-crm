@@ -14,7 +14,7 @@ export interface CustomerCustomFieldForm {
   value: string;
 }
 
-const FIELD_KEY = /^[a-z][a-z0-9_]{0,39}$/;
+const FIELD_KEY = /^[a-z0-9_]{1,40}$/;
 const hasControl = (value: string) => /[\u0000-\u001f\u007f]/.test(value);
 const validKey = (key: string) => FIELD_KEY.test(key) && !(key in Object.prototype) && key !== "prototype";
 function validDate(value: string): boolean {

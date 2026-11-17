@@ -35,7 +35,7 @@
     {
       "version": 5,
       "path": "storage/005-customer-custom-fields.json",
-      "sha256": "sha256:778ed6c96056ce4bc1c93ba5fb06321fbdcd48b13a67bbb1d411e0dad483d5a0"
+      "sha256": "sha256:719f1f31b70d096d7ceca514bfc1fcb8b987fa81deee24db2fe9aaddad04b682"
     }
   ],
   "record_search_columns": ["display_name", "email", "tags", "phone", "source"],
