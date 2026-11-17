@@ -438,7 +438,7 @@ function CustomerList({
                   const state = viewProfile(record.profile).consentEmail;
                   return (
                     <span className={`chip ${state === "granted" ? "crm-consent-ok" : ""}`} title={t("Email consent")}>
-                      {consentLabel(state)}
+                      {t(consentLabel(state))}
                     </span>
                   );
                 },
