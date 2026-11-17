@@ -181,6 +181,11 @@ requires the agent's own live record grant. To update an existing customer, a
 paired agent needs its own write grant, rechecked when an owner approves the
 action; approval does not confer access.
 
+Paired-agent CLI chat uses that agent's own live credential and grants; a
+different agent's grant does not transfer. Ordinary browser chat does not yet
+have a separate customer-access identity and cannot use private customer data
+through this path.
+
 For a protected agent create, omit `record_id` and supply the intended human
 workspace member as `record_owner_id` to `app_call`. The owner reviews the
 request; the host verifies the assignee's current membership. The new customer
