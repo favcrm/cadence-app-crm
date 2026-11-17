@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": { "name": "customer_type", "type": "text", "nullable": true, "enum": ["person", "organization"] }
+    },
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": { "name": "website", "type": "text", "nullable": true, "max_length": 2048 }
+    }
+  ]
+}

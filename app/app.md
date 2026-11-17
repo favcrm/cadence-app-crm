@@ -209,7 +209,7 @@ return of the operations.
 ## App-owned storage schema (0.3.0, AOS-384)
 
 This package owns its logical storage schema. `app-storage.json` declares
-`app-storage/v1` at `schema_version` 2 with two ordered migrations under
+`app-storage/v1` at `schema_version` 3 with three ordered migrations under
 `storage/`; each migration's `sha256` is the exact raw-byte digest of that
 file. A host refuses this package if a migration is missing or its bytes
 differ from the declared hash, and `needs.requires.contracts` must list
@@ -225,8 +225,12 @@ keeps seeded legacy rows distinguishable. Schema v2 adds persisted,
 nullable `phone` and `source` columns to `customers` plus a
 `customers_phone` index. The customer form collects phone but leaves
 `source` to authorized platform and agent operations; profile and consent
-edits omit it so a partial update preserves any stored value. `campaigns`
-and `proposals` declare the host
+edits omit it so a partial update preserves any stored value. Schema v3 adds
+an optional `customer_type` (`person` or `organization`) and an optional
+website. Both kinds remain customers; a person representing an organization is
+a separate contact, not a second name for that organization. Contacts and
+cross-app links are not implemented by these fields. `campaigns` and
+`proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The
 host-owned `id`, `context_id`, `revision`,

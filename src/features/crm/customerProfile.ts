@@ -12,11 +12,14 @@ import { hostErrorText } from "./hostErrors";
  */
 
 export type ConsentChoice = "granted" | "denied" | "unknown";
+export type CustomerType = "" | "person" | "organization";
 
 export interface CustomerFormFields {
   displayName: string;
   email: string;
   phone: string;
+  customerType: CustomerType;
+  website: string;
   /** Raw tag text; separators are commas, semicolons or whitespace. */
   tags: string;
   consentEmail: ConsentChoice;
@@ -27,6 +30,8 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormFields = {
   displayName: "",
   email: "",
   phone: "",
+  customerType: "",
+  website: "",
   tags: "",
   consentEmail: "unknown",
   consentSms: "unknown",
@@ -85,6 +90,19 @@ function phoneShapeValid(phone: string): boolean {
   return digits >= 7 && /^[0-9+ \-().]+$/.test(phone);
 }
 
+/** Only HTTP(S) addresses without embedded credentials are safe to open. */
+export function customerWebsiteHref(value: unknown): string | null {
+  if (typeof value !== "string" || value.length === 0 || value.length > 2048 ||
+      value !== value.trim() || /\s/.test(value) || hasControl(value)) return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") && url.hostname &&
+      !url.username && !url.password ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the allowlisted `profile` value for create/update. Throws a
  * field-named ApiError on the first bad field. Blank optional fields are
@@ -111,6 +129,13 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
   if (phone !== "" && !phoneShapeValid(phone)) {
     throw new ApiError("Phone needs at least 7 digits (7–24 characters)", 400);
   }
+  if (fields.customerType !== "" && fields.customerType !== "person" && fields.customerType !== "organization") {
+    throw new ApiError("Choose a valid customer type", 400);
+  }
+  const website = fields.website.trim();
+  if (website !== "" && customerWebsiteHref(website) === null) {
+    throw new ApiError("Website must be an http or https address without credentials", 400);
+  }
   const tags = parseTags(fields.tags);
   if (!isConsentChoice(fields.consentEmail) || !isConsentChoice(fields.consentSms)) {
     throw new ApiError("Consent must be granted, denied or unknown", 400);
@@ -124,6 +149,8 @@ export function buildCustomerProfile(fields: CustomerFormFields): Record<string,
     // field must clear the stored value instead of preserving it.
     email: email !== "" ? email : null,
     phone: phone !== "" ? phone : null,
+    customer_type: fields.customerType || null,
+    website: website || null,
     // Source is platform-managed; omitting it preserves it on a PATCH.
   };
   return profile;
@@ -145,6 +172,8 @@ export interface CustomerView {
   displayName: string;
   email: string | null;
   phone: string | null;
+  customerType: CustomerType;
+  website: string | null;
   tags: string[];
   consentEmail: string;
   consentSms: string | null;
@@ -166,6 +195,8 @@ export function viewProfile(profile: unknown): CustomerView {
     displayName: text(row.display_name) ?? "—",
     email: text(row.email),
     phone: text(row.phone),
+    customerType: row.customer_type === "person" || row.customer_type === "organization" ? row.customer_type : "",
+    website: text(row.website),
     tags: Array.isArray(row.tags) ? row.tags.filter((t): t is string => typeof t === "string") : [],
     consentEmail: text(consent.email) ?? "unknown",
     consentSms: text(consent.sms),
@@ -179,6 +210,8 @@ export function formFromProfile(profile: unknown): CustomerFormFields {
     displayName: view.displayName === "—" ? "" : view.displayName,
     email: view.email ?? "",
     phone: view.phone ?? "",
+    customerType: view.customerType,
+    website: view.website ?? "",
     tags: view.tags.join(", "),
     consentEmail: isConsentChoice(view.consentEmail) ? view.consentEmail : "unknown",
     consentSms: view.consentSms !== null && isConsentChoice(view.consentSms) ? view.consentSms : "unknown",
@@ -312,10 +345,17 @@ function activityChanges(before: unknown, after: unknown, current: unknown, t: T
   };
   const text = (value: unknown): string | undefined =>
     value === null || value === "" ? t("Not provided") : typeof value === "string" ? value : undefined;
-  for (const [key, label] of [["display_name", "Display name"], ["email", "Email"], ["phone", "Phone"]] as const) {
+  for (const [key, label] of [["display_name", "Display name"], ["email", "Email"], ["phone", "Phone"], ["website", "Website"]] as const) {
     if (Object.hasOwn(visible, key) && Object.hasOwn(previous, key) && Object.hasOwn(next, key)) {
       add(label, text(previous[key]), text(next[key]));
     }
+  }
+  const customerType = (value: unknown): string | undefined =>
+    value === null ? t("Not provided")
+      : value === "person" ? t("Person")
+        : value === "organization" ? t("Organization") : undefined;
+  if (Object.hasOwn(visible, "customer_type") && Object.hasOwn(previous, "customer_type") && Object.hasOwn(next, "customer_type")) {
+    add("Customer type", customerType(previous.customer_type), customerType(next.customer_type));
   }
   const tags = (value: unknown): string | undefined =>
     Array.isArray(value) && value.every((item) => typeof item === "string")
@@ -507,7 +547,7 @@ export function friendlyError(error: unknown, t: Translate = identity): string {
     return `${message} ${t("— pick a different id or address, or open the existing record.")}`;
   }
   if (/supported shape or bounds/i.test(message)) {
-    return `${message} ${t("— check display name, email, phone and tags against the field hints.")}`;
+    return `${message} ${t("— check the customer fields against the field hints.")}`;
   }
   if (/refused app record field/i.test(message)) {
     return `${message} ${t("— the client refused a field the server never accepts.")}`;

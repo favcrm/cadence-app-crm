@@ -20,6 +20,8 @@ const fields = (overrides = {}) => ({
   displayName: "Ada Lovelace",
   email: "",
   phone: "",
+  customerType: "",
+  website: "",
   tags: "",
   consentEmail: "unknown",
   consentSms: "unknown",
@@ -52,6 +54,19 @@ test("non-blank optional profile values are carried", () => {
   );
   expect(built.email).toBe("ada@example.test");
   expect(built.phone).toBe("+44 20 7946 0000");
+});
+
+test("customer type and website round-trip without treating an organization as a contact", () => {
+  const input = fields({ customerType: "organization", website: "https://example.test/about" });
+  const saved = profile.buildCustomerProfile(input);
+  expect(saved).toMatchObject({ customer_type: "organization", website: "https://example.test/about" });
+  expect(profile.formFromProfile({ ...saved })).toMatchObject({
+    customerType: "organization", website: "https://example.test/about",
+  });
+  expect(profile.viewProfile(saved)).toMatchObject({ customerType: "organization", website: "https://example.test/about" });
+  expect(() => profile.buildCustomerProfile(fields({ website: "javascript:alert(1)" }))).toThrow();
+  expect(() => profile.buildCustomerProfile(fields({ website: "https://user:secret@example.test/" }))).toThrow();
+  expect(profile.customerWebsiteHref("javascript:alert(1)")).toBeNull();
 });
 
 test("profile edits leave platform-managed source untouched", () => {

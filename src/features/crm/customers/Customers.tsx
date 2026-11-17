@@ -516,7 +516,7 @@ function CustomerForm({
           buildCustomerProfile(fields);
           if (consentMethod && granted) provenance = buildCreateProvenance(method, note);
         } catch (e: unknown) {
-          setFieldError(e instanceof ApiError ? e.message : String(e));
+          setFieldError(e instanceof ApiError ? t(e.message) : String(e));
           return;
         }
         onSubmit(fields, provenance);
@@ -534,6 +534,40 @@ function CustomerForm({
           />
         )}
       </Field>
+      <div className="crm-field-row">
+        <Field label={t("Customer type (optional)")} id="crm-customer-type" className="crm-field">
+          {(c) => (
+            <Select
+              id={c.id}
+              value={fields.customerType}
+              onChange={(value) => {
+                if (value === "" || value === "person" || value === "organization") set({ customerType: value });
+              }}
+              options={[
+                { value: "", label: t("Not specified") },
+                { value: "person", label: t("Person") },
+                { value: "organization", label: t("Organization") },
+              ]}
+              aria-label={t("Customer type")}
+              full
+            />
+          )}
+        </Field>
+        <Field label={t("Website (optional)")} id="crm-website" className="crm-field">
+          {(c) => (
+            <input
+              {...c}
+              className="field"
+              type="url"
+              value={fields.website}
+              onChange={(e) => set({ website: e.target.value })}
+              maxLength={2048}
+              autoComplete="off"
+              placeholder="https://example.com"
+            />
+          )}
+        </Field>
+      </div>
       <div className="crm-field-row">
         <Field label={t("Email (optional)")} id="crm-email" className="crm-field">
           {(c) => (
@@ -872,8 +906,10 @@ function CustomerWorkspace({
                     className="crm-detail"
                     label={t("Customer fields")}
                     items={[
+                      { key: "type", term: t("Customer type"), value: view.customerType === "" ? t("Not specified") : t(view.customerType === "person" ? "Person" : "Organization") },
                       { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
                       { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
+                      { key: "website", term: t("Website"), value: view.website ?? "—" },
                       { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
                     ]}
                   />
