@@ -326,8 +326,6 @@ button.chip:focus-visible {
 .customer-header {
   justify-content: space-between;
   flex-wrap: wrap;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--color-ink-700);
 }
 .customer-heading { flex: 1 1 15rem; }
 .customer-heading p { margin: 0; }
@@ -347,12 +345,21 @@ button.chip:focus-visible {
 .customer-actions { flex-wrap: wrap; }
 .customer-workspace-grid {
   display: grid;
-  grid-template-columns: minmax(15rem, 22rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
 .customer-profile-panel,
 .customer-activity-panel { min-width: 0; }
+.customer-workspace .crm-ctabs-bar { margin: 0; }
+.customer-workspace .crm-ctabs {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.customer-workspace .crm-ctab { flex: none; white-space: nowrap; margin-bottom: 0; }
+.customer-workspace .crm-ctab:focus-visible { outline-offset: -2px; }
+.customer-workspace [role="tabpanel"] { min-width: 0; }
 .customer-section-heading {
   display: flex;
   align-items: center;

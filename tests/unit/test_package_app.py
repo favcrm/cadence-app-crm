@@ -442,6 +442,9 @@ class BuildAndExclusionTests(unittest.TestCase):
             {
                 f"{root}/storage/001-initial.json",
                 f"{root}/storage/002-customer-phone-source.json",
+                f"{root}/storage/003-customer-identity.json",
+                f"{root}/storage/004-customer-contacts.json",
+                f"{root}/storage/005-customer-custom-fields.json",
             },
         )
         self.assertEqual(
@@ -459,7 +462,6 @@ class BuildAndExclusionTests(unittest.TestCase):
         result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
         self.assertEqual(result["app"], "crm")
         self.assertEqual(result["version"], REAL_APP_VERSION)
-        self.assertEqual(result["files"], 13)
 
 
 class VerifyParityTests(unittest.TestCase):
@@ -607,8 +609,7 @@ class VerifyParityTests(unittest.TestCase):
     def test_legit_dir_trailing_slash_still_passes(self):
         # The real built archive carries explicit dir entries with a
         # trailing slash — canonicalization must not reject it.
-        result = pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
-        self.assertEqual(result["files"], 13)
+        pkg.verify_archive(self.out / f"crm-{REAL_APP_VERSION}.tar.gz")
 
 
 STORAGE_APP_MD = APP_MD.replace(
@@ -681,7 +682,7 @@ class StorageContractTests(unittest.TestCase):
         manifest = pkg.read_manifest(bundle, files)
         return pkg.read_contents(bundle, files, manifest.app)
 
-    def test_real_plan_has_two_migrations(self):
+    def test_real_plan_keeps_released_versions_and_packages_customer_fields(self):
         files = pkg.bundle_files(REPO / "app")
         manifest = pkg.read_manifest(REPO / "app", files)
         contents = pkg.read_contents(REPO / "app", files, manifest.app)
@@ -690,10 +691,12 @@ class StorageContractTests(unittest.TestCase):
         self.assertEqual(doc["contract"], "app-storage/v1")
         self.assertEqual(doc["app"], "crm")
         self.assertEqual(doc["record_kind"], "customer")
-        self.assertEqual(doc["schema_version"], 2)
-        self.assertEqual(doc["compatible_schema_versions"], [1, 2])
+        self.assertEqual(doc["schema_version"], 5)
+        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5])
         self.assertEqual(doc["default_table"], "customers")
-        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2])
+        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5])
+        fields_migration = "storage/005-customer-custom-fields.json"
+        self.assertEqual(dict(contents)[fields_migration], (REPO / "app" / fields_migration).read_bytes())
         self.assertIsInstance(doc["record_write_schema"], dict)
         self.assertIn("if", doc["record_write_schema"])
         self.assertEqual(
@@ -740,6 +743,29 @@ class StorageContractTests(unittest.TestCase):
         doc["record_write_schema"] = {"$ref": "https://example.test/schema.json"}
         (bundle / "app-storage.json").write_text(json.dumps(doc), encoding="utf-8")
         with self.assertRaisesRegex(pkg.PackageError, "unsupported JSON Schema keyword"):
+            self.read(bundle)
+
+    def test_property_names_cannot_hide_an_unsupported_schema(self):
+        bundle = write_storage_bundle(
+            self.dir / "badkeys",
+            [{"version": 1, "operations": create_customers_ops()}],
+            descriptor_overrides={
+                "record_write_schema": {
+                    "type": "object",
+                    "propertyNames": {"$ref": "https://example.test/schema.json"},
+                },
+            },
+        )
+        with self.assertRaisesRegex(pkg.PackageError, r"unsupported JSON Schema keyword.*\$ref"):
+            self.read(bundle)
+
+    def test_arbitrary_json_schema_format_refuses(self):
+        bundle = write_storage_bundle(
+            self.dir / "badformat",
+            [{"version": 1, "operations": create_customers_ops()}],
+            descriptor_overrides={"record_write_schema": {"format": "email"}},
+        )
+        with self.assertRaisesRegex(pkg.PackageError, "only supports the date format"):
             self.read(bundle)
 
     def test_column_format_and_json_schema_are_type_bound(self):

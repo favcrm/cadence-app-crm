@@ -1,4 +1,4 @@
-import { useLocale } from "../locale";
+import WorkspaceTabs from "../WorkspaceTabs";
 import type { ReactNode } from "react";
 import type { CampaignTab } from "./readiness";
 
@@ -8,8 +8,6 @@ export interface TabSpec {
   /** A short status pill next to the label (e.g. "1 draft"). */
   badge?: string | null;
 }
-
-const ORDER: CampaignTab[] = ["email", "audience", "review", "activity"];
 
 /**
  * The saved campaign's tablist (CAD-1055). Only the active panel is
@@ -32,60 +30,17 @@ export default function CampaignTabs({
   disabled?: boolean;
   children: ReactNode;
 }) {
-  const { t } = useLocale();
-  const move = (from: CampaignTab, key: string) => {
-    const index = ORDER.indexOf(from);
-    const next =
-      key === "ArrowRight" ? (index + 1) % ORDER.length
-      : key === "ArrowLeft" ? (index + ORDER.length - 1) % ORDER.length
-      : key === "Home" ? 0
-      : key === "End" ? ORDER.length - 1
-      : -1;
-    if (next < 0) return false;
-    onChange(ORDER[next]);
-    requestAnimationFrame(() =>
-      document.getElementById(`cmp-tab-${ORDER[next]}`)?.focus(),
-    );
-    return true;
-  };
   return (
-    <>
-      <div className="crm-ctabs-bar">
-        <div className="crm-ctabs" role="tablist" aria-label={t("Campaign sections")}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              id={`cmp-tab-${tab.id}`}
-              type="button"
-              role="tab"
-              className="crm-ctab"
-              data-tab={tab.id}
-              aria-selected={active === tab.id}
-              aria-controls={`cmp-panel-${tab.id}`}
-              tabIndex={active === tab.id ? 0 : -1}
-              aria-disabled={disabled || undefined}
-              onClick={() => { if (!disabled) onChange(tab.id); }}
-              onKeyDown={(e) => {
-                if (disabled) return;
-                if (move(tab.id, e.key)) e.preventDefault();
-              }}
-            >
-              {t(tab.label)}
-              {tab.badge ? <span className="chip">{t(tab.badge)}</span> : null}
-            </button>
-          ))}
-        </div>
-        {actions !== undefined && <div className="crm-ctabs-action">{actions}</div>}
-      </div>
-      <div
-        id={`cmp-panel-${active}`}
-        role="tabpanel"
-        aria-labelledby={`cmp-tab-${active}`}
-        className="grid gap-3"
-        data-panel={active}
-      >
-        {children}
-      </div>
-    </>
+    <WorkspaceTabs
+      idPrefix="cmp"
+      label="Campaign sections"
+      tabs={tabs}
+      active={active}
+      onChange={onChange}
+      actions={actions}
+      disabled={disabled}
+    >
+      {children}
+    </WorkspaceTabs>
   );
 }

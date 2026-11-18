@@ -97,9 +97,13 @@ process; do not edit `node_modules` or copy primitives into the preview.
 
 ## Detail drawers
 
-Customer records open as full pages in the CRM outlet; profile and consent
-edits and individual activity details use the in-frame drawer. A recorded
-profile edit shows available before/after values for supported fields.
+Customer records replace the list with a page in the CRM outlet. Overview shows
+profile, consent and recent activity; Activity shows the available history,
+Fields shows stored custom values, and Access shows your current permissions.
+Profile edits and individual activity details use the in-frame drawer. A recorded
+profile edit shows available before/after values for supported fields. Related
+records and sharing controls require host authorization contracts; the app does
+not simulate them.
 Segment details continue to open in that drawer. The shared `DrawerShell` spans
 the frame height, with a frame-wide scrim and a width of `min(30rem, 100vw)`;
 only its body scrolls. While open, Tab stays inside and Escape or the close

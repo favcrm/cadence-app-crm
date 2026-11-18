@@ -1,7 +1,8 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
+import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select } from "@cadence/screen-ui";
 import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
+import WorkspaceTabs from "../WorkspaceTabs";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
@@ -992,6 +993,15 @@ function CustomerNew({
   );
 }
 
+const CUSTOMER_TAB_PREFIX = "crm-customer";
+const CUSTOMER_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "activity", label: "Activity" },
+  { id: "fields", label: "Fields" },
+  { id: "access", label: "Access" },
+] as const;
+type CustomerTab = typeof CUSTOMER_TABS[number]["id"];
+
 function CustomerWorkspace({
   scope,
   recordId,
@@ -1005,6 +1015,11 @@ function CustomerWorkspace({
 }) {
   const { t, formatDate } = useLocale();
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const [activeTab, setActiveTab] = useState<CustomerTab>("overview");
+  const openTab = (tab: CustomerTab) => {
+    setActiveTab(tab);
+    headingRef.current?.ownerDocument.getElementById(`${CUSTOMER_TAB_PREFIX}-tab-${tab}`)?.focus();
+  };
   const [selectedActivity, setSelectedActivity] = useState<{ key: string; record: HostRecord } | null>(null);
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
   const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
@@ -1111,154 +1126,170 @@ function CustomerWorkspace({
       ? formatDate(time, withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" })
       : t("Not recorded");
   };
-  const tabs: DrawerTab[] =
-    ready && record !== null && view !== null
-      ? [
-          {
-            id: "overview",
-            label: t("Overview"),
-            panel: (
-              <>
-                <section className="crm-sect" aria-label={t("Profile")}>
-                  <h4>{t("Profile")}</h4>
-                  <Detail
-                    className="crm-detail"
-                    label={t("Customer fields")}
-                    items={[
-                      { key: "type", term: t("Customer type"), value: view.customerType === "" ? t("Not specified") : t(view.customerType === "person" ? "Person" : "Organization") },
-                      { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
-                      { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
-                      { key: "website", term: t("Website"), value: view.website ?? "—" },
-                      { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
-                    ]}
-                  />
-                </section>
-                <section className="crm-sect" aria-label={t("Contacts")}>
-                  <div className="customer-section-heading">
-                    <h4>{t("Contacts")}</h4>
-                    {canWrite && contacts !== null && contacts.length < 50 && (
-                      <Button size="sm" onClick={() => openContact(null)}>{t("Add contact")}</Button>
-                    )}
-                  </div>
-                  {contacts === null ? (
-                    <p className="text-secondary text-ink-400">{t("Contacts are unavailable for this record.")}</p>
-                  ) : contacts.length === 0 ? (
-                    <p className="text-secondary text-ink-400">{t("No contacts recorded yet.")}</p>
-                  ) : (
-                    <ul className="customer-contacts">
-                      {contacts.map((contact, index) => (
-                        <li key={index}>
-                          <div>
-                            <strong>{contact.name}</strong>
-                            {contact.title && <p>{contact.title}</p>}
-                            {contact.email && <p className="num">{contact.email}</p>}
-                            {contact.phone && <p className="num">{contact.phone}</p>}
-                          </div>
-                          {canWrite && <Button size="sm" aria-label={`${t("Edit contact")} ${contact.name}`} onClick={() => openContact(index)}>{t("Edit")}</Button>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-                <section className="crm-sect" aria-label={t("Custom fields")}>
-                  <div className="customer-section-heading">
-                    <h4>{t("Custom fields")}</h4>
-                    {canWrite && customFields !== null && Object.keys(customFields).length < 64 && (
-                      <Button size="sm" onClick={() => openCustomField(null)}>{t("Add field")}</Button>
-                    )}
-                  </div>
-                  {customFields === null ? (
-                    <p className="text-secondary text-ink-400">{t("Custom fields are unavailable for this record.")}</p>
-                  ) : Object.keys(customFields).length === 0 ? (
-                    <p className="text-secondary text-ink-400">{t("No custom fields recorded yet.")}</p>
-                  ) : (
-                    <ul className="customer-contacts">
-                      {Object.entries(customFields).map(([key, field]) => (
-                        <li key={key}>
-                          <div>
-                            <strong>{field.label}</strong>
-                            <p>{field.type === "boolean" ? t(field.value ? "Yes" : "No") : String(field.value)}</p>
-                            <p className="num">{key}</p>
-                          </div>
-                          {canWrite && <Button size="sm" aria-label={`${t("Edit field")} ${field.label}`} onClick={() => openCustomField(key)}>{t("Edit")}</Button>}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-                <section className="crm-sect" aria-label={t("Consent")}>
-                  <h4>{t("Consent")}</h4>
-                  <div className="crm-consent-cards">
-                    <div className="card px-3 py-2" data-consent="email">
-                      <div className="text-label text-ink-300">{t("Email marketing")}</div>
-                      <span className={`chip ${view.consentEmail === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentEmail))}</span>
-                      <div className="text-micro text-ink-500">
-                        {t(view.consentEmail === "granted" ? "Can receive campaigns" : "No marketing until granted")}
-                      </div>
+  const activityRow = (item: (typeof timeline)[number], source: "timeline" | "recent") => (
+    <li key={item.key}>
+      <button
+        type="button"
+        className="customer-activity-row"
+        data-activity-key={source === "timeline" ? item.key : undefined}
+        aria-haspopup="dialog"
+        onClick={() => { if (record) setSelectedActivity({ key: item.key, record }); }}
+      >
+        <span className="customer-activity-copy">
+          <span>{item.text}</span>
+          <span className="num text-micro text-ink-500">{when(item.at)}</span>
+        </span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </li>
+  );
+  const panels = ready && record !== null && view !== null ? {
+    overview: (
+      <div className="customer-workspace-grid">
+        <div className="customer-profile-panel">
+          <section className="crm-sect" aria-label={t("Profile")}>
+            <h4>{t("Profile")}</h4>
+            <Detail
+              className="crm-detail"
+              label={t("Customer fields")}
+              items={[
+                { key: "type", term: t("Customer type"), value: view.customerType === "" ? t("Not specified") : t(view.customerType === "person" ? "Person" : "Organization") },
+                { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
+                { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
+                { key: "website", term: t("Website"), value: view.website ?? "—" },
+                { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
+              ]}
+            />
+          </section>
+          <section className="crm-sect" aria-label={t("Contacts")}>
+            <div className="customer-section-heading">
+              <h4>{t("Contacts")}</h4>
+              {canWrite && contacts !== null && contacts.length < 50 && (
+                <Button size="sm" onClick={() => openContact(null)}>{t("Add contact")}</Button>
+              )}
+            </div>
+            {contacts === null ? (
+              <p className="text-secondary text-ink-400">{t("Contacts are unavailable for this record.")}</p>
+            ) : contacts.length === 0 ? (
+              <p className="text-secondary text-ink-400">{t("No contacts recorded yet.")}</p>
+            ) : (
+              <ul className="customer-contacts">
+                {contacts.map((contact, index) => (
+                  <li key={index}>
+                    <div>
+                      <strong>{contact.name}</strong>
+                      {contact.title && <p>{contact.title}</p>}
+                      {contact.email && <p className="num">{contact.email}</p>}
+                      {contact.phone && <p className="num">{contact.phone}</p>}
                     </div>
-                    <div className="card px-3 py-2" data-consent="sms">
-                      <div className="text-label text-ink-300">{t("SMS marketing")}</div>
-                      <span className={`chip ${view.consentSms === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentSms))}</span>
-                      <div className="text-micro text-ink-500">{t(view.consentSms === null ? "Not recorded" : "Per customer choice")}</div>
-                    </div>
-                  </div>
-                </section>
-              </>
-            ),
-          },
-          {
-            id: "activity",
-            label: t("Activity"),
-            panel: (
-              <>
-                <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
-                {activityRecord?.historyTruncated && !activityRecord.historyNextCursor
-                  ? <p className="text-micro text-ink-500">{t(record.recordAccess ? "Only recent changes are shown; earlier history may be unavailable after access is enabled." : "Only recent record changes are shown.")}</p>
-                  : record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
-                <span role="status" className="sr-only">{historyAnnouncement}</span>
-                {timeline.length > 0 ? (
-                <ol ref={activityListRef} tabIndex={-1} className="crm-timeline" aria-label={t("Activity")}>
-                  {timeline.map((item) => (
-                    <li key={item.key}>
-                      <button type="button" className="customer-activity-row" data-activity-key={item.key} onClick={() => setSelectedActivity({ key: item.key, record })}>
-                        <span className="customer-activity-copy">
-                          <span>{item.text}</span>
-                          <span className="num text-micro text-ink-500">{when(item.at)}</span>
-                        </span>
-                        <span aria-hidden="true">›</span>
-                      </button>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                  <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
-                )}
-                {historyError && <ErrorNotice onRetry={reload}>{historyError}</ErrorNotice>}
-                {activityRecord?.historyNextCursor && (
-                  <Button size="sm" loading={historyBusy} disabled={historyBusy || mode !== "view"} onClick={loadOlder}>
-                    {t("Load earlier activity")}
-                  </Button>
-                )}
-              </>
-            ),
-          },
-          {
-            id: "details",
-            label: t("Details"),
-            panel: (
-              <section aria-label={t("Record diagnostics")}>
-                <p className="text-micro text-ink-500 mb-2">
-                  {t("Selection is chat context only — the server re-proves scope on every send.")}
-                </p>
-                <p className="num text-micro text-ink-500">
-                  {t("Record")} <span className="num">{recordId}</span> · {t("revision")} r{record.revision} · {t("digest")}{" "}
-                  {record.digest.slice(0, 18)}…
-                </p>
-              </section>
-            ),
-          },
-        ]
-      : [];
+                    {canWrite && <Button size="sm" aria-label={`${t("Edit contact")} ${contact.name}`} onClick={() => openContact(index)}>{t("Edit")}</Button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="crm-sect" aria-label={t("Consent")}>
+            <h4>{t("Consent")}</h4>
+            <div className="crm-consent-cards">
+              <div className="card px-3 py-2" data-consent="email">
+                <div className="text-label text-ink-300">{t("Email marketing")}</div>
+                <span className={`chip ${view.consentEmail === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentEmail))}</span>
+                <div className="text-micro text-ink-500">
+                  {t(view.consentEmail === "granted" ? "Can receive campaigns" : "No marketing until granted")}
+                </div>
+              </div>
+              <div className="card px-3 py-2" data-consent="sms">
+                <div className="text-label text-ink-300">{t("SMS marketing")}</div>
+                <span className={`chip ${view.consentSms === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentSms))}</span>
+                <div className="text-micro text-ink-500">{t(view.consentSms === null ? "Not recorded" : "Per customer choice")}</div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <aside className="customer-activity-panel" aria-label={t("Recent activity")}>
+          <div className="customer-section-heading">
+            <h4>{t("Recent activity")}</h4>
+            <Button size="sm" onClick={() => openTab("activity")}>{t("View all activity")}</Button>
+          </div>
+          {timeline.length > 0 ? (
+            <ol className="crm-timeline" aria-label={t("Recent activity")}>
+              {timeline.slice(0, 2).map((item) => activityRow(item, "recent"))}
+            </ol>
+          ) : (
+            <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+          )}
+        </aside>
+      </div>
+    ),
+    activity: (
+      <section className="customer-activity-panel" aria-label={t("Activity")}>
+        <h4>{t("Activity")}</h4>
+        <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
+        {activityRecord?.historyTruncated && !activityRecord.historyNextCursor
+          ? <p className="text-micro text-ink-500">{t(record.recordAccess ? "Only recent changes are shown; earlier history may be unavailable after access is enabled." : "Only recent record changes are shown.")}</p>
+          : record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
+        <span role="status" className="sr-only">{historyAnnouncement}</span>
+        {timeline.length > 0 ? (
+          <ol ref={activityListRef} tabIndex={-1} className="crm-timeline" aria-label={t("Activity")}>
+            {timeline.map((item) => activityRow(item, "timeline"))}
+          </ol>
+        ) : (
+          <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+        )}
+        {historyError && <ErrorNotice onRetry={reload}>{historyError}</ErrorNotice>}
+        {activityRecord?.historyNextCursor && (
+          <Button size="sm" loading={historyBusy} disabled={historyBusy || mode !== "view"} onClick={loadOlder}>
+            {t("Load earlier activity")}
+          </Button>
+        )}
+      </section>
+    ),
+    fields: (
+      <section className="crm-sect" aria-label={t("Custom fields")}>
+        <div className="customer-section-heading">
+          <h4>{t("Custom fields")}</h4>
+          {canWrite && customFields !== null && Object.keys(customFields).length < 64 && (
+            <Button size="sm" onClick={() => openCustomField(null)}>{t("Add field")}</Button>
+          )}
+        </div>
+        {customFields === null ? (
+          <p className="text-secondary text-ink-400">{t("Custom fields are unavailable for this record.")}</p>
+        ) : Object.keys(customFields).length === 0 ? (
+          <p className="text-secondary text-ink-400">{t("No custom fields recorded yet.")}</p>
+        ) : (
+          <ul className="customer-contacts">
+            {Object.entries(customFields).map(([key, field]) => (
+              <li key={key}>
+                <div>
+                  <strong>{field.label}</strong>
+                  <p>{field.type === "boolean" ? t(field.value ? "Yes" : "No") : String(field.value)}</p>
+                  <p className="num">{key}</p>
+                </div>
+                {canWrite && <Button size="sm" aria-label={`${t("Edit field")} ${field.label}`} onClick={() => openCustomField(key)}>{t("Edit")}</Button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    ),
+    access: (
+      <section className="crm-sect" aria-label={t("Access")}>
+        <h4>{t("Your access")}</h4>
+        <p>{t(canWrite ? "You can view and edit this customer." : "You can view this customer, but cannot edit it.")}</p>
+        <p className="text-secondary text-ink-400">{t("Customer sharing cannot be managed from this screen.")}</p>
+        <details className="crm-diag">
+          <summary>{t("Record diagnostics")}</summary>
+          <p className="text-micro text-ink-500 mb-2">
+            {t("Selection is chat context only — the server re-proves scope on every send.")}
+          </p>
+          <p className="num text-micro text-ink-500">
+            {t("Record")} <span className="num">{recordId}</span> · {t("revision")} r{record.revision} · {t("digest")}{" "}
+            {record.digest.slice(0, 18)}…
+          </p>
+        </details>
+      </section>
+    ),
+  } : null;
 
   const save = (profile: Record<string, unknown>, provenance?: { method: ConsentMethod; note?: string }) => {
     if (record === null) return;
@@ -1276,7 +1307,7 @@ function CustomerWorkspace({
 
   return (
     <section className="customer-workspace" aria-label={t("Customer details")}>
-      <button type="button" className="lnk customer-back" onClick={onClose}>← {t("Customers")}</button>
+      <button type="button" className="lnk customer-back" onClick={onClose}>← {t("All customers")}</button>
       <header className="customer-header">
         <div className="customer-heading">
           {ready && initials && <span className="customer-avatar" aria-hidden="true">{initials}</span>}
@@ -1303,17 +1334,15 @@ function CustomerWorkspace({
               <>
                 <span role="status"><QueryRefresh updating={queryState.updating} /></span>
                 {!canWrite && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
-                <div className="customer-workspace-grid">
-                  <aside className="customer-profile-panel">{tabs[0]?.panel}</aside>
-                  <section className="customer-activity-panel" aria-label={t("Activity")}>
-                    <h4>{t("Activity")}</h4>
-                    {tabs[1]?.panel}
-                  </section>
-                </div>
-                <details className="crm-diag">
-                  <summary>{t("Details")}</summary>
-                  {tabs[2]?.panel}
-                </details>
+                <WorkspaceTabs
+                  idPrefix={CUSTOMER_TAB_PREFIX}
+                  label="Customer sections"
+                  tabs={CUSTOMER_TABS}
+                  active={activeTab}
+                  onChange={setActiveTab}
+                >
+                  {panels?.[activeTab]}
+                </WorkspaceTabs>
               </>
             )}
       {mode !== "view" && canWrite && ready && record !== null && (

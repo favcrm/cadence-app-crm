@@ -141,6 +141,11 @@ root member and `storage/` directory. Only a hosted v2 runtime with the
 real adapter installs or executes this schema. Nothing here proves schema
 execution, migration, installation or update.
 
+Schema v5 uses `propertyNames` for custom field keys and `format: date` for
+typed date values. The offline package checker validates the shape of both
+declarations. The target host must support and enforce both keywords before
+an installation or upgrade; do not strip the constraints to fit an older host.
+
 The plan declares `customers`, `segments`, `campaigns` and `proposals`,
 including the `synthetic` boolean (default false) that keeps seeded legacy
 rows distinguishable, and the `proposals.campaign_id` relation with its
