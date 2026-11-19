@@ -1,7 +1,7 @@
 ---
 app: crm
 title: CRM
-version: '0.4.0'
+version: '0.5.0'
 summary: Customer records, activity, segments and scoped campaign workflows; sending stays an operator-run host action.
 needs:
   connections: []
