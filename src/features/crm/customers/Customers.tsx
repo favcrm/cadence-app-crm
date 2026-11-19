@@ -67,9 +67,18 @@ export default function Customers({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
-  const returningToList = useRef(false);
+  const listPane = useRef<HTMLDivElement>(null);
+  const lastOpenRecord = useRef<string | null>(null);
   useEffect(() => {
-    if (recordId !== null) returningToList.current = true;
+    if (recordId !== null) {
+      lastOpenRecord.current = recordId;
+    } else if (lastOpenRecord.current !== null) {
+      const id = lastOpenRecord.current;
+      lastOpenRecord.current = null;
+      const pane = listPane.current;
+      const opener = pane?.querySelector<HTMLElement>(`[data-record-id="${CSS.escape(id)}"] button.lnk`);
+      (opener ?? pane?.querySelector<HTMLElement>("[data-outlet-heading]"))?.focus();
+    }
   }, [recordId]);
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
@@ -77,14 +86,15 @@ export default function Customers({
     <div className="app-outlet crm" data-outlet="crm">
 
       <div className="crm-surface">
-        {view === "list" && recordId === null && (
-          <CustomerList
-            scope={scope}
-            viewer={viewer}
-            onSelect={onSelect}
-            onNew={() => onView("new")}
-            focusOnMount={returningToList.current}
-          />
+        {view === "list" && (
+          <div ref={listPane} hidden={recordId !== null}>
+            <CustomerList
+              scope={scope}
+              viewer={viewer}
+              onSelect={onSelect}
+              onNew={() => onView("new")}
+            />
+          </div>
         )}
         {view === "list" && recordId !== null && (
           <CustomerWorkspace
@@ -123,20 +133,14 @@ function CustomerList({
   viewer,
   onSelect,
   onNew,
-  focusOnMount,
 }: {
   scope: HostScope;
   viewer: Viewer;
   onSelect: (recordId: string) => void;
   onNew: () => void;
-  focusOnMount: boolean;
 }) {
   const { t, formatNumber } = useLocale();
   const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
-    if (focusOnMount) headingRef.current?.focus({ preventScroll: true });
-  }, [focusOnMount]);
   const [initialList] = useState(() => readCustomerList(scope));
   const [query, setQuery] = useState(initialList?.query ?? "");
   const [committed, setCommitted] = useState(initialList?.committed ?? "");
@@ -260,7 +264,7 @@ function CustomerList({
 
   return (
     <section ref={listRef} aria-label={t("Customers list")} className="crm-list crm-list-controls">
-      <h3 ref={headingRef} tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+      <h3 tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Customers")}
       </h3>
       <div className="crm-toolbar crm-list-toolbar">
@@ -358,7 +362,7 @@ function CustomerList({
           <DataTable<HostRecord>
             label={t("Customers table — scroll horizontally to reach every column")}
             wrapClassName="crm-table-wrap"
-            tableClassName="crm-table"
+            tableClassName="crm-table crm-customer-table"
             rowKey={(record) => record.id}
             rowProps={(record) => ({
               "data-record-id": record.id,
@@ -401,9 +405,9 @@ function CustomerList({
               {
                 key: "name",
                 header: t("Name"),
-                cellClassName: "text-ink-100",
+                cellClassName: "text-ink-100 crm-cell-name",
                 cell: (record) => (
-                  <button type="button" className="lnk" onClick={() => onSelect(record.id)}>
+                  <button type="button" className="lnk" title={viewProfile(record.profile).displayName} onClick={() => onSelect(record.id)}>
                     {viewProfile(record.profile).displayName}
                   </button>
                 ),
@@ -420,13 +424,17 @@ function CustomerList({
                 cell: (record) => {
                   const tags = viewProfile(record.profile).tags;
                   return tags.length > 0 ? (
-                    <span className="crm-chips">
-                      {tags.map((tag) => (
-                        <button key={tag} type="button" className="chip" title={`${t("Filter by tag")} ${tag}`} onClick={() => setTagFilter(tag)}>
-                          {tag}
-                        </button>
-                      ))}
-                    </span>
+                    <>
+                      <span className="crm-chips crm-tags-full">
+                        {tags.map((tag) => (
+                          <button key={tag} type="button" className="chip" title={`${t("Filter by tag")} ${tag}`} onClick={() => setTagFilter(tag)}>
+                            {tag}
+                          </button>
+                        ))}
+                      </span>
+                      {/* Narrow frames show the count; the tags are in the record. */}
+                      <span className="chip crm-tags-count" title={tags.join(", ")}>{formatNumber(tags.length)}</span>
+                    </>
                   ) : (
                     "—"
                   );

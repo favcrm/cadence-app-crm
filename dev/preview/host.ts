@@ -4,8 +4,20 @@ import "./shell";
 import type { Route } from "../../src/bridge/scope";
 
 const sections = ["customers", "segments", "campaigns"] as const;
-const locale = new URLSearchParams(location.search).get("locale") === "zh-TW" ? "zh-TW" : "en";
 const unavailable = () => new ApiError("Unavailable offline. No live data was changed, sent or approved.", 503, { code: "unavailable" });
+
+// CRM-19 canvas mode: ?canvas=<px> mounts the screen alone in a frame of that
+// width (the chat canvas is ~420-830px), ?readonly=1 narrows the offered
+// actions to reads like the member mount, ?lang=zh-TW and ?theme=light|dark
+// pick the presentation. All synthetic; nothing here is a host authority.
+const options = new URLSearchParams(location.search);
+const canvas = /^\d{3,4}$/.test(options.get("canvas") ?? "") ? Number(options.get("canvas")) : null;
+const presentationLocale = (options.get("lang") ?? options.get("locale")) === "zh-TW" ? "zh-TW" : "en";
+const offeredActions = options.get("readonly") === "1" ? fixtureActions.filter(verb => /\.(list|show|render)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
+if (canvas !== null) {
+  document.documentElement.dataset.canvas = "";
+  document.documentElement.style.setProperty("--canvas-width", `${canvas}px`);
+}
 
 const frame = document.querySelector<HTMLIFrameElement>("#crm-frame")!;
 const status = document.querySelector<HTMLElement>("#preview-status")!;
@@ -31,7 +43,7 @@ function sendProjection(conn: Conn) {
   conn.port?.postMessage({
     v: 2, op: "screen", tag: "crm", install_id: installId, digest,
     installation: { install_id: installId, name: "crm", title: "CRM fixtures", version: "development", digest, summary: "Local browser-memory fixtures" },
-    actions: fixtureActions, route, presentation_locale: locale,
+    actions: offeredActions, route, presentation_locale: presentationLocale,
   });
 }
 
@@ -117,7 +129,7 @@ function reply(conn: Conn, request: { op: string; id: string }, data: unknown) {
 function handle(conn: Conn, request: Record<string, unknown>) {
   if (request?.v === 1 && request.op === "ready") {
     sendProjection(conn);
-    status.textContent = "Local fixture data · editing enabled";
+    status.textContent = options.get("readonly") === "1" ? "Local fixture data · read-only" : "Local fixture data · editing enabled";
     return;
   }
   if (request?.v === 2 && request.op === "leave") return;
@@ -125,7 +137,7 @@ function handle(conn: Conn, request: Record<string, unknown>) {
   const call = request as { op: "call" | "slot"; id: string; verb: string; args: Record<string, unknown> };
   try {
     if (call.op !== "call") throw unavailable();
-    if (!fixtureActions.includes(call.verb)) throw unavailable();
+    if (!offeredActions.includes(call.verb)) throw unavailable();
     if (call.verb === "screen.route.patch") {
       const patch = call.args;
       if ((patch.section !== undefined && !sections.includes(patch.section as Route["section"])) || (patch.view !== undefined && !["list", "new"].includes(patch.view as string)) || ["record_id", "segment_id"].some(key => patch[key] !== undefined && patch[key] !== null && (typeof patch[key] !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(patch[key] as string)))) throw new ApiError("Invalid local route.", 400);
@@ -175,5 +187,5 @@ window.addEventListener("popstate", () => {
   pushAll();
 });
 window.addEventListener("pagehide", () => { primary.port?.close(); });
-frame.src = `./frame.html?nonce=${primary.nonce}`;
+frame.src = `./frame.html?nonce=${primary.nonce}${options.has("theme") ? `&theme=${encodeURIComponent(options.get("theme")!)}` : ""}`;
 if (import.meta.hot) import.meta.hot.dispose(() => { frameResize.disconnect(); primary.port?.close(); });

@@ -106,3 +106,8 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 2px sol
 }
 @media (max-width: 479px) { .header-context { gap: 8px; } .header-context > span:first-of-type { display: none; } .header-actions { gap: 6px; } .local-badge { font-size: 9px; } .frame-status > span:last-child { display: none; } .preview-panels { padding: 0 10px 10px; } }
 
+/* CRM-19 canvas mode: only the screen frame, at a fixed container width. */
+html[data-canvas] :is(.preview-sidebar, .workspace-header, .preview-notice, .workspace-title, .preview-assistant, .mobile-panels, .sidebar-scrim) { display: none !important; }
+html[data-canvas] :is(.preview-board, .preview-main, .preview-panels, .preview-workspace) { display: block !important; padding: 0 !important; margin: 0 !important; height: 100vh; }
+html[data-canvas] .frame-status { display: flex; }
+html[data-canvas] #crm-frame { width: var(--canvas-width); height: calc(100vh - 28px); }

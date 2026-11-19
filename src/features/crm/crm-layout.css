@@ -368,3 +368,71 @@
   border-radius: 0.5rem;
   background: #fff;
 }
+
+/* CRM-19 — Customers list at canvas widths. Headers never break inside a
+   word, and the tag count only shows when the full tag chips do not fit. */
+.crm-customer-table thead th {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.crm-customer-table .crm-tags-count {
+  display: none;
+}
+
+/* A long name wraps from the left edge, never centred. */
+.crm-customer-table .crm-cell-name .lnk {
+  text-align: left;
+}
+
+@container (max-width: 47.5rem) {
+  /* Name and email stay on one line each and end in an ellipsis. Consent
+     drops out and tags collapse to a count; the first four columns stay. */
+  /* crm-campaign.css gives every .crm-table a 680px floor that would force
+     a horizontal scroll here; the narrow table fits its container instead. */
+  .crm-customer-table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .crm-customer-table :is(th, td):nth-child(n + 5) {
+    display: none;
+  }
+
+  .crm-customer-table :is(th, td):nth-child(1) {
+    width: 2.25rem;
+  }
+
+  .crm-customer-table :is(th, td):nth-child(4) {
+    width: 4rem;
+    text-align: center;
+  }
+
+  .crm-customer-table th,
+  .crm-customer-table td {
+    padding: 0.4rem 0.5rem;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .crm-customer-table .crm-cell-name .lnk {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .crm-customer-table .crm-tags-full {
+    display: none;
+  }
+
+  .crm-customer-table .crm-tags-count {
+    display: inline-flex;
+  }
+}

@@ -21,6 +21,8 @@ const records: LocalRecord[] = [
   { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
   { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
   { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
+  // Long values exercise the single-line customer table in narrow canvases.
+  { id: "wholesale", name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Montgomery", email: "bartholomew.wolfeschlegelstein@wholesale-distribution.example.invalid", tags: ["wholesale", "vip", "newsletter", "events"], consent: "granted" },
 ].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, contacts: row.id === "ada" ? [{ name: "Alex Demo", title: "Operations", email: "alex@example.invalid", phone: null }] : [], custom_fields: (row.id === "ada" ? { customer_segment: { label: "Customer segment", type: "text", value: "Local fixture" } } : {}) as CustomerCustomFields, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
 const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
