@@ -10,6 +10,8 @@
   <div id="root"></div>
   <script id="cadence-screen-boot" type="application/json"></script>
   <script type="module">
+    const theme = new URLSearchParams(location.search).get("theme");
+    if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
     const boot = document.getElementById("cadence-screen-boot");
     boot.textContent = JSON.stringify({ tag: "crm", bridge_nonce: new URLSearchParams(location.search).get("nonce"), generation: 1, parent_origin: location.origin });
     await import("/src/main.tsx");

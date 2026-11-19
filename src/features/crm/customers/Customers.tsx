@@ -1,6 +1,7 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
 import { useEffect,useRef,useState } from "react";
+import { STACK_BELOW_PX,useContainerWidth } from "../containerWidth";
 import FrameDrawer from "../FrameDrawer";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
@@ -61,14 +62,21 @@ export default function Customers({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
+  const { t } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
+  // CRM-19: in a narrow frame (the chat canvas) an open record replaces the
+  // list instead of covering most of it. The list remembers its page, filters
+  // and scroll, so it comes back as it was.
+  const width = useContainerWidth();
+  const stacked = width !== null && width < STACK_BELOW_PX;
+  const detailOnly = stacked && recordId !== null;
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
       <div className="crm-surface">
-        {view === "list" && (
+        {view === "list" && !detailOnly && (
           <CustomerList
             scope={scope}
             viewer={viewer}
@@ -99,6 +107,7 @@ export default function Customers({
           recordId={recordId}
           viewer={viewer}
           canWrite={canWrite}
+          fill={detailOnly ? { backLabel: t("Customers") } : undefined}
           onClose={() => onSelect(null)}
         />
       )}
@@ -353,7 +362,7 @@ function CustomerList({
           <DataTable<HostRecord>
             label={t("Customers table — scroll horizontally to reach every column")}
             wrapClassName="crm-table-wrap"
-            tableClassName="crm-table"
+            tableClassName="crm-table crm-customer-table"
             rowKey={(record) => record.id}
             rowProps={(record) => ({
               "data-record-id": record.id,
@@ -396,9 +405,9 @@ function CustomerList({
               {
                 key: "name",
                 header: t("Name"),
-                cellClassName: "text-ink-100",
+                cellClassName: "text-ink-100 crm-cell-name",
                 cell: (record) => (
-                  <button type="button" className="lnk" onClick={() => onSelect(record.id)}>
+                  <button type="button" className="lnk" title={viewProfile(record.profile).displayName} onClick={() => onSelect(record.id)}>
                     {viewProfile(record.profile).displayName}
                   </button>
                 ),
@@ -406,7 +415,7 @@ function CustomerList({
               {
                 key: "email",
                 header: t("Email"),
-                cellClassName: "num text-ink-300 crm-nowrap",
+                cellClassName: "num text-ink-300 crm-nowrap crm-cell-email",
                 cell: (record) => viewProfile(record.profile).email ?? "—",
               },
               {
@@ -415,13 +424,17 @@ function CustomerList({
                 cell: (record) => {
                   const tags = viewProfile(record.profile).tags;
                   return tags.length > 0 ? (
-                    <span className="crm-chips">
-                      {tags.map((tag) => (
-                        <button key={tag} type="button" className="chip" title={`${t("Filter by tag")} ${tag}`} onClick={() => setTagFilter(tag)}>
-                          {tag}
-                        </button>
-                      ))}
-                    </span>
+                    <>
+                      <span className="crm-chips crm-tags-full">
+                        {tags.map((tag) => (
+                          <button key={tag} type="button" className="chip" title={`${t("Filter by tag")} ${tag}`} onClick={() => setTagFilter(tag)}>
+                            {tag}
+                          </button>
+                        ))}
+                      </span>
+                      {/* Narrow frames show the count; the tags are in the record. */}
+                      <span className="chip crm-tags-count" title={tags.join(", ")}>{formatNumber(tags.length)}</span>
+                    </>
                   ) : (
                     "—"
                   );
@@ -430,12 +443,13 @@ function CustomerList({
               {
                 key: "source",
                 header: t("Source"),
-                cellClassName: "text-ink-300",
+                cellClassName: "text-ink-300 crm-col-source",
                 cell: (record) => viewProfile(record.profile).source ?? "—",
               },
               {
                 key: "consent",
                 header: t("Email consent"),
+                cellClassName: "crm-col-consent",
                 cell: (record) => {
                   const state = viewProfile(record.profile).consentEmail;
                   return (
@@ -842,12 +856,15 @@ export function CustomerDrawer({
   recordId,
   viewer,
   canWrite,
+  fill,
   onClose,
 }: {
   scope: HostScope;
   recordId: string;
   viewer: Viewer;
   canWrite: boolean;
+  /** Narrow frame: the record takes the whole screen with a Back control. */
+  fill?: { backLabel: string };
   onClose: () => void;
 }) {
   const { t, formatDate } = useLocale();
@@ -963,6 +980,7 @@ export function CustomerDrawer({
 
   return (
     <FrameDrawer
+      fill={fill}
       kind="customer"
       kicker={t("Customer")}
       label={t("Customer details")}
