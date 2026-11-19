@@ -65,8 +65,8 @@ export default function Customers({
   const { t } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
   // CRM-19: in a narrow frame (the chat canvas) an open record replaces the
-  // list instead of covering most of it. The list remembers its page, filters
-  // and scroll, so it comes back as it was.
+  // list instead of covering most of it. The list is only hidden, so its
+  // page, filters, selection and scroll are exactly as they were.
   const width = useContainerWidth();
   const stacked = width !== null && width < STACK_BELOW_PX;
   const detailOnly = stacked && recordId !== null;
@@ -75,8 +75,8 @@ export default function Customers({
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
-      <div className="crm-surface">
-        {view === "list" && !detailOnly && (
+      <div className="crm-surface" hidden={detailOnly || undefined}>
+        {view === "list" && (
           <CustomerList
             scope={scope}
             viewer={viewer}
@@ -108,7 +108,12 @@ export default function Customers({
           viewer={viewer}
           canWrite={canWrite}
           fill={detailOnly ? { backLabel: t("Customers") } : undefined}
-          onClose={() => onSelect(null)}
+          onClose={() => {
+            onSelect(null);
+            // The list stays mounted (hidden) so selection and scroll survive;
+            // return focus to the row that opened the record once it shows.
+            if (detailOnly) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-record-id="${CSS.escape(recordId)}"] .lnk`)?.focus());
+          }}
         />
       )}
     </div>

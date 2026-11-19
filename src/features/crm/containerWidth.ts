@@ -8,14 +8,15 @@ export const STACK_BELOW_PX = 900;
  * ResizeObserver. The CRM screen runs in frames of very different widths
  * (full page, the ~420-830px chat canvas), so layout follows this container,
  * not the host's viewport. The screen owns its whole frame, so the document
- * element is the container (outer page padding included). `null` until
+ * is the container. window.innerWidth includes the scrollbar, so the drawer's
+ * scroll lock cannot flip the layout near the threshold. `null` until
  * measured, which callers treat as "wide" so the full-page layout never flashes.
  */
 export function useContainerWidth(): number | null {
   const [width, setWidth] = useState<number | null>(null);
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const measure = () => setWidth(root.clientWidth);
+    const measure = () => setWidth(window.innerWidth);
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);

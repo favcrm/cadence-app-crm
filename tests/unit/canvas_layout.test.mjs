@@ -28,7 +28,7 @@ beforeAll(async () => {
 });
 afterAll(() => GlobalRegistrator.unregister());
 
-const frameWidth = (px) => Object.defineProperty(document.documentElement, "clientWidth", { value: px, configurable: true });
+const frameWidth = (px) => Object.defineProperty(window, "innerWidth", { value: px, configurable: true });
 
 test("the container width is the frame width and follows resizes", async () => {
   frameWidth(704);
