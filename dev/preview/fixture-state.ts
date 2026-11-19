@@ -17,10 +17,12 @@ type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
 type Content = { draft_audience_full?: unknown; campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
 const records: LocalRecord[] = [
-  { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
-  { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
-  { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
-].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+  { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted", source: "fixture" },
+  { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown", source: "fixture" },
+  { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied", source: "fixture" },
+  // Long values: the list must keep name and email on one line each.
+  { id: "wholesale", name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Montgomery", email: "bartholomew.wolfeschlegelstein@wholesale-distribution.example.invalid", tags: ["wholesale", "vip", "newsletter", "events"], consent: "granted", source: "wholesale-referral" },
+].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: row.source, consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
 const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };

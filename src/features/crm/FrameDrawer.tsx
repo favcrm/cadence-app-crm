@@ -1,4 +1,4 @@
-import { DrawerShell,type DrawerShellProps } from "@cadence/screen-ui";
+import { Button,DrawerShell,type DrawerShellProps } from "@cadence/screen-ui";
 import { useEffect,useRef } from "react";
 
 const FOCUSABLE = "button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex=\"0\"]";
@@ -9,7 +9,10 @@ const FOCUSABLE = "button:not(:disabled),input:not(:disabled),select:not(:disabl
  * is open the document behind it does not scroll and Tab stays inside it.
  * Escape, the scrim and the close control are the shell's own.
  */
-export default function FrameDrawer(props: Omit<DrawerShellProps, "geometry" | "scrim">) {
+export default function FrameDrawer({ fill, ...props }: Omit<DrawerShellProps, "geometry" | "scrim"> & {
+  /** A narrow frame: the detail replaces the list, full width, with no scrim. */
+  fill?: { backLabel: string };
+}) {
   const layer = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const root = document.documentElement;
@@ -38,5 +41,9 @@ export default function FrameDrawer(props: Omit<DrawerShellProps, "geometry" | "
     document.addEventListener("keydown", trap);
     return () => document.removeEventListener("keydown", trap);
   }, []);
-  return <div className="crm-frame-drawer" ref={layer}><DrawerShell {...props} geometry={{ left: 0 }} /></div>;
+  return <div className="crm-frame-drawer" data-fill={fill ? "" : undefined} ref={layer}><DrawerShell
+    {...props}
+    kicker={fill ? <Button size="sm" variant="ghost" className="crm-drawer-back" onClick={props.onClose}>← {fill.backLabel}</Button> : props.kicker}
+    geometry={{ left: 0 }}
+  /></div>;
 }

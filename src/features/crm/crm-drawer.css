@@ -307,3 +307,16 @@ button.chip:focus-visible {
 .crm-surface {
   min-width: 0;
 }
+
+/* CRM-19 — in a narrow frame (the chat canvas) the open record replaces the
+   list: full width, no scrim, a Back control in the kicker row. */
+.crm-frame-drawer[data-fill] .crm-drawer-scrim {
+  display: none;
+}
+.crm .crm-frame-drawer[data-fill] .crm-drawer.crm-drawer-shell {
+  width: 100%;
+  border-left: 0;
+}
+.crm-drawer-back {
+  margin-left: -0.5rem;
+}
