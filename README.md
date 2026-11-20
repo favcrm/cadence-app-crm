@@ -11,6 +11,14 @@ the viewer as read-only and drops the member-only "Read-only view" wording, beca
 already says "Open in CRM to edit". Create, edit, bulk, approve and send controls are hidden;
 reads, navigation and Copy email stay. The full page and the drawer are unchanged.
 
+## Canvas padding in 0.4.3
+
+Below 1100px wide (the board chat canvas) the screen keeps a modest inner padding (16px inline,
+12px block; 12px inline under 36rem) instead of sitting flush against the canvas edges, the same
+rule as Accounting ACC-22. Tag chips keep words whole: they wrap between chips, and a tag too
+long for the row ends in an ellipsis. The full page is unchanged. CSS only: no storage or
+capability change.
+
 ## Local development
 
 Use the Node version in `screen-ui.lock.json` and pnpm version in `package.json`.
