@@ -1,8 +1,8 @@
 ---
 app: crm
 title: CRM
-version: '0.4.1'
-summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
+version: '0.4.2'
+summary: Customer segments and campaigns. To show a customer on screen, call canvas_open with section customers and the customer's record id (find it with records.list).
 needs:
   connections: []
   requires:
