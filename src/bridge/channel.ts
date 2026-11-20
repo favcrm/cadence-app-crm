@@ -17,6 +17,10 @@ export function createCrmBridge(): ScreenBridge<CrmSection, CrmView, ApiError> {
     appName: "crm",
     records: true,
     locale: true,
+    // Shown read-only in the board chat canvas (app-kit 0.7.0): negotiates
+    // screen-surfaces.v1 and screen-canvas.v1.
+    surfaces: true,
+    canvas: true,
     calls: CALL_FIELDS,
     slots: SLOT_FIELDS,
     argBytes: {

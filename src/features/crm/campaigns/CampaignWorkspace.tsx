@@ -390,6 +390,7 @@ export default function CampaignWorkspace({
         <EmailPane
           scope={scope}
           canWrite={canWrite}
+          canvas={viewer.canvas === true}
           doc={doc}
           render={render}
           renderPending={renderPending}

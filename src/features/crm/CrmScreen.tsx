@@ -1,7 +1,7 @@
 import { ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import { FrameNavigationAdapter,patchRoute } from "../../bridge/route";
-import { scopeError,useScope } from "../../bridge/scope";
+import { scopeError,useCanvasReadOnly,useScope } from "../../bridge/scope";
 import Campaigns from "./campaigns/CrmCampaigns";
 import "./crm-layout.css";
 import "./crm-campaign.css";
@@ -14,6 +14,7 @@ import { CrmLocaleProvider } from "./locale";
 const HOST_PUSH_TIMEOUT_MS = 15000;
 export default function CrmScreen() {
   const snapshot = useScope();
+  const canvas = useCanvasReadOnly();
   const [unreachable, setUnreachable] = useState(false);
   // A closed detail unmounts here at once, so its scroll lock and focus trap
   // never outlive the close even when the host refuses the route patch. The
@@ -35,7 +36,7 @@ export default function CrmScreen() {
   }
   const { scope, route: current, actions } = snapshot;
   const prefix = current.section === "customers" ? "records" : current.section === "segments" ? "segments" : "content";
-  const viewer = { operator: actions.includes(`${prefix}.list`), readOnly: !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save") };
+  const viewer = { operator: actions.includes(`${prefix}.list`), canvas, readOnly: canvas || !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save") };
   // Customer and Segment details are always the in-frame drawer: the route
   // selects the record, and the drawer shell returns focus to the opener row.
   const props = {

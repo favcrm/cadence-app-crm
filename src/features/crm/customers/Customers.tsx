@@ -328,7 +328,7 @@ function CustomerList({
       {viewer.operator === false && (
         <Notice>{t("Sign in as the operator to inspect customer records.")}</Notice>
       )}
-      {viewer.operator && viewer.readOnly && (
+      {viewer.operator && viewer.readOnly && !viewer.canvas && (
         <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
@@ -343,7 +343,7 @@ function CustomerList({
           title={t(committed === "" ? "No customers yet" : "No customers match this search")}
         >
           {committed === ""
-            ? t("Create the first record with New customer. Only real server rows appear here.")
+            ? viewer.canvas ? t("Only real server rows appear here.") : t("Create the first record with New customer. Only real server rows appear here.")
             : t("Clear the search to see every record.")}
         </EmptyState>
       )}
@@ -821,7 +821,7 @@ function CustomerNew({
         </button>
       </p>
       {!canWrite ? (
-        <Notice className="mt-2" state="read-only">
+        viewer.canvas ? null : <Notice className="mt-2" state="read-only">
           {t("Read-only view. A verified operator creates customer records.")}
         </Notice>
       ) : (
@@ -1091,7 +1091,7 @@ export function CustomerDrawer({
         ) : undefined
       }
       note={
-        ready && !canWrite
+        ready && !canWrite && !viewer.canvas
           ? `Read-only view. ${viewer.operator ? "Edits are disabled on this board." : "Sign in as the operator to edit."}`
           : undefined
       }

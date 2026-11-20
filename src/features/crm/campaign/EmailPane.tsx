@@ -39,6 +39,7 @@ const MODES: [Mode, string][] = [
 export default function EmailPane({
   scope,
   canWrite,
+  canvas,
   doc,
   render,
   renderPending,
@@ -60,6 +61,8 @@ export default function EmailPane({
 }: {
   scope: AudienceScope;
   canWrite: boolean;
+  /** The chat canvas already says "Open in CRM to edit"; no member-only wording here. */
+  canvas?: boolean;
   doc: ContentDoc | null;
   render: ContentRender | null;
   renderPending: boolean;
@@ -500,7 +503,7 @@ export default function EmailPane({
           </p>
         )}
         {stage}
-        {doc !== null && !canWrite && (
+        {doc !== null && !canWrite && !canvas && (
           <p className="text-label text-ink-400" data-state="read-only">
             {t("Read-only view. A verified operator saves content revisions.")}
           </p>
