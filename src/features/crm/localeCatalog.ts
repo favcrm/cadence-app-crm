@@ -81,6 +81,7 @@ export const zhTW: Record<string, string> = {
   "{shown} of {count} customers on this page": "此頁顯示 {count} 位客戶中的 {shown} 位",
   "Sign in as the operator to inspect customer records.": "請以操作員身分登入以檢視客戶記錄。",
   "Read-only view. Record creation and edits are unavailable.": "唯讀檢視。無法建立或編輯記錄。",
+  "Only real server rows appear here.": "此處僅顯示伺服器中的實際記錄。",
   "Reading customers…": "正在讀取客戶…",
   "No customers match this search": "沒有符合此搜尋條件的客戶",
   "Create the first record with New customer. Only real server rows appear here.": "使用「新增客戶」建立第一筆記錄。此處僅顯示伺服器中的實際記錄。",

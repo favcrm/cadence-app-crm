@@ -252,7 +252,7 @@ export default function FinalSendPanel({
             <span className="text-label text-ink-400" data-blocked-why>{t(why)}</span>
           ) : null}
         </div>
-      ) : (
+      ) : viewer.canvas ? null : (
         <p className="text-label text-ink-400" data-state="read-only">{t("Read-only view. A verified operator sends campaigns.")}</p>
       )}
       {testEvidence !== null && (

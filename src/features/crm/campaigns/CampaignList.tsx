@@ -124,7 +124,7 @@ export default function CampaignList({
           {t("Sign in as the operator to inspect campaigns.")}
         </p>
       )}
-      {viewer.operator && viewer.readOnly && (
+      {viewer.operator && viewer.readOnly && !viewer.canvas && (
         <p className="card px-4 py-3 text-label text-ink-400" data-state="read-only">
           {t("Read-only view. Campaign creation and edits are unavailable.")}
         </p>
@@ -141,7 +141,7 @@ export default function CampaignList({
         <div className="card px-4 py-5 text-secondary text-ink-400" data-empty="campaigns" role="status">
           <p className="font-medium text-ink-200">{t("No campaigns yet")}</p>
           <p className="mt-1">
-            {t("Create the first campaign with New campaign. Only real server rows appear here.")}
+            {viewer.canvas ? t("Only real server rows appear here.") : t("Create the first campaign with New campaign. Only real server rows appear here.")}
           </p>
         </div>
       )}

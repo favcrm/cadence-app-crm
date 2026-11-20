@@ -3,6 +3,14 @@
 Public repository: https://github.com/favcrm/cadence-app-crm.
 App identity stays `crm`; repository names do not change installation or data identities.
 
+## Chat canvas
+
+The bridge declares `screen-surfaces.v1` and `screen-canvas.v1` (app-kit 0.7.0). When the
+host mounts CRM read-only in the board chat canvas (`surface.readOnly`), the screen treats
+the viewer as read-only and drops the member-only "Read-only view" wording, because the host
+already says "Open in CRM to edit". Create, edit, bulk, approve and send controls are hidden;
+reads, navigation and Copy email stay. The full page and the drawer are unchanged.
+
 ## Local development
 
 Use the Node version in `screen-ui.lock.json` and pnpm version in `package.json`.

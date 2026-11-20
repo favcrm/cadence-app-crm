@@ -8,7 +8,7 @@ import { ApiError, sdkMock } from "../support/sdk-mock.mjs";
 mock.module("@cadence/screen-ui", sdkMock);
 
 const { createChannel } = await import("../../src/bridge/channel.ts");
-const { clearScope, getScope } = await import("../../src/bridge/scope.ts");
+const { clearScope, getScope, getCanvasReadOnly } = await import("../../src/bridge/scope.ts");
 
 const DIGEST = "sha256:" + "a".repeat(64);
 const boot = {
@@ -76,7 +76,7 @@ async function mount() {
   const channel = createChannel();
   channel.start();
   const ready = await waitFor(() => env.events.find((event) => event.op === "ready"), "ready");
-  expect(ready.accepts).toEqual(["screen.v2", "screen-records.v1", "screen-locale.v1"]);
+  expect(ready.accepts).toEqual(["screen.v2", "screen-surfaces.v1", "screen-canvas.v1", "screen-records.v1", "screen-locale.v1"]);
   env.host().postMessage(push());
   await waitFor(() => getScope()?.scope.installId === "install-test", "PUSH scope");
   return { channel, ...env };
@@ -181,6 +181,20 @@ test("ownCampaignLeaveState publishes generic v2 leave hints and clears on relea
       { v: 2, op: "leave", unsaved: true },
       { v: 2, op: "leave", unsaved: false },
     ]);
+  } finally {
+    retire(channel);
+  }
+});
+
+test("a frame is not read-only until the host mounts it in the chat canvas", async () => {
+  const { channel, host } = await mount();
+  try {
+    expect(getCanvasReadOnly()).toBe(false);
+    host().postMessage({ v: 1, op: "surface", role: "canvas", modal: false, readOnly: true });
+    await waitFor(() => getCanvasReadOnly(), "canvas surface");
+    expect(channel.bridge.getState().surface).toMatchObject({ role: "canvas", readOnly: true });
+    host().postMessage({ v: 1, op: "surface", role: "primary", modal: false });
+    await waitFor(() => !getCanvasReadOnly(), "primary surface");
   } finally {
     retire(channel);
   }
