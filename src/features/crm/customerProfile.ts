@@ -172,6 +172,15 @@ export interface CustomerContactFields {
   phone: string;
 }
 
+/** JSON Schema string limits count Unicode code points, not UTF-16 units. */
+function withinSchemaLength(value: string, max: number): boolean {
+  let length = 0;
+  for (const _ of value) {
+    if (++length > max) return false;
+  }
+  return true;
+}
+
 /** An absent or malformed collection is unavailable, not an empty collection. */
 export function readCustomerContacts(profile: unknown): CustomerContact[] | null {
   if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
@@ -183,11 +192,10 @@ export function readCustomerContacts(profile: unknown): CustomerContact[] | null
     const contact = row as Record<string, unknown>;
     if (
       Object.keys(contact).some((key) => !["name", "title", "email", "phone"].includes(key)) ||
-      typeof contact.name !== "string" || contact.name.length === 0 || contact.name.length > 120 ||
-      hasControl(contact.name) ||
-      !(contact.title === null || (typeof contact.title === "string" && contact.title.length <= 120 && !hasControl(contact.title))) ||
-      !(contact.email === null || (typeof contact.email === "string" && contact.email.length <= 254 && !hasControl(contact.email))) ||
-      !(contact.phone === null || (typeof contact.phone === "string" && contact.phone.length <= 24 && !hasControl(contact.phone)))
+      typeof contact.name !== "string" || contact.name.length === 0 || !withinSchemaLength(contact.name, 120) ||
+      !(contact.title === null || (typeof contact.title === "string" && withinSchemaLength(contact.title, 120))) ||
+      !(contact.email === null || (typeof contact.email === "string" && withinSchemaLength(contact.email, 254))) ||
+      !(contact.phone === null || (typeof contact.phone === "string" && withinSchemaLength(contact.phone, 24)))
     ) return null;
     result.push({
       name: contact.name,
@@ -327,8 +335,7 @@ export function consentLabel(state: string | null, t: Translate = identity): str
 }
 
 /**
- * Build the update for the Record consent form: the loaded profile with
- * only its consent replaced, plus the provenance. Granting a channel
+ * Build the consent-only partial update, plus provenance. Granting a channel
  * needs a method; withdrawing only needs one when a note is recorded.
  * Throws a field-named ApiError, never an echo of the note.
  */
@@ -353,11 +360,12 @@ export function buildConsentChange(
   if (note !== "" && next.method === "") {
     throw new ApiError("Choose how this consent was recorded to save the note", 400);
   }
-  const base = formFromProfile(profile);
-  const built = buildCustomerProfile({ ...base, consentEmail: next.email, consentSms: next.sms });
+  if (!isConsentChoice(next.email) || !isConsentChoice(next.sms)) {
+    throw new ApiError("Consent must be granted, denied or unknown", 400);
+  }
   const provenance: ConsentProvenance | null =
     next.method === "" ? null : { method: next.method, ...(note !== "" ? { note } : {}) };
-  return { profile: built, provenance };
+  return { profile: { consent: { email: next.email, sms: next.sms } }, provenance };
 }
 
 /** Create-time provenance: optional. A note needs a method to describe. */

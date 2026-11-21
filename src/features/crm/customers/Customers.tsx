@@ -1044,7 +1044,11 @@ function CustomerWorkspace({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyAnnouncement, setHistoryAnnouncement] = useState("");
   const [historyAccessLost, setHistoryAccessLost] = useState(false);
-  useEffect(() => () => { historyRequest.current += 1; }, []);
+  const accessCheck = useRef(0);
+  const editOpener = useRef<{ element: HTMLElement | null; tab: CustomerTab } | null>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const previousMode = useRef("view");
+  useEffect(() => () => { historyRequest.current += 1; accessCheck.current += 1; }, []);
   useEffect(() => {
     historyRequest.current += 1;
     setOlderHistory(null);
@@ -1052,7 +1056,6 @@ function CustomerWorkspace({
     setHistoryError(null);
     setHistoryAnnouncement("");
     historyKeyboardTrigger.current = null;
-    setHistoryAccessLost(false);
   }, [queryState.data]);
   useEffect(() => {
     const trigger = historyKeyboardTrigger.current;
@@ -1072,6 +1075,29 @@ function CustomerWorkspace({
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => { setMode("view"); setEditRecord(null); setFormError(null); }, [recordId]);
+  useEffect(() => {
+    const wasEditing = previousMode.current !== "view";
+    previousMode.current = mode;
+    if (!wasEditing || mode !== "view") return;
+    const opener = editOpener.current;
+    editOpener.current = null;
+    if (!opener || opener.tab !== activeTab) return;
+    const frame = requestAnimationFrame(() => {
+      const workspace = workspaceRef.current;
+      if (!workspace || !document.hasFocus() || (document.activeElement !== document.body && document.activeElement !== workspace)) return;
+      const target = opener.element;
+      if (target?.isConnected && workspace.contains(target) && target.getClientRects().length > 0 && !target.matches(":disabled")) {
+        target.focus();
+      } else {
+        headingRef.current?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mode, activeTab]);
+
+  const rememberEditOpener = () => {
+    editOpener.current = { element: document.activeElement instanceof HTMLElement ? document.activeElement : null, tab: activeTab };
+  };
 
   const view = record ? viewProfile(record.profile) : null;
   const contacts = record ? readCustomerContacts(record.profile) : null;
@@ -1082,7 +1108,21 @@ function CustomerWorkspace({
   const initials = view
     ? view.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
     : "";
-  const reload = () => { void queryState.store.refresh(); };
+  const reload = () => {
+    if (!historyAccessLost) {
+      void queryState.store.refresh();
+      return;
+    }
+    const check = ++accessCheck.current;
+    void hostActions.show(scope, recordId).then((fresh) => {
+      if (accessCheck.current !== check) return;
+      queryState.store.write(() => fresh);
+      setHistoryAccessLost(false);
+      setHistoryError(null);
+    }).catch(() => {
+      // A retained cache value is not proof of current access.
+    });
+  };
   const ready = !loading && error === null && !historyAccessLost && viewer.operator === true && record !== null && view !== null;
   const activity = selectedActivity?.record === record
     ? timeline.find((item) => item.key === selectedActivity.key)
@@ -1106,12 +1146,21 @@ function CustomerWorkspace({
       })
       .catch((error: unknown) => {
         if (historyRequest.current !== request || latestRecord.current !== base) return;
-        setOlderHistory(null);
         historyKeyboardTrigger.current = null;
-        setHistoryError(t("Could not load earlier activity. Reload the customer and try again."));
-        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
+        const refused = error instanceof ApiError && (
+          [401, 403, 404, 409, 503].includes(error.status) ||
+          ["unauthorized", "forbidden", "not_found", "conflict", "unavailable"].includes(error.code ?? "")
+        );
+        if (refused) {
+          historyRequest.current += 1;
+          setHistoryBusy(false);
+          setOlderHistory(null);
+          setSelectedActivity(null);
+          setMode("view");
+          setEditRecord(null);
           setHistoryAccessLost(true);
-          void queryState.store.refresh();
+        } else {
+          setHistoryError(t("Could not load earlier activity. Reload the customer and try again."));
         }
       })
       .finally(() => {
@@ -1119,12 +1168,14 @@ function CustomerWorkspace({
       });
   };
   const openContact = (index: number | null) => {
+    rememberEditOpener();
     setEditRecord(record);
     setContactIndex(index);
     setFormError(null);
     setMode("contact");
   };
   const openCustomField = (key: string | null) => {
+    rememberEditOpener();
     setEditRecord(record);
     setCustomKey(key);
     setFormError(null);
@@ -1316,7 +1367,7 @@ function CustomerWorkspace({
   };
 
   return (
-    <section className="customer-workspace" aria-label={t("Customer details")}>
+    <section ref={workspaceRef} className="customer-workspace" aria-label={t("Customer details")}>
       <button type="button" className="lnk customer-back" onClick={onClose}>← {t("All customers")}</button>
       <header className="customer-header">
         <div className="customer-heading">
@@ -1329,17 +1380,17 @@ function CustomerWorkspace({
             {ready && view && <p className="customer-contact text-label text-ink-400">{[view.email, view.phone].filter(Boolean).join(" · ")}</p>}
           </div>
         </div>
-        {ready && (canWrite || (viewer.canvas && view?.email)) && (
+        {ready && (canWrite || view?.email) && (
           <div className="customer-actions">
-            {viewer.canvas && view?.email && (
+            {view?.email && (
               <Button size="sm" onClick={() => void navigator.clipboard?.writeText(view.email ?? "")}>
                 {t("Copy email")}
               </Button>
             )}
             {canWrite && (
               <>
-                <Button size="sm" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
-                <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
+                <Button size="sm" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
+                <Button size="sm" variant="primary" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
               </>
             )}
           </div>

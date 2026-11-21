@@ -180,28 +180,35 @@ never the authority.
 
 ### Schema-v1 staging recipe (package-only v1 → v2 proof)
 
-`tests/fixtures/app-storage-v1/` carries a `schema_version: 1` descriptor
-and a byte-identical copy of `001-initial.json`. Stage a v1 bundle from
-the current tree so the manager can exercise a real package-only upgrade on
-an unchanged host:
+Use the pinned CRM 0.3.0 source below for the historical rehearsal. Its `app/`
+is schema v2, and its `tests/fixtures/app-storage-v1/` carries the v1 descriptor
+and byte-identical initial migration. Do not stage v1 from the current bundle:
+its newer screen and migrations are not part of this rehearsal.
 
 ```sh
-rm -rf /tmp/crm-v1 /tmp/crm-v1-dist && cp -r app /tmp/crm-v1
-cp tests/fixtures/app-storage-v1/app-storage.json /tmp/crm-v1/app-storage.json
-rm /tmp/crm-v1/storage/002-customer-phone-source.json
-sed -i "s/^version: '0.3.0'/version: '0.2.1'/" /tmp/crm-v1/app.md
-python3 scripts/package_app.py check --source /tmp/crm-v1
-python3 scripts/package_app.py build --source /tmp/crm-v1 --outdir /tmp/crm-v1-dist
-python3 scripts/package_app.py build --source app --outdir dist
+scratch=$(mktemp -d)
+revision=6860888858784a066b161495fcb637625a385e86
+git archive "$revision" app scripts/package_app.py tests/fixtures/app-storage-v1 | tar -x -C "$scratch"
+cp -R "$scratch/app" "$scratch/app-v1"
+cp "$scratch/tests/fixtures/app-storage-v1/app-storage.json" "$scratch/app-v1/app-storage.json"
+rm "$scratch/app-v1/storage/002-customer-phone-source.json"
+sed -i "s/^version: '0.3.0'/version: '0.2.1'/" "$scratch/app-v1/app.md"
+python3 "$scratch/scripts/package_app.py" build --source "$scratch/app-v1" --outdir "$scratch/dist-v1"
+python3 "$scratch/scripts/package_app.py" build --source "$scratch/app" --outdir "$scratch/dist-v2"
 ```
 
-Install `/tmp/crm-v1-dist/crm-0.2.1.*` (schema_version 1) on the hosted v2
-runtime, create or adopt real records, then install `dist/crm-0.3.0.*` on
-the same unchanged host. Expect only migration 2 pending, the `phone` and
-`source` columns plus `customers_phone` index to appear, and installation
-id, record ids, revisions, consent and `synthetic` values to stay intact.
-The `0.2.1` label is a staging artifact for the upgrade path, not a
-re-release of 0.2.1 and not a release claim.
+In an isolated compatible hosted workspace, install the schema-v1 bundle
+from `dist-v1/`, seed synthetic customers, and upgrade to the schema-v2 bundle
+from `dist-v2/` on the same host. Expect only migration 2 and preserve installation
+ID, record IDs, revisions, consent and `synthetic` values. The `0.2.1` label
+identifies a staging fixture, not a re-release.
+
+Qualify CRM 0.5.0 separately: start with the installed-compatible 0.4.3 bundle
+at `8576f58f8bea0a8e9ebf4e456b5b279f538a3a32` (schema v2), then upgrade to the
+digest-pinned 0.5.0 candidate on the authorized hosted test workspace. Verify
+that only migrations 3–5 apply, existing identity and consent are preserved,
+and contacts and typed custom fields work. The 0.5.0 host must support the
+bounded `propertyNames` and `format: date` contract before this check can pass.
 
 ## Still missing (separate scope)
 

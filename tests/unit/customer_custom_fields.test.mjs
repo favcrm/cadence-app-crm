@@ -27,3 +27,13 @@ test("adding, changing and removing fields preserves other data and validates ty
   expect(() => profile.changeCustomerCustomFields(original, "industry", { key: "renamed", label: "Industry", type: "text", value: "Retail" })).toThrow();
   expect(() => profile.changeCustomerCustomFields(original, "industry", { key: "industry", label: "Industry", type: "number", value: "1" })).toThrow();
 });
+
+test("custom fields cannot use keys that the host removes from record replies", () => {
+  const reserved = ["action_token", "confirmation_token", "confirmation_nonce", "confirm_token", "csv_confirm_token", "scope_proof", "password", "credentials", "credential", "secret", "session_key", "host_command"];
+  const field = { label: "Status", type: "text", value: "active" };
+  for (const key of reserved) {
+    expect(() => profile.changeCustomerCustomFields({}, null, { key, ...field })).toThrow("reserved");
+    expect(profile.readCustomerCustomFields({ custom_fields: { [key]: field } })).toBeNull();
+  }
+  expect(profile.changeCustomerCustomFields({}, null, { key: "customer_status", ...field }).custom_fields).toEqual({ customer_status: field });
+});

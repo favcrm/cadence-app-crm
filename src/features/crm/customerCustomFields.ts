@@ -15,8 +15,24 @@ export interface CustomerCustomFieldForm {
 }
 
 const FIELD_KEY = /^[a-z0-9_]{1,40}$/;
+// Keep these in sync with the host screen DTO redaction and migration 005.
+const BRIDGE_RESERVED_KEYS: ReadonlySet<string> = new Set([
+  "action_token",
+  "confirmation_token",
+  "confirmation_nonce",
+  "confirm_token",
+  "csv_confirm_token",
+  "scope_proof",
+  "password",
+  "credentials",
+  "credential",
+  "secret",
+  "session_key",
+  "host_command",
+]);
 const hasControl = (value: string) => /[\u0000-\u001f\u007f]/.test(value);
-const validKey = (key: string) => FIELD_KEY.test(key) && !(key in Object.prototype) && key !== "prototype";
+const reservedKey = (key: string) => key in Object.prototype || key === "prototype" || BRIDGE_RESERVED_KEYS.has(key);
+const validKey = (key: string) => FIELD_KEY.test(key) && !reservedKey(key);
 function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -66,6 +82,7 @@ export function changeCustomerCustomFields(
     delete next[existingKey!];
     return { custom_fields: next };
   }
+  if (reservedKey(form.key)) throw new ApiError("This field key is reserved", 400);
   if (!validKey(form.key)) throw new ApiError("Field key must use lowercase letters, digits or underscores", 400);
   if (existingKey !== null && form.key !== existingKey) throw new ApiError("Field keys cannot be changed", 400);
   if (existingKey !== null && fields[existingKey]?.type !== form.type) throw new ApiError("Field types cannot be changed", 400);

@@ -215,8 +215,8 @@ types and lengths, not email or phone formats. Never infer consent from a
 contact's details.
 
 `custom_fields` is a customer-local object keyed by stable lowercase
-letters, digits or underscores (1–40 characters; reserved object names are
-excluded). Each value is `{label, type, value}` with `type` equal to `text`,
+letters, digits or underscores (1–40 characters; reserved object and host
+bridge keys are excluded). Each value is `{label, type, value}` with `type` equal to `text`,
 `number`, `boolean` or `date`; dates use `YYYY-MM-DD`. To change one, preserve
 the other entries and submit the whole object with the current customer
 revision. These fields share the customer's access. Coordinate keys and types
@@ -265,10 +265,10 @@ campaign Work card is gone, so the screen does not use campaign work.
 return of the operations.
 
 
-## App-owned storage schema (0.3.0, AOS-384)
+## App-owned storage schema
 
 This package owns its logical storage schema. `app-storage.json` declares
-`app-storage/v1` at `schema_version` 3 with three ordered migrations under
+`app-storage/v1` at `schema_version` 5 with five ordered migrations under
 `storage/`; each migration's `sha256` is the exact raw-byte digest of that
 file. A host refuses this package if a migration is missing or its bytes
 differ from the declared hash, and `needs.requires.contracts` must list

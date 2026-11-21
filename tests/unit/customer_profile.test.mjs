@@ -87,8 +87,29 @@ test("profile edits leave platform-managed source untouched", () => {
     method: "written",
     note: "",
   });
-  expect(consent.profile).not.toHaveProperty("source");
-  expect({ ...existing, ...consent.profile }.source).toBe("platform_import");
+  expect(consent.profile).toEqual({ consent: { email: "granted", sms: "unknown" } });
+  expect({ ...existing, ...consent.profile }).toEqual({
+    ...existing, consent: { email: "granted", sms: "unknown" },
+  });
+});
+
+test("withdrawal patches only consent even when unrelated host data cannot be edited by this form", () => {
+  const existing = {
+    display_name: "Ada",
+    website: "ftp://example.test/file",
+    tags: ["legacy"],
+    consent: { email: "granted", sms: "unknown" },
+  };
+  const change = profile.buildConsentChange(existing, {
+    email: "denied", sms: "unknown", method: "", note: "",
+  });
+  expect(change).toEqual({
+    profile: { consent: { email: "denied", sms: "unknown" } },
+    provenance: null,
+  });
+  expect({ ...existing, ...change.profile }).toEqual({
+    ...existing, consent: { email: "denied", sms: "unknown" },
+  });
 });
 
 test("a consent note is never silently discarded when its method is missing", () => {

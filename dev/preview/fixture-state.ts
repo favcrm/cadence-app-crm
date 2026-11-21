@@ -43,9 +43,13 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  or `?access=write` shows the host's per-record edit decision.
  *  `?create=uncertain` simulates a lost response after creating a fixture.
  *  `?history=truncated` reports that earlier record changes are unavailable;
- *  `?history=paged` supplies synthetic paged activity for Ada. */
+ *  `?history=paged` supplies synthetic paged activity for Ada.
+ *  `?history=access-changed` also refuses the earlier page and first fresh read. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
-if (params.get("history") === "paged") {
+const historyMode = params.get("history");
+const hasPagedHistory = historyMode === "paged" || historyMode === "access-changed";
+let refuseNextCustomerRead = false;
+if (hasPagedHistory) {
   const ada = records[0]!;
   ada.revision = 23;
   ada.history = Array.from({ length: 23 }, (_, index) => ({
@@ -129,7 +133,15 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const record = records.find(r => r.id === args.record_id) ?? missing();
       const visible = recordAccess === "read" || recordAccess === "write"
         ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
-      if (params.get("history") === "paged" && record.id === "ada") {
+      if (hasPagedHistory && record.id === "ada") {
+        if (historyMode === "access-changed" && typeof args.history_cursor === "string") {
+          refuseNextCustomerRead = true;
+          throw new ApiError("This fixture customer's access changed.", 409, { code: "conflict" });
+        }
+        if (refuseNextCustomerRead) {
+          refuseNextCustomerRead = false;
+          throw new ApiError("This fixture customer's access is unavailable.", 503, { code: "unavailable" });
+        }
         return { record: pagedHistory(visible, args.history_cursor) };
       }
       return { record: params.get("history") === "truncated" ? { ...visible, history_truncated: true } : visible };
@@ -172,7 +184,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       if (verb === "records.create" && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
       const visible = recordAccess === "read" || recordAccess === "write"
         ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
-      return { record: params.get("history") === "paged" && record.id === "ada" ? pagedHistory(visible, undefined) : visible };
+      return { record: hasPagedHistory && record.id === "ada" ? pagedHistory(visible, undefined) : visible };
     }
     case "segments.list": return { segments };
     case "segments.show": return { segment: segments.find(s => s.id === args.segment_id) ?? missing() };

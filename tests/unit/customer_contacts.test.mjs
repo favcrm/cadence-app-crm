@@ -17,6 +17,34 @@ test("contacts are available only when the host returns a valid collection", () 
   expect(contacts.readCustomerContacts({ contacts: [contact] })).toEqual([contact]);
 });
 
+test("host-valid contact text remains intact when another contact changes", () => {
+  const raw = {
+    name: "\u0000Name\n",
+    title: "Role\u007f",
+    email: "legacy\nemail",
+    phone: "\u0001phone",
+  };
+  const rows = contacts.readCustomerContacts({ contacts: [raw, contact] });
+  expect(rows).toEqual([raw, contact]);
+  expect(contacts.changeCustomerContacts(rows, 1, {
+    name: "Updated", title: "", email: "", phone: "",
+  })).toEqual({ contacts: [raw, { name: "Updated", title: null, email: null, phone: null }] });
+  expect(() => contacts.changeCustomerContacts(rows, 1, {
+    name: "Bad\u0000name", title: "", email: "", phone: "",
+  })).toThrow();
+});
+
+test("contact schema string limits count Unicode code points", () => {
+  const atLimit = { name: "😀".repeat(120), title: "😀".repeat(120), email: "😀".repeat(254), phone: "😀".repeat(24) };
+  expect(contacts.readCustomerContacts({ contacts: [atLimit] })).toEqual([atLimit]);
+  for (const field of ["name", "title", "email", "phone"]) {
+    expect(contacts.readCustomerContacts({ contacts: [{ ...atLimit, [field]: atLimit[field] + "😀" }] })).toBeNull();
+  }
+  expect(contacts.readCustomerContacts({ contacts: [{ ...atLimit, name: "" }] })).toBeNull();
+  expect(contacts.readCustomerContacts({ contacts: [{ ...atLimit, title: undefined }] })).toBeNull();
+  expect(contacts.readCustomerContacts({ contacts: [{ ...atLimit, extra: "unknown" }] })).toBeNull();
+});
+
 test("contact edits preserve other entries and validate basic identity details", () => {
   const original = [contact, { name: "Robin Lee", title: null, email: null, phone: null }];
   expect(contacts.changeCustomerContacts(original, 1, {

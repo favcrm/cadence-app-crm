@@ -816,6 +816,7 @@ export const zhTW: Record<string, string> = {
   "Keep field": "保留欄位",
   "Custom field is no longer available": "此自訂欄位已無法使用",
   "Field key must use lowercase letters, digits or underscores": "欄位識別碼只可使用小寫英文字母、數字或底線",
+  "This field key is reserved": "此欄位識別碼已保留",
   "Field keys cannot be changed": "欄位識別碼不可更改",
   "Field types cannot be changed": "欄位類型不可更改",
   "Field key already exists": "欄位識別碼已存在",
