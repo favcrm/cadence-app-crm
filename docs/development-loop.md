@@ -109,6 +109,9 @@ the frame height, with a frame-wide scrim and a width of `min(30rem, 100vw)`;
 only its body scrolls. While open, Tab stays inside and Escape or the close
 control dismisses it. Opening a customer sets the record route, so direct
 routes and Back work. CRM sends no host drawer request.
+Each profile open waits for a fresh record read. An Activity access refusal
+clears the displayed profile and edit controls until a fresh read succeeds;
+returning to the list and reopening cannot restore the previous profile.
 
 ## Compact CRM polish
 

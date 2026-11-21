@@ -1,5 +1,5 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select } from "@cadence/screen-ui";
+import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Resource,Select,useQuery } from "@cadence/screen-ui";
 import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
 import WorkspaceTabs from "../WorkspaceTabs";
@@ -29,7 +29,7 @@ type CustomerFormFields,
 import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
-import { appendHistoryPage,hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
+import { appendHistoryPage,hostActions,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
@@ -1012,6 +1012,12 @@ const CUSTOMER_TABS = [
 ] as const;
 type CustomerTab = typeof CUSTOMER_TABS[number]["id"];
 
+function customerAccessRefused(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return [401, 403, 404, 409, 503].includes(error.status) ||
+    ["unauthorized", "forbidden", "not_found", "conflict", "unavailable", "record_changed", "record_access_unavailable"].includes(error.code ?? "");
+}
+
 function CustomerWorkspace({
   scope,
   recordId,
@@ -1032,10 +1038,15 @@ function CustomerWorkspace({
   };
   const [selectedActivity, setSelectedActivity] = useState<{ key: string; record: HostRecord } | null>(null);
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
-  const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
-  const { loading, error } = queryState;
+  // The profile is private. This pane is keyed by mount and record, and
+  // never imports a prior pane's cache or the host's pushed observations.
+  const [recordStore] = useState(() => new Resource(
+    () => hostActions.show(scope, recordId),
+    { discardOnError: customerAccessRefused },
+  ));
+  const { data, error, inFlight } = useQuery(recordStore);
   const latestRecord = useRef<HostRecord | null>(null);
-  latestRecord.current = queryState.data;
+  latestRecord.current = data;
   const historyRequest = useRef(0);
   const activityListRef = useRef<HTMLOListElement>(null);
   const historyKeyboardTrigger = useRef<{ element: HTMLElement; previous: Set<string> } | null>(null);
@@ -1044,11 +1055,15 @@ function CustomerWorkspace({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyAnnouncement, setHistoryAnnouncement] = useState("");
   const [historyAccessLost, setHistoryAccessLost] = useState(false);
-  const accessCheck = useRef(0);
+  const writeFence = useRef(0);
   const editOpener = useRef<{ element: HTMLElement | null; tab: CustomerTab } | null>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const previousMode = useRef("view");
-  useEffect(() => () => { historyRequest.current += 1; accessCheck.current += 1; }, []);
+  useEffect(() => () => {
+    historyRequest.current += 1;
+    writeFence.current += 1;
+    recordStore.pause();
+  }, [recordStore]);
   useEffect(() => {
     historyRequest.current += 1;
     setOlderHistory(null);
@@ -1056,7 +1071,8 @@ function CustomerWorkspace({
     setHistoryError(null);
     setHistoryAnnouncement("");
     historyKeyboardTrigger.current = null;
-  }, [queryState.data]);
+    if (data !== null) setHistoryAccessLost(false);
+  }, [data]);
   useEffect(() => {
     const trigger = historyKeyboardTrigger.current;
     if (olderHistory && trigger && (document.activeElement === trigger.element || document.activeElement === document.body)) {
@@ -1066,12 +1082,12 @@ function CustomerWorkspace({
     }
     historyKeyboardTrigger.current = null;
   }, [olderHistory]);
-  const canWrite = canEditCustomer(viewer, queryState.data);
+  const canWrite = canEditCustomer(viewer, data);
   const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact" | "custom">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
   const [contactIndex, setContactIndex] = useState<number | null>(null);
   const [customKey, setCustomKey] = useState<string | null>(null);
-  const record = mode === "view" ? queryState.data : editRecord;
+  const record = data === null ? null : mode === "view" ? data : editRecord;
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => { setMode("view"); setEditRecord(null); setFormError(null); }, [recordId]);
@@ -1108,22 +1124,8 @@ function CustomerWorkspace({
   const initials = view
     ? view.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
     : "";
-  const reload = () => {
-    if (!historyAccessLost) {
-      void queryState.store.refresh();
-      return;
-    }
-    const check = ++accessCheck.current;
-    void hostActions.show(scope, recordId).then((fresh) => {
-      if (accessCheck.current !== check) return;
-      queryState.store.write(() => fresh);
-      setHistoryAccessLost(false);
-      setHistoryError(null);
-    }).catch(() => {
-      // A retained cache value is not proof of current access.
-    });
-  };
-  const ready = !loading && error === null && !historyAccessLost && viewer.operator === true && record !== null && view !== null;
+  const reload = () => { void recordStore.refresh(); };
+  const ready = error === null && !historyAccessLost && viewer.operator === true && record !== null && view !== null;
   const activity = selectedActivity?.record === record
     ? timeline.find((item) => item.key === selectedActivity.key)
     : undefined;
@@ -1147,17 +1149,16 @@ function CustomerWorkspace({
       .catch((error: unknown) => {
         if (historyRequest.current !== request || latestRecord.current !== base) return;
         historyKeyboardTrigger.current = null;
-        const refused = error instanceof ApiError && (
-          [401, 403, 404, 409, 503].includes(error.status) ||
-          ["unauthorized", "forbidden", "not_found", "conflict", "unavailable"].includes(error.code ?? "")
-        );
-        if (refused) {
+        if (customerAccessRefused(error)) {
           historyRequest.current += 1;
           setHistoryBusy(false);
           setOlderHistory(null);
           setSelectedActivity(null);
           setMode("view");
           setEditRecord(null);
+          writeFence.current += 1;
+          setPending(false);
+          recordStore.reset();
           setHistoryAccessLost(true);
         } else {
           setHistoryError(t("Could not load earlier activity. Reload the customer and try again."));
@@ -1353,17 +1354,19 @@ function CustomerWorkspace({
   } : null;
 
   const save = (profile: Record<string, unknown>, provenance?: { method: ConsentMethod; note?: string }) => {
-    if (record === null) return;
+    if (!ready || !canWrite || record === null) return;
+    const fence = writeFence.current;
     setPending(true);
     setFormError(null);
     void hostActions
       .update(scope, recordId, record.revision, profile, provenance)
       .then((next) => {
-        queryState.store.write(() => next);
+        if (writeFence.current !== fence) return;
+        recordStore.write(() => next);
         setMode("view");
       })
-      .catch((e: unknown) => setFormError(friendlyError(e)))
-      .finally(() => setPending(false));
+      .catch((e: unknown) => { if (writeFence.current === fence) setFormError(friendlyError(e)); })
+      .finally(() => { if (writeFence.current === fence) setPending(false); });
   };
 
   return (
@@ -1396,13 +1399,13 @@ function CustomerWorkspace({
           </div>
         )}
       </header>
-      {loading ? <Loading>{t("Reading the record…")}</Loading>
+      {data === null && (inFlight || (error === null && !historyAccessLost && viewer.operator === true)) ? <Loading>{t("Reading the record…")}</Loading>
         : error !== null ? <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
           : historyAccessLost ? <ErrorNotice onRetry={reload}>{t("Customer access changed. Reload to continue.")}</ErrorNotice>
           : !ready ? <Notice>{t("You do not have access to customer records.")}</Notice>
             : (
               <>
-                <span role="status"><QueryRefresh updating={queryState.updating} /></span>
+                <span role="status"><QueryRefresh updating={inFlight} /></span>
                 {!canWrite && !viewer.canvas && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
                 <WorkspaceTabs
                   idPrefix={CUSTOMER_TAB_PREFIX}
