@@ -2,6 +2,7 @@
 export interface Viewer {
   operator: boolean | null;
   readOnly: boolean;
+  canvas?: boolean;
   canCreate?: boolean;
   canUpdate?: boolean;
   access?: "unavailable";

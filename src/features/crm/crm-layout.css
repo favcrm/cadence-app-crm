@@ -21,7 +21,38 @@
   font: 500 var(--text-micro) var(--font-mono);
   line-height: 1.5;
   vertical-align: middle;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* CRM-21: a tag chip never breaks inside a word. Chips wrap between each
+   other (.crm-chips is a wrapping row); a tag too long for the row ends in an
+   ellipsis instead. */
+.crm button.chip {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CRM-21: in the board's chat canvas the screen is mounted flush, with no
+   workspace padding around it, so below the full-page width it keeps a modest
+   inner margin (same rule as Accounting ACC-22). The iframe viewport is the
+   canvas width, so a media query measures it. Only the outermost outlet is
+   padded (Customers nests its own .app-outlet.crm). Full page (1100px and up)
+   is unchanged. */
+@media (max-width: 68.74rem) {
+  main.crm {
+    padding-inline: 1rem;
+    padding-block: 0.75rem;
+  }
+}
+
+@media (max-width: 36rem) {
+  main.crm {
+    padding-inline: 0.75rem;
+  }
 }
 
 /* Outlet headings are focused programmatically after navigation

@@ -13,7 +13,11 @@ const unavailable = () => new ApiError("Unavailable offline. No live data was ch
 const options = new URLSearchParams(location.search);
 const canvas = /^\d{3,4}$/.test(options.get("canvas") ?? "") ? Number(options.get("canvas")) : null;
 const presentationLocale = (options.get("lang") ?? options.get("locale")) === "zh-TW" ? "zh-TW" : "en";
-const offeredActions = options.get("readonly") === "1" ? fixtureActions.filter(verb => /\.(list|show|render)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
+// ?surface=canvas also tells the frame it is the read-only chat canvas (the host's
+// `surface` message, app-kit 0.7.0) and narrows the actions the way the host does.
+const asCanvasSurface = options.get("surface") === "canvas";
+const readOnlyMount = asCanvasSurface || options.get("readonly") === "1";
+const offeredActions = readOnlyMount ? fixtureActions.filter(verb => /\.(list|show|render)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
 if (canvas !== null) {
   document.documentElement.dataset.canvas = "";
   document.documentElement.style.setProperty("--canvas-width", `${canvas}px`);
@@ -128,8 +132,9 @@ function reply(conn: Conn, request: { op: string; id: string }, data: unknown) {
 
 function handle(conn: Conn, request: Record<string, unknown>) {
   if (request?.v === 1 && request.op === "ready") {
+    if (asCanvasSurface) conn.port?.postMessage({ v: 1, op: "surface", role: "canvas", modal: false, readOnly: true });
     sendProjection(conn);
-    status.textContent = options.get("readonly") === "1" ? "Local fixture data · read-only" : "Local fixture data · editing enabled";
+    status.textContent = readOnlyMount ? "Local fixture data · read-only" : "Local fixture data · editing enabled";
     return;
   }
   if (request?.v === 2 && request.op === "leave") return;

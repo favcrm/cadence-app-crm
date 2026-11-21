@@ -25,8 +25,20 @@ export interface ScreenPush {
 }
 
 export type ScreenPresentationMode = "outlet" | "drawer";
-export type ScreenSurfaceRole = "primary" | "drawer";
+export type ScreenSurfaceRole = "primary" | "drawer" | "canvas";
 export type ScreenLocale = "en" | "zh-TW";
+export type ScreenAudioMode = "record" | "upload";
+export type ScreenAudioSource = "recording" | "upload";
+export type ScreenAudioLanguage = "" | "en" | "zh";
+export type ScreenAudioSessionPhase =
+  | "idle"
+  | "starting"
+  | "recording"
+  | "paused"
+  | "stopping"
+  | "transcribing"
+  | "ready"
+  | "error";
 export type ScreenCapability =
   | "screen.v1"
   | "screen.v2"
@@ -34,8 +46,53 @@ export type ScreenCapability =
   | "screen-media.v1"
   | "screen-presentation.v1"
   | "screen-surfaces.v1"
+  | "screen-canvas.v1"
   | "screen-records.v1"
-  | "screen-locale.v1";
+  | "screen-locale.v1"
+  | "screen-audio.v1"
+  | "screen-audio.v2";
+
+export interface ScreenAudioCapture {
+  readonly transcript: string;
+  readonly duration_seconds: number;
+  readonly held_at: string;
+  readonly source: ScreenAudioSource;
+}
+
+export interface ScreenAudioCaptureOptions {
+  mode?: ScreenAudioMode;
+  timeoutMs?: number;
+}
+
+export interface ScreenAudioSessionSnapshot {
+  readonly session_id: string;
+  readonly mode: ScreenAudioMode;
+  readonly phase: ScreenAudioSessionPhase;
+  readonly held_at: string;
+  readonly elapsed_seconds: number;
+  readonly level: number;
+  readonly peak: number;
+  readonly segments_total: number;
+  readonly segments_done: number;
+  readonly segments_in_flight: number;
+  readonly segments_failed: number;
+  readonly no_speech_segments: number;
+  readonly transcript: string;
+  readonly error: { readonly code: string; readonly text: string } | null;
+}
+
+export type ScreenAudioSessionCommand =
+  | { action: "start"; language?: ScreenAudioLanguage; timeoutMs?: number }
+  | { action: "pause" | "resume" | "stop" | "retry" | "cancel"; timeoutMs?: number }
+  | {
+      action: "upload";
+      bytes: ArrayBuffer;
+      mimeType: string;
+      fileName?: string;
+      lastModified?: number;
+      language?: ScreenAudioLanguage;
+      timeoutMs?: number;
+    };
 
 export type SlotAnchor = "footer" | { x: number; y: number; w: number; h: number };
 
@@ -46,8 +103,9 @@ export interface ScreenReceiverOptions {
   onPush(push: ScreenPush): void;
   onError?(reason: string): void;
   onSlotState?(event: SlotState): void;
+  onAudioSessionEvent?(state: ScreenAudioSessionSnapshot): void;
   onPresentation?(mode: ScreenPresentationMode): void;
-  onSurface?(role: ScreenSurfaceRole, surface: string | undefined, modal: boolean): void;
+  onSurface?(role: ScreenSurfaceRole, surface: string | undefined, modal: boolean, readOnly?: boolean): void;
   accepts?: readonly ScreenCapability[];
   /** Largest JSON args/input bag to send. Defaults to 16 KiB. */
   maxArgsBytes?: number;
@@ -87,12 +145,16 @@ export interface ScreenReceiver {
   call<T = unknown>(verb: string, args?: unknown): Promise<T>;
   slot(verb: string, args?: unknown, anchor?: SlotAnchor): Promise<SlotState>;
   tool<T = unknown>(alias: string, input?: unknown, requestId?: string, generationScope?: GenerationScope): Promise<T>;
+  audioCapture(options?: ScreenAudioCaptureOptions): Promise<ScreenAudioCapture>;
+  audioSession(command: ScreenAudioSessionCommand): Promise<ScreenAudioSessionSnapshot>;
   asset(ref: string, options?: { timeoutMs?: number }): Promise<string>;
   assetAdmitted(ref: string): boolean;
   state(data: string): boolean;
   ownLeaveState(options?: { isLive?: () => boolean }): ScreenLeaveHandle | null;
   presentation(): ScreenPresentationMode;
   surfaceRole(): ScreenSurfaceRole;
+  /** True when the host says this mount is read-only (the chat canvas); needs `screen-canvas.v1`. */
+  readOnly(): boolean;
   surface(): string | undefined;
   openDrawer(surface: string, options?: ScreenDrawerOpenOptions): Promise<unknown>;
   closeDrawer(): Promise<unknown>;
@@ -118,6 +180,7 @@ export interface ScreenRoutePatch<Section extends string = string, View extends 
   view?: View;
   record_id?: string | null;
   segment_id?: string | null;
+  replace?: boolean;
 }
 
 export interface ScreenReadObservation {
@@ -130,6 +193,7 @@ export interface ScreenSurfaceSnapshot {
   readonly role: ScreenSurfaceRole;
   readonly name: string | undefined;
   readonly modal: boolean;
+  readonly readOnly: boolean;
 }
 
 export interface ScreenScopeSnapshot<
@@ -139,6 +203,7 @@ export interface ScreenScopeSnapshot<
   readonly scope: Required<ScreenScope>;
   readonly digest: string;
   readonly actions: readonly string[];
+  readonly audioCapture: boolean;
   readonly presentationLocale: ScreenLocale;
   readonly route: ScreenRoute<Section, View> | null;
   readonly observations: readonly ScreenReadObservation[];
@@ -181,11 +246,16 @@ export interface ScreenBridgeOptions<
   tag: string;
   appName?: string;
   records?: boolean;
+  /** Enable the hosted private-app catalogue bridge on a records screen. */
+  catalog?: boolean;
   actions?: boolean;
   media?: boolean;
   surfaces?: boolean;
+  /** Opt into `canvas` / `readOnly` from the host (needs `surfaces`). */
+  canvas?: boolean;
   presentation?: boolean;
   locale?: boolean;
+  audio?: boolean | "v1" | "v2";
   calls?: Record<string, readonly string[]>;
   slots?: Record<string, readonly string[]>;
   argBytes?: number | Record<string, number>;
@@ -200,8 +270,18 @@ export interface ScreenBridgeOptions<
   pushKeys?: readonly string[];
   maxInFlight?: number;
   timeoutMs?: number;
+  sandboxForms?: boolean;
   createError?: (message: string, status: number, options?: { code?: string }) => Err;
 }
+
+export type ScreenCatalogInput = { query?: Record<string, string | number | boolean>; body?: unknown; units?: number };
+export type ScreenCatalogReceipt<T = unknown> = {
+  slug: string; effect: "read" | "draft"; price: { currency: "USD"; scale: 6; amount: string }; result: T;
+};
+export type ScreenCatalogStatus<T = unknown> =
+  | { state: "uncertain" }
+  | { state: "settled"; result_available: false }
+  | { state: "settled"; result_available: true; receipt: ScreenCatalogReceipt<T> };
 
 export interface ScreenBridge<
   Section extends string = string,
@@ -214,6 +294,7 @@ export interface ScreenBridge<
   getState(): ScreenBridgeState<Section, View, Err>;
   getSnapshot(): ScreenScopeSnapshot<Section, View> | null;
   can(verb: string, actions?: readonly string[]): boolean;
+  canAudioCapture(snapshot?: ScreenScopeSnapshot<Section, View> | null): boolean;
   assertScope(scope: ScreenScope): void;
   start(runtime?: ScreenBridgeRuntimeOverrides): void;
   call<T = unknown>(
@@ -229,6 +310,19 @@ export interface ScreenBridge<
     anchor?: SlotAnchor,
     options?: ScreenBridgeCallOptions,
   ): Promise<T>;
+  catalog<T = unknown>(
+    scope: ScreenScope,
+    slot: string,
+    input: ScreenCatalogInput,
+    requestId: string,
+    anchor?: SlotAnchor,
+  ): Promise<ScreenCatalogReceipt<T>>;
+  catalogStatus<T = unknown>(
+    scope: ScreenScope,
+    slot: string,
+    input: ScreenCatalogInput,
+    requestId: string,
+  ): Promise<ScreenCatalogStatus<T>>;
   tool<T = unknown>(
     scope: ScreenScope,
     alias: string,
@@ -236,6 +330,16 @@ export interface ScreenBridge<
     requestId?: string,
     generationScope?: GenerationScope,
   ): Promise<T>;
+  audioCapture(
+    scope: ScreenScope,
+    options?: ScreenAudioCaptureOptions,
+  ): Promise<ScreenAudioCapture>;
+  audioSession(
+    scope: ScreenScope,
+    command: ScreenAudioSessionCommand,
+  ): Promise<ScreenAudioSessionSnapshot>;
+  getAudioSession(): ScreenAudioSessionSnapshot | null;
+  onAudioSession(listener: (state: ScreenAudioSessionSnapshot) => void): () => void;
   asset(scope: ScreenScope, ref: string, options?: { timeoutMs?: number }): Promise<string>;
   assetAdmitted(ref: string): boolean;
   state(data: string): boolean;
@@ -288,6 +392,10 @@ export declare const DEFAULT_TIMEOUT_MS: number;
 export declare const DRAWER_CONTEXT_BYTES: number;
 export declare const MAX_PUSH_BYTES: number;
 export declare const MAX_REPLY_DATA_BYTES: number;
+export declare const MAX_AUDIO_TRANSCRIPT_CHARS: number;
+export declare const MAX_AUDIO_UPLOAD_BYTES: number;
+export declare const SCREEN_AUDIO_V1: "screen-audio.v1";
+export declare const SCREEN_AUDIO_V2: "screen-audio.v2";
 export declare const HOST_DRAWER_VERBS: readonly [
   "screen.drawer.open",
   "screen.drawer.close",
@@ -297,6 +405,7 @@ export declare const ROUTABLE_ID: RegExp;
 export declare const ROUTE_RECORD_ID: RegExp;
 
 export declare function readRefusal(value: unknown): { code: string; text: string } | null;
+export declare function installSandboxFormActions(doc?: unknown): () => void;
 export declare function validateBoot(value: unknown, expectedTag?: string): ScreenBoot;
 export declare function readBoot(documentRef?: unknown, expectedTag?: string): ScreenBoot;
 export declare function createScreenReceiver(options: ScreenReceiverOptions): ScreenReceiver;

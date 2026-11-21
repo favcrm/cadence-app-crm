@@ -1,7 +1,7 @@
 import { ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import { FrameNavigationAdapter,patchRoute } from "../../bridge/route";
-import { scopeError,useScope } from "../../bridge/scope";
+import { scopeError,useCanvasReadOnly,useScope } from "../../bridge/scope";
 import Campaigns from "./campaigns/CrmCampaigns";
 import "./crm-layout.css";
 import "./crm-campaign.css";
@@ -14,6 +14,7 @@ import { CrmLocaleProvider } from "./locale";
 const HOST_PUSH_TIMEOUT_MS = 15000;
 export default function CrmScreen() {
   const snapshot = useScope();
+  const canvas = useCanvasReadOnly();
   const [unreachable, setUnreachable] = useState(false);
   // Dismiss a selected detail at once even if the host refuses the route
   // patch. The next section/record route clears the dismissal.
@@ -35,9 +36,10 @@ export default function CrmScreen() {
   const prefix = current.section === "customers" ? "records" : current.section === "segments" ? "segments" : "content";
   const viewer = {
     operator: actions.includes(`${prefix}.list`),
-    readOnly: !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save"),
-    canCreate: actions.includes("records.create"),
-    canUpdate: actions.includes("records.update"),
+    canvas,
+    readOnly: canvas || !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save"),
+    canCreate: !canvas && actions.includes("records.create"),
+    canUpdate: !canvas && actions.includes("records.update"),
   };
   // The route selects a full customer page or an in-frame segment drawer.
   const props = {

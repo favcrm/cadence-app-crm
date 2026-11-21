@@ -323,7 +323,7 @@ function CustomerList({
       {viewer.operator === false && (
         <Notice>{t("You do not have access to customer records.")}</Notice>
       )}
-      {viewer.operator && !canCreate && (
+      {viewer.operator && !viewer.canvas && !canCreate && (
         <Notice state="read-only">{t("Creating customers is unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
@@ -338,7 +338,7 @@ function CustomerList({
           title={t(committed === "" ? "No customers yet" : "No customers match this search")}
         >
           {committed === ""
-            ? t("Create the first record with New customer. Only real server rows appear here.")
+            ? viewer.canvas ? t("Only real server rows appear here.") : t("Create the first record with New customer. Only real server rows appear here.")
             : t("Clear the search to see every record.")}
         </EmptyState>
       )}
@@ -955,9 +955,11 @@ function CustomerNew({
         </button>
       </p>
       {!canCreate ? (
-        <Notice className="mt-2" state="read-only">
-          {t("Creating customers is unavailable.")}
-        </Notice>
+        viewer.canvas ? null : (
+          <Notice className="mt-2" state="read-only">
+            {t("Creating customers is unavailable.")}
+          </Notice>
+        )
       ) : hostAssignedCreateId === null && creationPolicy.error !== null ? (
         <ErrorNotice onRetry={() => void creationPolicy.store.refresh()}>{creationPolicy.error}</ErrorNotice>
       ) : hostAssignedCreateId === null ? (
@@ -1327,10 +1329,19 @@ function CustomerWorkspace({
             {ready && view && <p className="customer-contact text-label text-ink-400">{[view.email, view.phone].filter(Boolean).join(" · ")}</p>}
           </div>
         </div>
-        {ready && canWrite && (
+        {ready && (canWrite || (viewer.canvas && view?.email)) && (
           <div className="customer-actions">
-            <Button size="sm" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
-            <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
+            {viewer.canvas && view?.email && (
+              <Button size="sm" onClick={() => void navigator.clipboard?.writeText(view.email ?? "")}>
+                {t("Copy email")}
+              </Button>
+            )}
+            {canWrite && (
+              <>
+                <Button size="sm" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
+                <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
+              </>
+            )}
           </div>
         )}
       </header>
@@ -1341,7 +1352,7 @@ function CustomerWorkspace({
             : (
               <>
                 <span role="status"><QueryRefresh updating={queryState.updating} /></span>
-                {!canWrite && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
+                {!canWrite && !viewer.canvas && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
                 <WorkspaceTabs
                   idPrefix={CUSTOMER_TAB_PREFIX}
                   label="Customer sections"

@@ -79,6 +79,9 @@ export function scopeError(): string | null {
   const err = ensureBridge().getState().error?.message ?? null;
   return err ?? manualError;
 }
+/** True when the host mounts this frame read-only in the chat canvas (screen-canvas.v1). */
+export const getCanvasReadOnly = (): boolean => ensureBridge().getState().surface.readOnly === true;
+export function useCanvasReadOnly(): boolean { return useSyncExternalStore(subscribeScope, getCanvasReadOnly); }
 export function onScopeRetired(f: () => void) { retireListeners.add(f); return () => { retireListeners.delete(f); }; }
 
 export function clearScope(reason: string): void {

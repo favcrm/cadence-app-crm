@@ -346,7 +346,7 @@ function SegmentList({
       {viewer.operator === false && (
         <Notice>{t("Sign in as the operator to inspect saved segments.")}</Notice>
       )}
-      {viewer.operator && viewer.readOnly && (
+      {viewer.operator && viewer.readOnly && !viewer.canvas && (
         <Notice state="read-only">{t("Read-only view. Segment creation and edits are unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
@@ -357,7 +357,7 @@ function SegmentList({
       )}
       {viewer.operator && error === null && !loading && segments.length === 0 && (
         <EmptyState name="segments" title={t("No segments yet")}>
-          {t("Create the first saved rule with New segment. Only real server rows appear here.")}
+          {viewer.canvas ? t("Only real server rows appear here.") : t("Create the first saved rule with New segment. Only real server rows appear here.")}
         </EmptyState>
       )}
       <span role="status"><QueryRefresh updating={queryState.updating} /></span>
@@ -581,7 +581,7 @@ function SegmentNew({
         </button>
       </p>
       {!canWrite ? (
-        <Notice className="mt-2" state="read-only">
+        viewer.canvas ? null : <Notice className="mt-2" state="read-only">
           {t("Read-only view. A verified operator creates saved segments.")}
         </Notice>
       ) : (
@@ -1015,7 +1015,7 @@ export function SegmentDrawer({
         ) : undefined
       }
       note={
-        ready && !canWrite
+        ready && !canWrite && !viewer.canvas
           ? `Read-only view. ${viewer.operator ? "Edits are disabled on this board." : "Sign in as the operator to edit."}`
           : undefined
       }
