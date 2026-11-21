@@ -12,7 +12,7 @@ const unavailable = () => new ApiError("Unavailable offline. No live data was ch
 // pick the presentation. All synthetic; nothing here is a host authority.
 const options = new URLSearchParams(location.search);
 const canvas = /^\d{3,4}$/.test(options.get("canvas") ?? "") ? Number(options.get("canvas")) : null;
-const presentationLocale = options.get("lang") === "zh-TW" ? "zh-TW" : "en";
+const presentationLocale = (options.get("lang") ?? options.get("locale")) === "zh-TW" ? "zh-TW" : "en";
 // ?surface=canvas also tells the frame it is the read-only chat canvas (the host's
 // `surface` message, app-kit 0.7.0) and narrows the actions the way the host does.
 const asCanvasSurface = options.get("surface") === "canvas";

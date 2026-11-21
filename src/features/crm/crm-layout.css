@@ -417,9 +417,8 @@
 }
 
 @container (max-width: 47.5rem) {
-  /* Name and email stay on one line each and end in an ellipsis; source and
-     consent drop out and the tags collapse to a count. Selection, name,
-     email and tags are columns 1 to 4. */
+  /* Name and email stay on one line each and end in an ellipsis. Consent
+     drops out and tags collapse to a count; the first four columns stay. */
   /* crm-campaign.css gives every .crm-table a 680px floor that would force
      a horizontal scroll here; the narrow table fits its container instead. */
   .crm-customer-table {

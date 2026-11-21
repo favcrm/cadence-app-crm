@@ -31,6 +31,24 @@ export function isApprovalRequired(error: unknown): boolean {
   return error instanceof ApiError && error.code === "approval_required";
 }
 
+/** The bridge can map unknown refusal codes to 400, even for an uncertain write. */
+const DEFINITE_CREATE_REFUSALS: Record<string, true> = {
+  validation_failed: true,
+  record_id_not_allowed: true,
+  record_access_required: true,
+  record_owner_required: true,
+  record_access_unsafe_index: true,
+  operation_not_declared: true,
+  unauthorized: true,
+  forbidden: true,
+  owner_required: true,
+};
+
+/** Only host decisions known to precede a create or roll it back are retryable. */
+export function isDefiniteCreateRefusal(error: unknown): boolean {
+  return error instanceof ApiError && typeof error.code === "string" && Object.hasOwn(DEFINITE_CREATE_REFUSALS, error.code);
+}
+
 export function hostErrorText(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return SESSION_EXPIRED_TEXT;

@@ -1,5 +1,6 @@
 import { ApiError } from "@cadence/screen-ui";
-import { buildCustomerProfile, formFromProfile } from "../../src/features/crm/customerProfile";
+import { buildCustomerProfile, formFromProfile, readCustomerContacts, type CustomerContact } from "../../src/features/crm/customerProfile";
+import { readCustomerCustomFields, type CustomerCustomFields } from "../../src/features/crm/customerCustomFields";
 import { checkPredicate, checkSegmentName } from "../../src/features/crm/segmentGrammar";
 import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, type CampaignBlock } from "../../src/features/crm/campaignGrammar";
 
@@ -11,18 +12,19 @@ export const fixtureActions = [
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
 ];
-type Profile = { schema: number; display_name: string; email?: string; phone?: string; tags: string[]; source?: string; consent: { email: string; sms: string } };
-type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
+type Profile = { schema: number; display_name: string; email?: string | null; phone?: string | null; customer_type?: "person" | "organization" | null; website?: string | null; contacts: CustomerContact[]; custom_fields: CustomerCustomFields; tags: string[]; source?: string | null; consent: { email: string; sms: string } };
+type LocalRecord = { id: string; install_id: string; context_id: string; kind: string; revision: number; digest: string; profile: Profile; history: { revision: number; digest: string; actor: string; at: number; before: Profile | null; after: Profile }[]; consent_history: { revision: number; channel: string; state: string; actor: string; at: number; method?: string; note?: string }[] };
 type Predicate = { field: string; op: string; value: string };
 type Segment = { id: string; revision: number; name: string; segment_type?: "dynamic" | "static"; predicates: Predicate[]; member_ids?: string[]; digest: string };
 type Content = { draft_audience_full?: unknown; campaign_id: string; name: string; revision: number; subject: string; preheader: string; blocks: CampaignBlock[]; mode: "blocks" | "html"; html: string | null; text_override: string | null; content_digest: string; approval: { revision: null; digest: null; valid: false; scope: string } };
 const records: LocalRecord[] = [
-  { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted", source: "fixture" },
-  { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown", source: "fixture" },
-  { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied", source: "fixture" },
-  // Long values: the list must keep name and email on one line each.
-  { id: "wholesale", name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Montgomery", email: "bartholomew.wolfeschlegelstein@wholesale-distribution.example.invalid", tags: ["wholesale", "vip", "newsletter", "events"], consent: "granted", source: "wholesale-referral" },
-].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, tags: row.tags, source: row.source, consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+  { id: "ada", name: "Ada Chen", email: "ada@example.invalid", tags: ["vip"], consent: "granted" },
+  { id: "sam", name: "Sam Rivera", email: "sam@example.invalid", tags: ["member"], consent: "unknown" },
+  { id: "lee", name: "Lee Wong", email: "lee@example.invalid", tags: ["vip"], consent: "denied" },
+  // Long values exercise the single-line customer table in narrow canvases.
+  { id: "wholesale", name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Montgomery", email: "bartholomew.wolfeschlegelstein@wholesale-distribution.example.invalid", tags: ["wholesale", "vip", "newsletter", "events"], consent: "granted" },
+].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, contacts: row.id === "ada" ? [{ name: "Alex Demo", title: "Operations", email: "alex@example.invalid", phone: null }] : [], custom_fields: (row.id === "ada" ? { customer_segment: { label: "Customer segment", type: "text", value: "Local fixture" } } : {}) as CustomerCustomFields, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
 const fixtureSmtpBinding = { connection_id: "fixture-smtp", auth_revision: 1, link_revision: 1, state: "live", digest: fixtureDigest, sender: fixtureSender, transport_kind: "smtp" };
@@ -37,10 +39,27 @@ const contents: Content[] = [{ campaign_id: "welcome", name: "Welcome — fixtur
  *  AOS-521 board does (`draft_audience_full`); without it the fixture is an
  *  older board that cannot. `?sends=sending|sent|partial|uncertain` seeds one
  *  READ-ONLY send row so the status chip and result view can be seen. No send,
- *  approval or test is ever simulated: slots stay refused. */
+ *  approval or test is ever simulated: slots stay refused. `?access=read`
+ *  or `?access=write` shows the host's per-record edit decision.
+ *  `?create=uncertain` simulates a lost response after creating a fixture.
+ *  `?history=truncated` reports that earlier record changes are unavailable;
+ *  `?history=paged` supplies synthetic paged activity for Ada.
+ *  `?history=access-changed` also refuses the earlier page and first fresh read. */
 const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
+const historyMode = params.get("history");
+const hasPagedHistory = historyMode === "paged" || historyMode === "access-changed";
+let refuseNextCustomerRead = false;
+if (hasPagedHistory) {
+  const ada = records[0]!;
+  ada.revision = 23;
+  ada.history = Array.from({ length: 23 }, (_, index) => ({
+    revision: index + 1, digest: fixtureDigest, actor: `Fixture ${index + 1}`, at: 1700000000 + index * 60,
+    before: index === 0 ? null : structuredClone(ada.profile), after: structuredClone(ada.profile),
+  }));
+}
 const keepsAudience = params.get("board") === "audience";
 const seededSend = params.get("sends");
+const recordAccess = params.get("access");
 const sendCounts = { sending: { queued: 80, submitting: 3, accepted: 41, failed: 0, uncertain: 0, suppressed: 0, closed: 0 }, sent: { queued: 0, submitting: 0, accepted: 121, failed: 0, uncertain: 0, suppressed: 3, closed: 0 }, partial: { queued: 0, submitting: 0, accepted: 113, failed: 8, uncertain: 0, suppressed: 3, closed: 0 }, uncertain: { queued: 0, submitting: 0, accepted: 60, failed: 0, uncertain: 2, suppressed: 0, closed: 0 } } as const;
 function seededSendRow() {
   const key = seededSend as keyof typeof sendCounts | null;
@@ -82,9 +101,21 @@ export function inertHtml(raw: string) {
   }
   return template.innerHTML;
 }
+function pagedHistory<T extends LocalRecord>(record: T, cursor: unknown) {
+  const ordered = [...record.history].reverse();
+  const anchor = typeof cursor === "string" ? parseInt(cursor, 16) : null;
+  if (anchor !== null && !ordered.some((entry) => entry.revision === anchor)) {
+    throw new ApiError("That local history cursor is not available.", 400, { code: "invalid_cursor" });
+  }
+  const older = anchor === null ? ordered : ordered.filter((entry) => entry.revision < anchor);
+  const history = older.slice(0, 20);
+  const truncated = older.length > history.length;
+  return { ...record, history, history_truncated: truncated,
+    ...(truncated ? { history_next_cursor: history.at(-1)!.revision.toString(16).padStart(32, "0") } : {}) };
+}
+
 /** The same contract shape the paired host serves: recorded facts only.
  *  `next_decision` is never serialized — the app derives it. */
-
 export function fixtureCall(verb: string, args: Record<string, unknown>): unknown {
   switch (verb) {
     case "records.list": {
@@ -95,27 +126,65 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
       const page = rows.slice(start, start + limit);
       const truncated = start + page.length < rows.length;
-      return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
+      return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null,
+        ...(recordAccess === "read" || recordAccess === "write" ? { record_access: { create_id: "host" } } : {}) };
     }
-    case "records.show": return { record: records.find(r => r.id === args.record_id) ?? missing() };
+    case "records.show": {
+      const record = records.find(r => r.id === args.record_id) ?? missing();
+      const visible = recordAccess === "read" || recordAccess === "write"
+        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
+      if (hasPagedHistory && record.id === "ada") {
+        if (historyMode === "access-changed" && typeof args.history_cursor === "string") {
+          refuseNextCustomerRead = true;
+          throw new ApiError("This fixture customer's access changed.", 409, { code: "conflict" });
+        }
+        if (refuseNextCustomerRead) {
+          refuseNextCustomerRead = false;
+          throw new ApiError("This fixture customer's access is unavailable.", 503, { code: "unavailable" });
+        }
+        return { record: pagedHistory(visible, args.history_cursor) };
+      }
+      return { record: params.get("history") === "truncated" ? { ...visible, history_truncated: true } : visible };
+    }
     case "records.create":
     case "records.update": {
-      requireId(args.record_id);
-      const existing = records.find(r => r.id === args.record_id);
+      if (verb === "records.update" && recordAccess === "read" && (typeof args.record_id !== "string" || !ownedRecordIds.has(args.record_id))) throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
+      const hostAssigned = verb === "records.create" && (recordAccess === "read" || recordAccess === "write");
+      if (hostAssigned && args.record_id !== undefined) throw new ApiError("The host assigns this customer ID.", 400, { code: "invalid_body" });
+      const recordId = hostAssigned ? `mem_${crypto.randomUUID().replaceAll("-", "")}` : args.record_id;
+      requireId(recordId);
+      const existing = records.find(r => r.id === recordId);
       if (verb === "records.create" && existing) throw new ApiError("That local customer already exists.", 409, { code: "conflict" });
       if (verb === "records.update" && !existing) missing();
       requireRevision(existing, args.expected_revision);
-      const profile = buildCustomerProfile(formFromProfile(args.profile)) as Profile;
+      const patch = args.profile !== null && typeof args.profile === "object" && !Array.isArray(args.profile)
+        ? args.profile as Partial<Profile>
+        : {};
+      const source = Object.hasOwn(patch, "source") ? patch.source : existing?.profile.source;
+      const contacts = readCustomerContacts({ contacts: Object.hasOwn(patch, "contacts") ? patch.contacts : existing?.profile.contacts ?? [] });
+      if (contacts === null) throw new ApiError("Invalid fixture contacts.", 400, { code: "validation_failed" });
+      const customFields = readCustomerCustomFields({ custom_fields: Object.hasOwn(patch, "custom_fields") ? patch.custom_fields : existing?.profile.custom_fields ?? {} });
+      if (customFields === null) throw new ApiError("Invalid fixture custom fields.", 400, { code: "validation_failed" });
+      const profile = {
+        ...buildCustomerProfile(formFromProfile({ ...existing?.profile, ...patch })),
+        contacts,
+        custom_fields: customFields,
+        ...(source === undefined ? {} : { source }),
+      } as Profile;
       const revision = (existing?.revision ?? 0) + 1;
       const at = Math.floor(Date.now() / 1000);
-      const history = [...(existing?.history ?? []), { revision, digest: fixtureDigest, actor: "local-preview", at }];
+      const history = [...(existing?.history ?? []), { revision, digest: fixtureDigest, actor: "local-preview", at, before: existing ? structuredClone(existing.profile) : null, after: structuredClone(profile) }];
       const consent_history = [...(existing?.consent_history ?? [])];
       const provenance = args.consent_provenance as { method?: string; note?: string } | undefined;
       for (const channel of ["email", "sms"] as const) if (profile.consent[channel] !== existing?.profile.consent[channel]) consent_history.push({ revision, channel, state: profile.consent[channel], actor: "local-preview", at, ...(typeof provenance?.method === "string" ? { method: provenance.method } : {}), ...(typeof provenance?.note === "string" ? { note: provenance.note } : {}) });
-      const record = { id: args.record_id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision, digest: fixtureDigest, profile, history, consent_history };
+      const record = { id: recordId, install_id: fixtureInstallId, context_id: "", kind: "customer", revision, digest: fixtureDigest, profile, history, consent_history };
       if (existing) records.splice(records.indexOf(existing), 1, record); else records.push(record);
+      if (hostAssigned) ownedRecordIds.add(recordId);
       changed(existing ? "Customer updated locally." : "Customer created locally.");
-      return { record };
+      if (verb === "records.create" && params.get("create") === "uncertain") throw new ApiError("The local create response was lost.", 503, { code: "outcome_uncertain" });
+      const visible = recordAccess === "read" || recordAccess === "write"
+        ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
+      return { record: hasPagedHistory && record.id === "ada" ? pagedHistory(visible, undefined) : visible };
     }
     case "segments.list": return { segments };
     case "segments.show": return { segment: segments.find(s => s.id === args.segment_id) ?? missing() };

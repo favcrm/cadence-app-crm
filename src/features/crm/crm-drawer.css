@@ -278,10 +278,9 @@ button.chip:focus-visible {
   }
 }
 
-/* CRM-14 — Customer and Segment details are always drawn in this frame:
-   a frame-wide scrim and a right drawer spanning the full frame height,
-   min(30rem, 100vw) wide, so a narrow frame gets a full-width sheet. The
-   header and footer stay put and only the body scrolls. */
+/* Segment, customer-edit and activity drawers use the frame-wide scrim.
+   The right drawer spans the frame height and becomes full-width on narrow
+   screens; its header and footer stay put while the body scrolls. */
 .crm-frame-drawer {
   display: contents;
 }
@@ -308,15 +307,124 @@ button.chip:focus-visible {
   min-width: 0;
 }
 
-/* CRM-19 — in a narrow frame (the chat canvas) the open record replaces the
-   list: full width, no scrim, a Back control in the kicker row. */
-.crm-frame-drawer[data-fill] .crm-drawer-scrim {
-  display: none;
+/* Customer record page; drawers are reserved for editing and activity details. */
+.customer-workspace {
+  container-type: inline-size;
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
-.crm .crm-frame-drawer[data-fill] .crm-drawer.crm-drawer-shell {
+.customer-back { justify-self: start; }
+.customer-header,
+.customer-heading,
+.customer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.customer-header {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.customer-heading { flex: 1 1 15rem; }
+.customer-heading p { margin: 0; }
+.customer-heading h3 { margin: 0.15rem 0; overflow-wrap: anywhere; }
+.customer-contact { overflow-wrap: anywhere; }
+.customer-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background: var(--color-ink-800);
+  color: var(--color-ink-200);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+.customer-actions { flex-wrap: wrap; }
+.customer-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+.customer-profile-panel,
+.customer-activity-panel { min-width: 0; }
+.customer-workspace .crm-ctabs-bar { margin: 0; }
+.customer-workspace .crm-ctabs {
+  flex-wrap: nowrap;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.customer-workspace .crm-ctab { flex: none; white-space: nowrap; margin-bottom: 0; }
+.customer-workspace .crm-ctab:focus-visible { outline-offset: -2px; }
+.customer-workspace [role="tabpanel"] { min-width: 0; }
+.customer-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.customer-section-heading h4 { margin-bottom: 0; }
+.customer-contacts { list-style: none; margin: 0.5rem 0 0; padding: 0; }
+.customer-contacts li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-ink-700);
+}
+.customer-contacts li > div { min-width: 0; overflow-wrap: anywhere; }
+.customer-contacts strong { font-weight: 500; }
+.customer-contacts p { margin: 0.2rem 0 0; color: var(--color-ink-400); font-size: var(--text-micro); }
+.customer-remove-confirm { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.customer-remove-confirm p { flex-basis: 100%; margin: 0; }
+.customer-activity-panel h4,
+.customer-activity-details h4 {
+  margin: 0 0 0.5rem;
+  font-size: var(--text-label);
+  font-weight: 500;
+  color: var(--color-ink-200);
+}
+.customer-activity-panel .crm-timeline {
+  gap: 0;
+  padding: 0;
+  border: 0;
+}
+.customer-activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   width: 100%;
-  border-left: 0;
+  padding: 0.75rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-ink-700);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.crm-drawer-back {
-  margin-left: -0.5rem;
+.customer-activity-row:hover { color: var(--color-ink-100); }
+.customer-activity-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.customer-activity-copy { display: grid; gap: 0.25rem; min-width: 0; overflow-wrap: anywhere; }
+.customer-activity-copy > span:first-child {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.customer-activity-details { display: grid; gap: 1.25rem; }
+.customer-activity-details p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.customer-changes { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--color-ink-700); }
+.customer-changes li { padding: 0.75rem 0; border-bottom: 1px solid var(--color-ink-700); }
+.customer-changes h5 { margin: 0 0 0.5rem; font-size: var(--text-label); font-weight: 500; }
+.customer-changes dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin: 0; }
+.customer-changes dt { color: var(--color-ink-400); font-size: var(--text-micro); }
+.customer-changes dd { margin: 0.25rem 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@container (max-width: 42rem) {
+  .customer-workspace-grid { grid-template-columns: minmax(0, 1fr); }
 }

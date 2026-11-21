@@ -119,7 +119,7 @@ OPTIONAL_DESCRIPTOR_KEYS = ("record_write_schema", "record_search_columns")
 MIGRATION_KEYS = ("version", "path", "sha256")
 COLUMN_KEYS = ("name", "type", "nullable", "default", "max_length", "enum", "format", "json_schema")
 JSON_SCHEMA_TYPES = ("object", "array", "string", "number", "integer", "boolean", "null")
-JSON_SCHEMA_SINGLE = ("items", "not", "if", "then", "else")
+JSON_SCHEMA_SINGLE = ("items", "not", "if", "then", "else", "propertyNames")
 JSON_SCHEMA_ARRAY = ("allOf", "anyOf", "oneOf")
 JSON_SCHEMA_KEYWORDS = (
     "type",
@@ -132,9 +132,11 @@ JSON_SCHEMA_KEYWORDS = (
     "minLength",
     "maxLength",
     "pattern",
+    "format",
     "properties",
     "required",
     "additionalProperties",
+    "propertyNames",
     "items",
     "minItems",
     "maxItems",
@@ -978,6 +980,8 @@ def _storage_json_schema(schema: object, where: str, what: str) -> None:
             elif key == "pattern":
                 if not isinstance(value, str) or len(value) > 256:
                     raise PackageError(f"{where}: {what} pattern is a bounded string")
+            elif key == "format" and value != "date":
+                raise PackageError(f"{where}: {what} only supports the date format")
         if "then" in node or "else" in node:
             if "if" not in node:
                 raise PackageError(f"{where}: {what} then/else requires if")

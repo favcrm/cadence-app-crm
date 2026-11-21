@@ -10,7 +10,6 @@ export interface CustomerListState {
   cursors: string[];
   page: number;
   consentFilter: string;
-  sourceFilter: string;
   tagFilter: string;
 }
 type Position = { top: number; left: number };
@@ -63,7 +62,7 @@ function bounded(state: CustomerListState): boolean {
   if (state.query.length > 120 || state.committed.length > 120 || state.cursors.length > 64 ||
       !Number.isInteger(state.page) || state.page < 0 || state.page > state.cursors.length ||
       !["", "granted", "unknown", "denied"].includes(state.consentFilter) ||
-      state.sourceFilter.length > 256 || state.tagFilter.length > 256) return false;
+      state.tagFilter.length > 256) return false;
   const encoder = new TextEncoder();
   return state.cursors.every(cursor => cursor.length <= 2048 && encoder.encode(cursor).length <= 2048) &&
     encoder.encode(JSON.stringify(state)).length <= 32768;

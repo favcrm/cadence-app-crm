@@ -10,6 +10,8 @@ with package-dev support; older CLIs can use `pnpm dev` without a host upgrade.
 Open the printed `/dev/preview/` URL. The default loopback port is 3186;
 `CADENCE_APP_PORT=3193 pnpm dev` or `cadence app dev --package . --port 3193`
 selects another port in 3110–3199. Both paths reject non-loopback hosts.
+Add `?locale=zh-TW` to exercise the app's Traditional Chinese copy; the
+fixture shell itself remains English.
 
 The runner uses the existing Vite/React toolchain and committed screen-ui SDK.
 It imports the real `src/main.tsx` in a development frame and speaks the existing
@@ -24,9 +26,10 @@ At narrow widths, navigation opens as a drawer and Assistant/Workspace switches
 between the same mounted panes, preserving the local chat draft.
 
 The real app action buttons operate on browser-memory fixtures:
-- Customers: create, edit and record local consent; search and detail views.
-  **New customer** is the sole creation action in the toolbar; the CSV import
-  screen is no longer exposed by the app. Host import services are unchanged.
+- Customers: create, edit and record local consent; search, open the full
+  customer page and inspect recorded activity in a drawer. **New customer**
+  is the sole creation action in the toolbar; the CSV import screen is no
+  longer exposed by the app. Host import services are unchanged.
 - Segments: create, edit and duplicate rules; counts use the current local customers.
 - Campaigns: choose **Blank** or **Paste HTML**, edit/save revisions and clone
   drafts without copying live sender/audience state. Saving never creates an
@@ -94,15 +97,21 @@ process; do not edit `node_modules` or copy primitives into the preview.
 
 ## Detail drawers
 
-Customer and Segment details always open inside the CRM frame (CRM-14), the
-same way Social Content draws its drawers: a frame-wide scrim and a right-hand
-`DrawerShell` from `@cadence/screen-ui` that spans the full frame height,
-`min(30rem, 100vw)` wide, so a narrow frame gets a full-width sheet. The header
-(kicker, title, close) and the footer stay put; only the body scrolls. While a
-drawer is open the document behind it does not scroll and Tab stays inside it.
-Escape keeps menu/edit/detail ordering; Escape, the scrim and the close control
-return to the list and restore focus to the opener row. Opening a row sets the
-record route, so direct routes and Back work. CRM sends no host drawer request.
+Customer records replace the list with a page in the CRM outlet. Overview shows
+profile, consent and recent activity; Activity shows the available history,
+Fields shows stored custom values, and Access shows your current permissions.
+Profile edits and individual activity details use the in-frame drawer. A recorded
+profile edit shows available before/after values for supported fields. Related
+records and sharing controls require host authorization contracts; the app does
+not simulate them.
+Segment details continue to open in that drawer. The shared `DrawerShell` spans
+the frame height, with a frame-wide scrim and a width of `min(30rem, 100vw)`;
+only its body scrolls. While open, Tab stays inside and Escape or the close
+control dismisses it. Opening a customer sets the record route, so direct
+routes and Back work. CRM sends no host drawer request.
+Each profile open waits for a fresh record read. An Activity access refusal
+clears the displayed profile and edit controls until a fresh read succeeds;
+returning to the list and reopening cannot restore the previous profile.
 
 ## Compact CRM polish
 

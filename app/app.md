@@ -1,8 +1,8 @@
 ---
 app: crm
 title: CRM
-version: '0.4.3'
-summary: Static and rule-based customer segments, scoped campaign content approval and audience freezing; sending stays operator-run host action.
+version: '0.5.0'
+summary: Customer records, activity, segments and scoped campaign workflows; sending stays an operator-run host action.
 needs:
   connections: []
   requires:
@@ -30,7 +30,7 @@ listing:
     personal: true
 ---
 
-# CRM — reviewed email briefs
+# CRM — customer workspace and campaigns
 
 This development bundle preserves the installed app identity `crm` and
 carries app-owned Customers, Segments and Campaigns screens, including
@@ -131,10 +131,11 @@ Agent procedure:
 
 1. Search or show customers first; read the current `revision` before any update.
 2. If a search is ambiguous, ask the operator to select one customer. Never guess.
-3. Propose exactly one reviewed change with the exact field values. Only the
-   listed fields are writable; no consent, identity or revision fields exist.
-   The host applies the change through its action policy; consent stays unknown
-   on create and is preserved on update.
+3. For the declared `app-actions` proposal, include only its listed fields;
+   its input does not contain consent, identity or revision fields. The host
+   applies the proposal through its action policy; the proposal does not grant
+   consent. Hosted `records.update` uses a different contract and requires the
+   current revision.
 4. After the operation, verify the durable receipt before reporting success.
 5. A static segment is an explicit member list (`segments.save_static`); a
    rule segment keeps the existing predicate grammar. `segments.delete` keeps
@@ -143,14 +144,102 @@ Agent procedure:
    `campaigns.approve` pins the exact content revision and `audiences.prepare`
    freezes the audience. These are host-authorized internal actions; the
    host decides whether the current autonomy policy runs them directly.
-7. A note is plain text on the customer timeline: `customers.notes.create`
-   appends, `customers.notes.list` reads and `customers.notes.delete` soft-deletes.
-   A note never changes the profile digest, a segment or a frozen audience.
+7. Where the host advertises `customers.notes.create`, `customers.notes.list`
+   and `customers.notes.delete`, they append, read and soft-delete plain-text
+   notes. A declaration alone does not make those actions available. A note
+   never changes the profile digest, a segment or a frozen audience.
 8. `sends.list` and `sends.show` are read-only. This bundle declares no send
    or SMTP action; the final send remains the host operator's guarded action.
 
-Upload is not import or consent. There is no consent inference, no custom
-attributes and no sending from this app.
+Upload is not import or consent. There is no consent inference and no sending
+from this app.
+
+### Hosted agent tools
+
+When the host offers `app_describe` and `app_call`, discover the installed
+CRM's current operations and storage fields before using them. Use
+`records.list` and `records.show` to find the exact customer and its current
+revision. `records.create` and `records.update` put fields inside `profile`;
+an update includes the revision returned by `records.show`. A hosted write is
+staged for the owner's review, not proof that a record changed. Read the
+resulting status and record after approval; a stale revision must be read
+again rather than overwritten. The host's current grants and approval policy,
+not this guidance or a selected customer, determine access.
+
+`records.show` history describes recorded profile changes, not every customer
+interaction. When a supporting host returns `history_next_cursor`, pass it as
+`history_cursor` to `records.show` to request older visible changes. Older hosts
+may report `history_truncated` without a cursor; then only recent changes are
+available. Protected history can also omit changes from before access was
+enabled. Do not claim the returned activity is complete or infer that no other
+interaction occurred.
+
+Consent notes require a recorded method; a withdrawal without a note does not.
+Consent entries and profile-change entries are separate evidence, even when
+their revision numbers match.
+
+On hosts with customer-level access, `records.show` may include
+`record_access.can_write`. A false value means this caller cannot edit that
+customer, even if the app declares `records.update`. Permissions can change;
+the host rechecks them on every write. Older unprotected hosts omit the field.
+
+For a protected table, `records.list` reports `record_access.create_id: "host"`;
+the screen then omits `record_id` on create. This capability does not grant
+access. On any host, if a create result is uncertain, check the customer list
+before trying again; a new request can create a duplicate.
+
+Workspace-visible customers remain readable to callers with the app's existing
+read capability; visibility alone is not permission to write. A private customer
+requires the agent's own live record grant. To update an existing customer, a
+paired agent needs its own write grant, rechecked when an owner approves the
+action; approval does not confer access.
+
+Paired-agent CLI chat uses that agent's own live credential and grants; a
+different agent's grant does not transfer. Ordinary browser chat does not yet
+have a separate customer-access identity and cannot use protected customer data
+through this path.
+
+For a protected agent create, omit `record_id` and supply the intended human
+workspace member as `record_owner_id` to `app_call`. The owner reviews the
+request; the host verifies the assignee's current membership. The new customer
+is private to that person, and creating it does not grant the agent access.
+
+Contacts are entries in the customer's `contacts` array and share that
+customer's access; they are not separate customers and do not carry independent
+marketing consent. To add, correct or remove one, read the customer first,
+preserve the other entries, and submit the complete revised array through
+`records.update` with the current revision. Each entry has `name` and nullable
+`title`, `email` and `phone`; at most 50 entries are supported. Validate email
+and phone syntax before proposing them: the host's nested JSON schema enforces
+types and lengths, not email or phone formats. Never infer consent from a
+contact's details.
+
+`custom_fields` is a customer-local object keyed by stable lowercase
+letters, digits or underscores (1–40 characters; reserved object and host
+bridge keys are excluded). Each value is `{label, type, value}` with `type` equal to `text`,
+`number`, `boolean` or `date`; dates use `YYYY-MM-DD`. To change one, preserve
+the other entries and submit the whole object with the current customer
+revision. These fields share the customer's access. Coordinate keys and types
+across the team: there is no workspace-wide definition registry or
+cross-customer uniqueness policy. The host validates keys, value types, bounds
+and calendar dates. Hosts predating this schema validation must be upgraded
+before installing this version of the CRM.
+
+In particular, do not assume `customers.notes.*` is callable through hosted
+`app_call` merely because `app-assistant.json` declares it. Use only operations
+the host advertises; a record update is not a substitute for logging a note.
+
+The same discovery and read can be called from an authorized hosted CLI
+without putting customer data in a shell command:
+
+```sh
+cadence --org "$ORG" platform call app_describe --input '{"app":"crm"}'
+cadence --org "$ORG" platform call app_call --input '{"app":"crm","operation":"records.list","args":"{\"limit\":1}"}'
+```
+
+Do not infer marketing consent from a customer profile or note. Do not claim
+contacts, custom fields, cross-app links or per-customer sharing exist unless
+the installed host's discovered contract actually provides them.
 
 ## Campaign work metadata (CRM-12)
 
@@ -176,10 +265,10 @@ campaign Work card is gone, so the screen does not use campaign work.
 return of the operations.
 
 
-## App-owned storage schema (0.3.0, AOS-384)
+## App-owned storage schema
 
 This package owns its logical storage schema. `app-storage.json` declares
-`app-storage/v1` at `schema_version` 2 with two ordered migrations under
+`app-storage/v1` at `schema_version` 5 with five ordered migrations under
 `storage/`; each migration's `sha256` is the exact raw-byte digest of that
 file. A host refuses this package if a migration is missing or its bytes
 differ from the declared hash, and `needs.requires.contracts` must list
@@ -193,10 +282,16 @@ Schema v1 creates the app tables `customers`, `segments`, `campaigns` and
 `proposals.campaign_id` relation, its index and a `synthetic` flag that
 keeps seeded legacy rows distinguishable. Schema v2 adds persisted,
 nullable `phone` and `source` columns to `customers` plus a
-`customers_phone` index. The accepted customer form already collects both
-values, so they travel through the existing `records.create`/
-`records.update` profile — this release adds no new bridge operation, wire
-field or screen design. `campaigns` and `proposals` declare the host
+`customers_phone` index. The customer form collects phone but leaves
+`source` to authorized platform and agent operations; profile and consent
+edits omit it so a partial update preserves any stored value. Schema v3 adds
+an optional `customer_type` (`person` or `organization`) and an optional
+website. Both kinds remain customers; a person representing an organization is
+a separate contact, not a second name for that organization. Schema v4 adds a
+bounded `contacts` array to the customer record; schema v5 adds typed
+`custom_fields`. Both inherit the customer's visibility. Cross-app links are
+not implemented by these fields.
+`campaigns` and `proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The
 host-owned `id`, `context_id`, `revision`,
@@ -207,8 +302,8 @@ Credentials and effect authority stay out of app-owned tables. SMTP
 credentials, approval gates, audience-freeze and send authority and actual
 sends remain host-owned; this bundle declares no send or SMTP operation.
 
-Blank optional customer fields are sent as explicit `null`, so an update
-clears `email`, `phone` or `source` instead of preserving an older value.
+Blank email and phone fields are sent as explicit `null`, so an update clears
+those values instead of preserving older ones.
 Columns carry `format`/`json_schema` declarations and the root
 `record_write_schema` declares that an update which moves either consent
 channel from not granted to granted must report provenance; the host
@@ -216,6 +311,9 @@ validates these server-side, so browser shaping is not authority. The
 customer timeline uses an explicit `consent_history` when present and
 otherwise projects the generic before/after journal (with reported
 provenance), because the host reports no derived consent semantics.
+The activity drawer shows changed customer fields only when the current
+profile and both journal snapshots contain them. Missing or withheld values
+are not inferred; the host remains responsible for authorizing history.
 `record_search_columns` names the text/json columns the host generic
 search may use — `display_name`, `email`, `tags`, `phone` and `source` —
 so tag-only queries do not silently become name-only queries; the host
