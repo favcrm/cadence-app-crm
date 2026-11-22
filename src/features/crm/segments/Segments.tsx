@@ -1021,7 +1021,7 @@ export function SegmentDrawer({
       }
       note={
         ready && !canWrite && !viewer.canvas
-          ? `Read-only view. ${viewer.operator ? "Edits are disabled on this board." : "Sign in as the operator to edit."}`
+          ? t(viewer.operator ? "Read-only view. Edits are disabled on this board." : "Read-only view. Sign in as the operator to edit.")
           : undefined
       }
       onClose={onClose}

@@ -11,6 +11,14 @@ the viewer as read-only and drops the member-only "Read-only view" wording, beca
 already says "Open in CRM to edit". Create, edit, bulk, approve and send controls are hidden;
 reads, navigation and Copy email stay. The full page and the drawer are unchanged.
 
+## Read-only wording in zh-TW and zh-HK (0.4.5)
+
+Every "Read-only view." string has zh-TW and zh-HK text in `localeCatalog.ts` (`zhTW`, `zhHK`).
+The two drawer notes that were built by string interpolation (and so never translated) are now
+whole keys. `tests/unit/readonly_locale.test.mjs` fails if a read-only string or any `t("...")`
+literal lacks either entry. The board host only sends `en` or `zh-TW` today; zh-HK is ready in
+the catalog for when it sends it.
+
 ## Canvas views with filters in 0.4.4
 
 CRM declares five views in `screens.json` next to `navigation` (app-kit 0.8.0,
