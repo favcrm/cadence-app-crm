@@ -2,13 +2,14 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 5,
+  "schema_version": 6,
   "compatible_schema_versions": [
     1,
     2,
     3,
     4,
-    5
+    5,
+    6
   ],
   "default_table": "customers",
   "migrations": [
@@ -36,8 +37,41 @@
       "version": 5,
       "path": "storage/005-customer-custom-fields.json",
       "sha256": "sha256:edaca96f4b5bb36ffff298fca1f15741c2164e55d8e150e751a0bae17c144385"
+    },
+    {
+      "version": 6,
+      "path": "storage/006-customer-notes.json",
+      "sha256": "sha256:0ffb682824834e2a67e8e5865223e3a939ffad45e55866e4ce51614e52d98716"
     }
   ],
+  "tables": {
+    "notes": {
+      "search_columns": ["body"],
+      "immutable_columns": ["customer_id"],
+      "write_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "before", "after", "provenance"],
+        "properties": {
+          "operation": { "enum": ["create", "update"] },
+          "before": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          },
+          "after": {
+            "type": "object",
+            "required": ["customer_id", "body"],
+            "properties": {
+              "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "body": { "type": "string", "minLength": 1, "maxLength": 4000 }
+            }
+          },
+          "provenance": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          }
+        }
+      }
+    }
+  },
   "record_search_columns": ["display_name", "email", "tags", "phone", "source"],
   "record_write_schema": {
     "type": "object",

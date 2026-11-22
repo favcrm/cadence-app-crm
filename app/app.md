@@ -1,8 +1,8 @@
 ---
 app: crm
 title: CRM
-version: '0.5.0'
-summary: Customer records, activity, segments and scoped campaign workflows; sending stays an operator-run host action.
+version: '0.6.0'
+summary: Customer records, notes, activity, segments and scoped campaign workflows; sending stays an operator-run host action.
 needs:
   connections: []
   requires:
@@ -268,7 +268,7 @@ return of the operations.
 ## App-owned storage schema
 
 This package owns its logical storage schema. `app-storage.json` declares
-`app-storage/v1` at `schema_version` 5 with five ordered migrations under
+`app-storage/v1` at `schema_version` 6 with six ordered migrations under
 `storage/`; each migration's `sha256` is the exact raw-byte digest of that
 file. A host refuses this package if a migration is missing or its bytes
 differ from the declared hash, and `needs.requires.contracts` must list
@@ -289,8 +289,14 @@ an optional `customer_type` (`person` or `organization`) and an optional
 website. Both kinds remain customers; a person representing an organization is
 a separate contact, not a second name for that organization. Schema v4 adds a
 bounded `contacts` array to the customer record; schema v5 adds typed
-`custom_fields`. Both inherit the customer's visibility. Cross-app links are
-not implemented by these fields.
+`custom_fields`. Schema v6 adds the `notes` table (`customer_id`, `body`,
+`archived_at`) indexed by `notes_customer_id` and `notes_archived_at` with
+`search_columns: ["body"]` and `immutable_columns: ["customer_id"]` declared
+under `tables.notes`. The bundle also declares `records.aggregate` and
+`records.batch` alongside `table`, `filters`, `sort`, `fields` and
+`omit_fields` selectors on record calls, and ships an agent skill package
+under `skills/crm/`. Contacts, custom fields and notes inherit the workspace
+record policy. Cross-app links are not implemented by these fields.
 `campaigns` and `proposals` declare the host
 absolute `record_bytes` budget (262144) so existing large content is not
 refused; other tables keep the generic 16 KiB record default. The

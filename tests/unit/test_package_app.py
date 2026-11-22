@@ -428,7 +428,7 @@ class BuildAndExclusionTests(unittest.TestCase):
         for name in names:
             rel = name.split("/", 1)[1]
             top = rel.split("/", 1)[0]
-            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "app-storage.json", "workflows", "rubrics", "templates", "views", "bindings", "screens", "storage"})
+            self.assertIn(top, {"app.md", "app-actions.json", "app-assistant.json", "app-chat.json", "app-storage.json", "workflows", "rubrics", "templates", "views", "bindings", "screens", "storage", "skills"})
             self.assertFalse(any(p.startswith(".") for p in rel.split("/")))
         self.assertIn(f"{root}/app.md", names)
         self.assertIn(f"{root}/workflows/email-brief.md", names)
@@ -445,6 +445,14 @@ class BuildAndExclusionTests(unittest.TestCase):
                 f"{root}/storage/003-customer-identity.json",
                 f"{root}/storage/004-customer-contacts.json",
                 f"{root}/storage/005-customer-custom-fields.json",
+                f"{root}/storage/006-customer-notes.json",
+            },
+        )
+        self.assertEqual(
+            {n for n in names if n.startswith(f"{root}/skills/")},
+            {
+                f"{root}/skills/crm/skill.json",
+                f"{root}/skills/crm/SKILL.md",
             },
         )
         self.assertEqual(
@@ -691,12 +699,17 @@ class StorageContractTests(unittest.TestCase):
         self.assertEqual(doc["contract"], "app-storage/v1")
         self.assertEqual(doc["app"], "crm")
         self.assertEqual(doc["record_kind"], "customer")
-        self.assertEqual(doc["schema_version"], 5)
-        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5])
+        self.assertEqual(doc["schema_version"], 6)
+        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5, 6])
         self.assertEqual(doc["default_table"], "customers")
-        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5])
+        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5, 6])
         fields_migration = "storage/005-customer-custom-fields.json"
+        notes_migration = "storage/006-customer-notes.json"
         self.assertEqual(dict(contents)[fields_migration], (REPO / "app" / fields_migration).read_bytes())
+        self.assertEqual(dict(contents)[notes_migration], (REPO / "app" / notes_migration).read_bytes())
+        self.assertIn("notes", doc["tables"])
+        self.assertEqual(doc["tables"]["notes"]["search_columns"], ["body"])
+        self.assertEqual(doc["tables"]["notes"]["immutable_columns"], ["customer_id"])
         self.assertIsInstance(doc["record_write_schema"], dict)
         self.assertIn("if", doc["record_write_schema"])
         self.assertEqual(
@@ -1234,6 +1247,78 @@ class CliTests(unittest.TestCase):
             archive.write_bytes(b"garbage")
             result = self.run_cli("verify", str(archive))
             self.assertNotEqual(result.returncode, 0)
+
+
+class SkillAndTableDescriptorTests(unittest.TestCase):
+    """Validate bundled skills/ and app-storage.json tables rules."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+
+    def _make_storage_bundle(self, descriptor_override: dict | None = None, extra_files: dict[str, str] | None = None) -> Path:
+        manifest = """---
+app: crm
+title: CRM
+version: '0.6.0'
+summary: Test bundle.
+needs:
+  connections: []
+  requires:
+    contracts: {app-storage: [1]}
+---
+
+# Guide
+"""
+        m1 = {
+            "version": 1,
+            "operations": [
+                {"op": "create_table", "table": "customers", "columns": [{"name": "display_name", "type": "text", "nullable": False, "max_length": 200}]},
+                {"op": "create_table", "table": "notes", "columns": [{"name": "customer_id", "type": "text", "nullable": False, "max_length": 128}, {"name": "body", "type": "text", "nullable": False, "max_length": 4000}]},
+            ],
+        }
+        m1_bytes = json.dumps(m1).encode("utf-8")
+        descriptor = {
+            "contract": "app-storage/v1",
+            "app": "crm",
+            "record_kind": "customer",
+            "schema_version": 1,
+            "compatible_schema_versions": [1],
+            "default_table": "customers",
+            "migrations": [{"version": 1, "path": "storage/001-initial.json", "sha256": f"sha256:{hashlib.sha256(m1_bytes).hexdigest()}"}],
+            "tables": {"notes": {"search_columns": ["body"], "immutable_columns": ["customer_id"]}},
+        }
+        if descriptor_override:
+            descriptor.update(descriptor_override)
+        files = {
+            "storage/001-initial.json": m1_bytes.decode("utf-8"),
+            "app-storage.json": json.dumps(descriptor),
+            "skills/crm/skill.json": json.dumps({"schema": 1, "name": "crm", "files": ["SKILL.md"]}),
+            "skills/crm/SKILL.md": "---\nname: crm\ndescription: Use CRM.\n---\nBody\n",
+        }
+        if extra_files:
+            files.update(extra_files)
+        return make_bundle(self.dir / "bundle", manifest=manifest, extra=files)
+
+    def test_accepts_valid_skill_and_tables_descriptor(self):
+        bundle = self._make_storage_bundle()
+        files = pkg.bundle_files(bundle)
+        pkg.read_contents(bundle, files, "crm")
+
+    def test_rejects_default_table_search_columns(self):
+        bundle = self._make_storage_bundle(descriptor_override={
+            "tables": {"customers": {"search_columns": ["display_name"]}},
+        })
+        files = pkg.bundle_files(bundle)
+        with self.assertRaises(pkg.PackageError):
+            pkg.read_contents(bundle, files, "crm")
+
+    def test_rejects_undeclared_skill_member(self):
+        bundle = self._make_storage_bundle(extra_files={"skills/crm/extra.md": "extra\n"})
+        files = pkg.bundle_files(bundle)
+        with self.assertRaises(pkg.PackageError):
+            pkg.read_contents(bundle, files, "crm")
 
 
 if __name__ == "__main__":

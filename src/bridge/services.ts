@@ -5,11 +5,24 @@ import { assertCurrentScope,requireOperation,type DisplayScope } from "./scope";
 type Bag = Record<string, unknown>;
 type CsvDecision = { row: number; action: string; expected_revision?: number };
 export type Base = { mode: "all" } | { mode: "segment"; segment_id: string } | { mode: "custom"; customer_ids: string[] };
+export interface RecordFilter { field: string; op: "eq" | "contains" | "prefix" | "gte" | "lte" | "in"; value: unknown }
+export interface RecordSort { field: string; direction?: "asc" | "desc" }
 export interface CallArgs {
-  "records.list": { query?: string; limit?: number; cursor?: string };
-  "records.show": { record_id: string; history_cursor?: string };
-  "records.create": { record_id?: string; profile: unknown; consent_provenance?: unknown };
-  "records.update": { record_id: string; expected_revision: number; profile: unknown; consent_provenance?: unknown };
+  "records.list": {
+    table?: string;
+    query?: string;
+    filters?: RecordFilter[];
+    sort?: RecordSort;
+    fields?: string[];
+    omit_fields?: string[];
+    limit?: number;
+    cursor?: string;
+  };
+  "records.show": { record_id: string; table?: string; history_cursor?: string };
+  "records.create": { record_id?: string; table?: string; profile: unknown; consent_provenance?: unknown };
+  "records.update": { record_id: string; expected_revision: number; table?: string; profile: unknown; consent_provenance?: unknown };
+  "records.aggregate": { table?: string; query?: string; filters?: RecordFilter[]; group_by?: string[]; sum?: string[] };
+  "records.batch": { items: Array<{ record_id: string; profile: unknown; table?: string }>; consent_provenance?: unknown };
   "records.csv.preview": { csv_text: string };
   "segments.list": Bag; "segments.show": { segment_id: string };
   "segments.save": { segment_id: string; name: string; predicates: unknown[]; expected_revision?: number };
@@ -55,8 +68,12 @@ export interface SlotArgs {
 }
 // A closed field allowlist is checked again at runtime before serialization.
 export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
-  "records.list": ["query", "limit", "cursor"], "records.show": ["record_id", "history_cursor"],
-  "records.create": ["record_id", "profile", "consent_provenance"], "records.update": ["record_id", "expected_revision", "profile", "consent_provenance"],
+  "records.list": ["table", "query", "filters", "sort", "fields", "omit_fields", "limit", "cursor"],
+  "records.show": ["record_id", "table", "history_cursor"],
+  "records.create": ["record_id", "table", "profile", "consent_provenance"],
+  "records.update": ["record_id", "expected_revision", "table", "profile", "consent_provenance"],
+  "records.aggregate": ["table", "query", "filters", "group_by", "sum"],
+  "records.batch": ["items", "consent_provenance"],
   "records.csv.preview": ["csv_text"], "segments.list": [], "segments.show": ["segment_id"], "segments.save": ["segment_id", "name", "predicates", "expected_revision"],
   "exclusions.list": [], "exclusions.show": ["list_id"], "exclusions.save": ["list_id", "name", "member_ids", "expected_revision"],
   "suppressions.list": [], "suppressions.add": ["email", "customer_id", "reason"],
@@ -80,12 +97,12 @@ export function cleanArgs(verb: string, args: Bag, slot: boolean): Bag {
   if (!fields || !args || typeof args !== "object" || Array.isArray(args)) throw new ApiError("Unlisted CRM operation", 400);
   for (const key of Object.keys(args)) if (!fields.includes(key)) throw new ApiError(`Refused CRM field: ${key}`, 400);
   const value = Object.fromEntries(Object.entries(args).filter(([, v]) => v !== undefined));
-  const cap = verb.startsWith("records.csv.") ? 327680 : ["records.create", "records.update", "content.save", "screen.preview.show"].includes(verb) ? 49152 : 16384;
+  const cap = verb.startsWith("records.csv.") ? 327680 : ["records.create", "records.update", "records.batch", "content.save", "screen.preview.show"].includes(verb) ? 49152 : 16384;
   if (new TextEncoder().encode(JSON.stringify(value)).length > cap) throw new ApiError("CRM request exceeds its operation budget", 413);
   return value;
 }
 export const WRITE_VERBS: readonly string[] = [
-  "records.create", "records.update", "segments.save", "exclusions.save", "suppressions.add",
+  "records.create", "records.update", "records.batch", "segments.save", "exclusions.save", "suppressions.add",
   "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard",
   "sender-bindings.save", "records.csv.import", "records.csv.confirm", "content.approve",
   "smtp.bind", "smtp.rebind", "smtp.revoke", "smtp.test-send", "sends.approve", "sends.resolve",

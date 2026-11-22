@@ -7,7 +7,8 @@ import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, t
 export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
 export const fixtureActions = [
-  "records.list", "records.show", "records.create", "records.update", "segments.list", "segments.show", "segments.save", "audience.preview",
+  "records.list", "records.show", "records.create", "records.update", "records.aggregate", "records.batch",
+  "segments.list", "segments.show", "segments.save", "audience.preview",
   "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list", "sends.show",
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
   "screen.route.patch", "screen.preview.show", "screen.preview.clear",
@@ -24,6 +25,28 @@ const records: LocalRecord[] = [
   // Long values exercise the single-line customer table in narrow canvases.
   { id: "wholesale", name: "Bartholomew Wolfeschlegelsteinhausenbergerdorff-Montgomery", email: "bartholomew.wolfeschlegelstein@wholesale-distribution.example.invalid", tags: ["wholesale", "vip", "newsletter", "events"], consent: "granted" },
 ].map(row => ({ id: row.id, install_id: fixtureInstallId, context_id: "", kind: "customer", revision: 1, digest: fixtureDigest, profile: { schema: 1, display_name: row.name, email: row.email, phone: null, contacts: row.id === "ada" ? [{ name: "Alex Demo", title: "Operations", email: "alex@example.invalid", phone: null }] : [], custom_fields: (row.id === "ada" ? { customer_segment: { label: "Customer segment", type: "text", value: "Local fixture" } } : {}) as CustomerCustomFields, tags: row.tags, source: "fixture", consent: { email: row.consent, sms: "unknown" } }, history: [], consent_history: [] }));
+type NoteRow = {
+  id: string;
+  install_id: string;
+  context_id: string;
+  kind: string;
+  table: string;
+  revision: number;
+  digest: string;
+  profile: { customer_id: string; body: string; archived_at: string | null };
+};
+const noteRows: NoteRow[] = [
+  {
+    id: "note-ada-1",
+    install_id: fixtureInstallId,
+    context_id: "",
+    kind: "customer",
+    table: "notes",
+    revision: 1,
+    digest: fixtureDigest,
+    profile: { customer_id: "ada", body: "Met at Hong Kong trade fair; prefers concise quarterly updates.", archived_at: null },
+  },
+];
 const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
@@ -119,6 +142,17 @@ function pagedHistory<T extends LocalRecord>(record: T, cursor: unknown) {
 export function fixtureCall(verb: string, args: Record<string, unknown>): unknown {
   switch (verb) {
     case "records.list": {
+      if (args.table === "notes") {
+        const filters = Array.isArray(args.filters) ? (args.filters as Array<{ field?: unknown; op?: unknown; value?: unknown }>) : [];
+        const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
+        let rows = noteRows.filter((row) => row.profile.body.toLowerCase().includes(query));
+        for (const f of filters) {
+          if (f.field === "customer_id" && f.op === "eq") rows = rows.filter((r) => r.profile.customer_id === f.value);
+          if (f.field === "archived_at" && f.op === "eq") rows = rows.filter((r) => r.profile.archived_at === f.value);
+        }
+        const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
+        return { records: rows.slice(0, limit), total: rows.length, truncated: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1]!.id : null };
+      }
       const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
       const rows = records.filter(r => `${r.profile.display_name} ${r.profile.email ?? ""} ${r.profile.tags.join(" ")}`.toLowerCase().includes(query));
       const start = args.cursor === undefined ? 0 : rows.findIndex(row => row.id === args.cursor) + 1;
@@ -130,6 +164,9 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
         ...(recordAccess === "read" || recordAccess === "write" ? { record_access: { create_id: "host" } } : {}) };
     }
     case "records.show": {
+      if (args.table === "notes") {
+        return { record: noteRows.find((r) => r.id === args.record_id) ?? missing() };
+      }
       const record = records.find(r => r.id === args.record_id) ?? missing();
       const visible = recordAccess === "read" || recordAccess === "write"
         ? { ...record, record_access: { can_write: recordAccess === "write" || ownedRecordIds.has(record.id) } } : record;
@@ -148,6 +185,35 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     }
     case "records.create":
     case "records.update": {
+      if (args.table === "notes") {
+        const noteId = args.record_id;
+        requireId(noteId);
+        const existing = noteRows.find((r) => r.id === noteId);
+        if (verb === "records.create" && existing) throw new ApiError("That local note already exists.", 409, { code: "conflict" });
+        if (verb === "records.update" && !existing) missing();
+        requireRevision(existing, args.expected_revision);
+        const patch = args.profile !== null && typeof args.profile === "object" && !Array.isArray(args.profile)
+          ? (args.profile as { customer_id?: unknown; body?: unknown; archived_at?: unknown })
+          : {};
+        const customerId = existing ? existing.profile.customer_id : patch.customer_id;
+        const body = Object.hasOwn(patch, "body") ? patch.body : existing?.profile.body;
+        const archivedAt = Object.hasOwn(patch, "archived_at") ? patch.archived_at : existing?.profile.archived_at ?? null;
+        if (typeof customerId !== "string" || typeof body !== "string" || body.trim().length === 0 || (archivedAt !== null && typeof archivedAt !== "string")) {
+          throw new ApiError("Invalid fixture note.", 400, { code: "validation_failed" });
+        }
+        const row: NoteRow = {
+          id: noteId,
+          install_id: fixtureInstallId,
+          context_id: "",
+          kind: "customer",
+          table: "notes",
+          revision: (existing?.revision ?? 0) + 1,
+          digest: fixtureDigest,
+          profile: { customer_id: customerId, body: body.trim(), archived_at: archivedAt },
+        };
+        if (existing) noteRows.splice(noteRows.indexOf(existing), 1, row); else noteRows.push(row);
+        return { record: row };
+      }
       if (verb === "records.update" && recordAccess === "read" && (typeof args.record_id !== "string" || !ownedRecordIds.has(args.record_id))) throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
       const hostAssigned = verb === "records.create" && (recordAccess === "read" || recordAccess === "write");
       if (hostAssigned && args.record_id !== undefined) throw new ApiError("The host assigns this customer ID.", 400, { code: "invalid_body" });
@@ -268,6 +334,21 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     case "suppressions.list": return { suppressions: [] };
     case "smtp.show": return { binding: fixtureSmtpBinding };
     case "audience.show": missing();
+    case "records.aggregate": {
+      const source = args.table === "notes" ? noteRows.map((n) => n.profile) : records.map((r) => r.profile);
+      return { groups: [{ key: {}, count: source.length, sums: {} }], total_groups: 1, truncated: false };
+    }
+    case "records.batch": {
+      const items = Array.isArray(args.items) ? (args.items as Array<{ record_id: string; profile: unknown; table?: string }>) : [];
+      for (const item of items) {
+        fixtureCall("records.create", {
+          record_id: item.record_id,
+          profile: item.profile,
+          ...(item.table ? { table: item.table } : {}),
+        });
+      }
+      return { created: items.length };
+    }
     default: throw new ApiError("This action needs a live Cadence host. Nothing was sent or approved.", 503, { code: "unavailable" });
   }
 }
