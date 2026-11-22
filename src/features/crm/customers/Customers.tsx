@@ -5,7 +5,7 @@ import { STACK_BELOW_PX,useContainerWidth } from "../containerWidth";
 import FrameDrawer from "../FrameDrawer";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
-import { customerPatch,hasParams,readCustomerParams,type CustomerParams } from "../../../domain/routeParams";
+import { hasParams,queryPatch,readQueryParams,type QueryParams } from "../../../domain/routeParams";
 import { useRouteParams,useRouteParamSync } from "../useRouteParams";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import {
@@ -137,11 +137,10 @@ function CustomerList({
 }) {
   const { t, formatNumber } = useLocale();
   const canWrite = viewer.operator === true && !viewer.readOnly;
-  // A declared view (customers {q, consent, source, tag}) opens the list
-  // filtered; without params the list is as it was left.
+  // A declared view (customers {q}) opens the list searched; without params the list is as it was left.
   const routeParams = useRouteParams();
   const [initialList] = useState(() => hasParams(routeParams) ? null : readCustomerList(scope));
-  const [initialParams] = useState(() => readCustomerParams(routeParams));
+  const [initialParams] = useState(() => readQueryParams(routeParams));
   const [query, setQuery] = useState(initialList?.query ?? initialParams.q);
   const [committed, setCommitted] = useState(initialList?.committed ?? initialParams.q);
   const [cursors, setCursors] = useState<string[]>(initialList?.cursors ?? []);
@@ -205,15 +204,13 @@ function CustomerList({
   };
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
-  const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? initialParams.consent);
-  const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? initialParams.source);
-  const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? initialParams.tag);
-  useRouteParamSync<CustomerParams>({ q: committed, consent: consentFilter, source: sourceFilter, tag: tagFilter },
-    readCustomerParams, customerPatch, (next) => {
-      jumpRef.current += 1; setJumping(null);
-      setQuery(next.q); setCommitted(next.q); setCursors([]); setPage(0);
-      setConsentFilter(next.consent); setSourceFilter(next.source); setTagFilter(next.tag);
-    });
+  const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
+  const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
+  const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
+  useRouteParamSync<QueryParams>({ q: committed }, readQueryParams, queryPatch, (next) => {
+    jumpRef.current += 1; setJumping(null);
+    setQuery(next.q); setCommitted(next.q); setCursors([]); setPage(0);
+  });
   const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
     queryState.failure, { query, committed, cursors, page, consentFilter, sourceFilter, tagFilter },
     JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
@@ -310,7 +307,7 @@ function CustomerList({
             <Select
               value={sourceFilter}
               onChange={setSourceFilter}
-              options={[{ value: "", label: t("Source: any") }, ...(sourceFilter !== "" && !sources.includes(sourceFilter) ? [sourceFilter, ...sources] : sources).map((v) => ({ value: v, label: v }))]}
+              options={[{ value: "", label: t("Source: any") }, ...sources.map((v) => ({ value: v, label: v }))]}
               aria-label={t("Filter by source")}
             />
             {tagFilter !== "" && (

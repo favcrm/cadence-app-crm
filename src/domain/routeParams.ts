@@ -3,7 +3,6 @@
 // A value the list cannot use is ignored, so a bad link opens the unfiltered list.
 export type Params = Readonly<Record<string, string>>;
 
-export const CONSENT_VALUES = ["granted", "unknown", "denied"] as const;
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 const RECORD_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
@@ -13,27 +12,11 @@ export const text = (value: string | undefined): string => {
   return trimmed.length >= 1 && trimmed.length <= 200 && !CONTROL.test(trimmed) ? trimmed : "";
 };
 
-export interface CustomerParams { q: string; consent: string; source: string; tag: string }
-export const NO_CUSTOMER_PARAMS: CustomerParams = { q: "", consent: "", source: "", tag: "" };
+// Every list's one param is `q`. Customers' `q` is the server search (name, email or tag, so it
+// reaches the whole list); records.list takes no field filter, so consent, source and tag are not params.
 export interface QueryParams { q: string }
-
-const drop = (entries: [string, string][]): Record<string, string> =>
-  Object.fromEntries(entries.filter(([, value]) => value !== ""));
-
-export function readCustomerParams(raw: Params | undefined): CustomerParams {
-  const consent = raw?.consent ?? "";
-  return {
-    q: text(raw?.q),
-    consent: (CONSENT_VALUES as readonly string[]).includes(consent) ? consent : "",
-    source: text(raw?.source),
-    tag: text(raw?.tag),
-  };
-}
-export const customerPatch = (state: CustomerParams): Record<string, string> =>
-  drop([["q", text(state.q)], ["consent", readCustomerParams({ consent: state.consent }).consent], ["source", text(state.source)], ["tag", text(state.tag)]]);
-
 export const readQueryParams = (raw: Params | undefined): QueryParams => ({ q: text(raw?.q) });
-export const queryPatch = (state: QueryParams): Record<string, string> => drop([["q", text(state.q)]]);
+export const queryPatch = (state: QueryParams): Record<string, string> => { const q = text(state.q); return q === "" ? {} : { q }; };
 
 /** The record a `segment` / `campaign` view names, or null. */
 export const readRecordParam = (raw: Params | undefined): string | null =>

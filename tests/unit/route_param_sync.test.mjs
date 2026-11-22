@@ -26,13 +26,13 @@ beforeAll(async () => {
 });
 afterAll(() => GlobalRegistrator.unregister());
 
-let setTag;
+let setQ;
 const Probe = ({ seen }) => {
-  const initial = params.readCustomerParams(routeParams);
-  const [tag, set] = React.useState(initial.tag);
-  setTag = set;
-  seen.push(tag);
-  useRouteParamSync({ q: "", consent: "", source: "", tag }, params.readCustomerParams, params.customerPatch, (next) => set(next.tag));
+  const initial = params.readQueryParams(routeParams);
+  const [q, set] = React.useState(initial.q);
+  setQ = set;
+  seen.push(q);
+  useRouteParamSync({ q }, params.readQueryParams, params.queryPatch, (next) => set(next.q));
   return null;
 };
 const mount = async (seen) => { const root = createRoot(document.createElement("div")); await act(async () => root.render(React.createElement(Probe, { seen }))); return root; };
@@ -41,7 +41,7 @@ const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 5));
 const pushRoute = async (next) => { routeParams = next; await act(async () => listeners.forEach((f) => f())); };
 
 test("opening with params starts filtered and writes nothing back", async () => {
-  patches.length = 0; routeParams = { tag: "vip", bogus: "1" };
+  patches.length = 0; routeParams = { q: "vip", bogus: "1" };
   const seen = [];
   await mount(seen);
   expect(seen[0]).toBe("vip");
@@ -49,11 +49,11 @@ test("opening with params starts filtered and writes nothing back", async () => 
 });
 
 test("a filter the user changes is patched back as the whole params set", async () => {
-  patches.length = 0; routeParams = { tag: "vip" };
+  patches.length = 0; routeParams = { q: "vip" };
   await mount([]);
-  await act(async () => setTag("new")); await tick();
-  expect(patches).toEqual([{ params: { tag: "new" } }]);
-  await act(async () => setTag("")); await tick();
+  await act(async () => setQ("new")); await tick();
+  expect(patches).toEqual([{ params: { q: "new" } }]);
+  await act(async () => setQ("")); await tick();
   expect(patches.at(-1)).toEqual({ params: {} });
 });
 
@@ -61,17 +61,17 @@ test("the echo of our own patch is not re-applied, an outside change is", async 
   patches.length = 0; routeParams = {};
   const seen = [];
   await mount(seen);
-  await act(async () => setTag("a")); await tick();
-  expect(patches).toEqual([{ params: { tag: "a" } }]);
-  await pushRoute({ tag: "a" });
+  await act(async () => setQ("a")); await tick();
+  expect(patches).toEqual([{ params: { q: "a" } }]);
+  await pushRoute({ q: "a" });
   expect(patches.length).toBe(1);
-  await pushRoute({ tag: "b" });
+  await pushRoute({ q: "b" });
   expect(seen.at(-1)).toBe("b");
   expect(patches.length).toBe(1);
 });
 
 test("an invalid value in the route is ignored, leaving the default", async () => {
-  patches.length = 0; routeParams = { consent: "maybe" };
+  patches.length = 0; routeParams = { q: "a\u0007b" };
   const seen = [];
   await mount(seen);
   expect(seen[0]).toBe("");

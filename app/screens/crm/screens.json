@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 308235,
-      "sha256": "sha256:b7ff9fd68b6fbd69e9cd5c15e3a7e0556316a08343c6c445a3f641e3249828bf"
+      "size": 307822,
+      "sha256": "sha256:bb8b14230e38bb615db992f5331734f8372f20205606132ddd4f158e58ba8a5e"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:2a3ebec92811921e3b8985e93f15212bf7596ba629b09ef628fd9fb2c31296ff",
+    "source_digest": "sha256:988b10fdca8d63abc8b363ab39ac8ace23d99a63c9a0986b86fb83bce3ab82b3",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
@@ -119,20 +119,6 @@
       "section": "customers",
       "params": {
         "q": {
-          "type": "string"
-        },
-        "consent": {
-          "type": "enum",
-          "values": [
-            "granted",
-            "unknown",
-            "denied"
-          ]
-        },
-        "source": {
-          "type": "string"
-        },
-        "tag": {
           "type": "string"
         }
       }
