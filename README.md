@@ -18,6 +18,43 @@ already says "Open in CRM to edit". Create, edit, bulk, approve and send control
 reads, navigation and Copy email stay. Customer profiles use the same main
 pane in the canvas and the full app.
 
+## Read-only wording in zh-TW and zh-HK (0.4.5)
+
+Every "Read-only view." string has zh-TW and zh-HK text in `localeCatalog.ts` (`zhTW`, `zhHK`).
+The two drawer notes that were built by string interpolation (and so never translated) are now
+whole keys. `tests/unit/readonly_locale.test.mjs` fails if a read-only string or any `t("...")`
+literal lacks either entry. The board host only sends `en` or `zh-TW` today; zh-HK is ready in
+the catalog for when it sends it.
+
+## Canvas views with filters in 0.4.4
+
+CRM declares five views in `screens.json` next to `navigation` (app-kit 0.8.0,
+`screen-route-params.v1`, opted in with `routeParams: true`), each with an English and a
+zh-TW label. Only filters the lists already apply are declared (`scripts/crm_views.mjs`
+is the one source for the build and the verifier):
+
+| view | params | applied as |
+| --- | --- | --- |
+| `customers` | `q` | the server search (name, email or tag), so it reaches the whole list |
+| `segments` | `q` | the list's name/id search |
+| `campaigns` | `q` | the list's name/subject/id search |
+| `segment`, `campaign` | `id` | opens that segment or campaign (a valid id; otherwise the list) |
+
+The assistant opens one with
+`canvas_open {app:"crm", view:"customers", params:{q:"vip"}}`.
+The screens read `route.params` when they open: a value the list cannot use (an unknown
+`consent`, text over 200 characters, a bad id) is ignored and the default stays, and without
+params the list is as it was. When the user changes a filter it is written back with
+`screen.route.patch {params}` so the link and canvas title follow; choosing another section
+clears the params. The host's `records.list` takes only `query`, `limit` and `cursor`, so the list's consent,
+source and tag filters narrow the loaded page only and are not params (a known gap until a
+server-side field filter exists; `q` already matches tags). There is no sort, status or segment
+filter on Customers and none on Campaigns, so none is declared. No storage migration, write or new required host capability
+beyond `screen-route-params.v1`. CI checks the bundle with Cadence `v0.5.1`, the first release
+whose checker admits screen `views`; the publish workflow's `CADENCE_TARGET_VERSION` must be
+`v0.5.1` or later before a release carrying them is tagged. The preview opens a route with
+`?section=customers&p.q=vip`.
+
 ## Canvas padding in 0.4.3
 
 Below 1100px wide (the board chat canvas) the screen keeps a modest inner padding (16px inline,

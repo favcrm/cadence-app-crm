@@ -1,6 +1,7 @@
 import { ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import { FrameNavigationAdapter,patchRoute } from "../../bridge/route";
+import { readRecordParam } from "../../domain/routeParams";
 import { scopeError,useCanvasReadOnly,useScope } from "../../bridge/scope";
 import Campaigns from "./campaigns/CrmCampaigns";
 import "./crm-layout.css";
@@ -21,6 +22,14 @@ export default function CrmScreen() {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const detail = snapshot?.route.record_id == null ? null : `${snapshot.route.section}:${snapshot.route.record_id}`;
   useEffect(() => { setDismissed(null); }, [detail]);
+  // The `segment` and `campaign` views name a record in an `id` param: open it
+  // as the route's record and drop the param. Customers take no `id`.
+  const route = snapshot?.route;
+  const named = route && route.record_id === null && route.view === "list" && route.section !== "customers" ? readRecordParam(route.params) : null;
+  useEffect(() => {
+    if (named === null) return;
+    void patchRoute({ view: "list", record_id: named, params: {} }).catch(() => undefined);
+  }, [named, route?.section]);
   useEffect(() => {
     if (snapshot) return;
     const timer = setTimeout(() => setUnreachable(true), HOST_PUSH_TIMEOUT_MS);

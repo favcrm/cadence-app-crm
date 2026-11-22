@@ -36,7 +36,7 @@ export interface CallArgs {
   "sends.prepare": { campaign_id: string; audience_freeze_id: string; request_id: string; base?: Base; exclusion_list_id?: string; max_recipients?: number };
   "sends.show": { send_id: string }; "sends.list": { campaign_id?: string };
   "smtp.show": Bag; "origin.show": Bag;
-  "screen.route.patch": { section?: "customers" | "segments" | "campaigns"; view?: "list" | "new"; record_id?: string | null; segment_id?: string | null; replace?: boolean };
+  "screen.route.patch": { section?: "customers" | "segments" | "campaigns"; view?: "list" | "new"; record_id?: string | null; segment_id?: string | null; params?: Readonly<Record<string, string>>; replace?: boolean };
   "screen.preview.show": { preview_id: string; document: string; anchor: Rect; mode: "draft" | "saved" };
   "screen.preview.clear": { preview_id: string };
 }
@@ -67,7 +67,7 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
   "sender-bindings.list": [], "sender-bindings.show": ["binding_id"], "sender-bindings.save": ["binding_id", "sender_name", "sender_address", "unsubscribe_base", "expected_revision"],
   "content.test-prepare": ["campaign_id", "to_email", "binding_id"], "content.send-prepare": ["campaign_id", "binding_id", "audience_freeze_id"],
   "sends.prepare": ["campaign_id", "audience_freeze_id", "request_id", "base", "exclusion_list_id", "max_recipients"], "sends.show": ["send_id"], "sends.list": ["campaign_id"], "smtp.show": [], "origin.show": [],
-  "screen.route.patch": ["section", "view", "record_id", "segment_id", "replace"], "screen.preview.show": ["preview_id", "document", "anchor", "mode"], "screen.preview.clear": ["preview_id"],
+  "screen.route.patch": ["section", "view", "record_id", "segment_id", "params", "replace"], "screen.preview.show": ["preview_id", "document", "anchor", "mode"], "screen.preview.clear": ["preview_id"],
 };
 export const SLOT_FIELDS: Record<keyof SlotArgs, readonly string[]> = {
   "records.csv.import": ["csv_text", "preview_token", "request_id", "decisions"], "records.csv.confirm": ["csv_text", "preview_token", "request_id", "decisions"],

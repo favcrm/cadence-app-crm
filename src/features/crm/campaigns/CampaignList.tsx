@@ -11,6 +11,8 @@ parseProposalList,
 } from "../campaignGrammar";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { useListMemory } from "../listMemory";
+import { queryPatch,readQueryParams,type QueryParams } from "../../../domain/routeParams";
+import { useRouteParams,useRouteParamSync } from "../useRouteParams";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import "../crm-campaign.css";
 import { campaignStatus,latestSend } from "../campaign/sendStatus";
@@ -41,11 +43,14 @@ export default function CampaignList({
   const campaigns = queryState.data ?? [];
   const pendingDrafts = proposalState.data?.filter(row => row.state === "pending") ?? [];
   const { loading, error } = queryState;
+  const routeParams = useRouteParams();
   const listRef = useListMemory(scope, "campaigns", viewer.operator === true && queryState.data !== null, queryState.failure);
   // null = unknown (loading or the read failed): no status is shown then.
   const [sends, setSends] = useState<SendListEntry[] | null>(null);
-  const [query, setQuery] = useState("");
+  // A declared view (campaigns {q}) opens the list searched.
+  const [query, setQuery] = useState(() => readQueryParams(routeParams).q);
   const [page, setPage] = useState(0);
+  useRouteParamSync<QueryParams>({ q: query.trim() }, readQueryParams, queryPatch, (next) => { setQuery(next.q); setPage(0); }, 400);
   const search = query.trim().toLocaleLowerCase();
   const filtered = campaigns.filter(campaign => `${campaignTitle(campaign)} ${campaign.subject} ${campaign.campaignId}`.toLocaleLowerCase().includes(search));
   const pageCount = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));

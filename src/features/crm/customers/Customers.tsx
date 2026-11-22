@@ -5,6 +5,8 @@ import FrameDrawer from "../FrameDrawer";
 import WorkspaceTabs from "../WorkspaceTabs";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
+import { hasParams,queryPatch,readQueryParams,type QueryParams } from "../../../domain/routeParams";
+import { useRouteParams,useRouteParamSync } from "../useRouteParams";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 import {
 activityItems,
@@ -141,9 +143,12 @@ function CustomerList({
 }) {
   const { t, formatNumber } = useLocale();
   const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
-  const [initialList] = useState(() => readCustomerList(scope));
-  const [query, setQuery] = useState(initialList?.query ?? "");
-  const [committed, setCommitted] = useState(initialList?.committed ?? "");
+  // A declared view (customers {q}) opens the list searched; without params the list is as it was left.
+  const routeParams = useRouteParams();
+  const [initialList] = useState(() => hasParams(routeParams) ? null : readCustomerList(scope));
+  const [initialParams] = useState(() => readQueryParams(routeParams));
+  const [query, setQuery] = useState(initialList?.query ?? initialParams.q);
+  const [committed, setCommitted] = useState(initialList?.committed ?? initialParams.q);
   const [cursors, setCursors] = useState<string[]>(initialList?.cursors ?? []);
   const [page, setPage] = useState(initialList?.page ?? 0);
   const cursor = page > 0 ? cursors[page - 1] : undefined;
@@ -207,6 +212,10 @@ function CustomerList({
   // the server search stays the only whole-list narrowing.
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
   const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
+  useRouteParamSync<QueryParams>({ q: committed }, readQueryParams, queryPatch, (next) => {
+    jumpRef.current += 1; setJumping(null);
+    setQuery(next.q); setCommitted(next.q); setCursors([]); setPage(0);
+  });
   const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
     queryState.failure, { query, committed, cursors, page, consentFilter, tagFilter },
     JSON.stringify([committed, cursor, consentFilter, tagFilter]));

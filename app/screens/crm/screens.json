@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 335715,
-      "sha256": "sha256:9a2a74e97b9743220cf1b64f8bd140a857adb095550f1e5cc26e79c74dab9883"
+      "size": 339275,
+      "sha256": "sha256:5b9b541bcd04658000e59a153d17d068f468723b0d0d0f88d38753a35097f0cd"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:26c4464da123e0f62701ca2532bd2abec04fb48a5c0c2e0ca171644a3143d4fb",
+    "source_digest": "sha256:c7f8de522d5ca297639eb6bad63e1db06db82dbf87aa2d818b676bfa51a57814",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
@@ -108,5 +108,72 @@
         "label": "Campaigns"
       }
     ]
-  }
+  },
+  "views": [
+    {
+      "id": "customers",
+      "label": {
+        "en": "Customers",
+        "zh-TW": "客戶"
+      },
+      "section": "customers",
+      "params": {
+        "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "segments",
+      "label": {
+        "en": "Segments",
+        "zh-TW": "客群"
+      },
+      "section": "segments",
+      "params": {
+        "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "campaigns",
+      "label": {
+        "en": "Campaigns",
+        "zh-TW": "行銷活動"
+      },
+      "section": "campaigns",
+      "params": {
+        "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "segment",
+      "label": {
+        "en": "Segment by id",
+        "zh-TW": "指定客群"
+      },
+      "section": "segments",
+      "params": {
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "campaign",
+      "label": {
+        "en": "Campaign by id",
+        "zh-TW": "指定行銷活動"
+      },
+      "section": "campaigns",
+      "params": {
+        "id": {
+          "type": "string"
+        }
+      }
+    }
+  ]
 }

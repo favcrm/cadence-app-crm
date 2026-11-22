@@ -37,7 +37,7 @@ interface Conn {
   frame: HTMLIFrameElement;
   port: MessagePort | null;
 }
-let route: Route = { section: "customers", view: "list", record_id: null, segment_id: null };
+let route: Route = { section: "customers", view: "list", record_id: null, segment_id: null, params: {} };
 
 function randomNonce(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -99,12 +99,14 @@ window.addEventListener("preview-layout", positionPreviews);
 const frameResize = new ResizeObserver(positionPreviews);
 frameResize.observe(frame);
 
+// A view's params ride on the route as `p.<name>=<text>`: names `[a-z_]{1,24}`, values 1-200 characters, at most 6.
+const readParams = (search: URLSearchParams): Record<string, string> => Object.fromEntries([...search].filter(([k, v]) => k.startsWith("p.") && /^[a-z_]{1,24}$/.test(k.slice(2)) && v.length >= 1 && v.length <= 200).slice(0, 6).map(([k, v]) => [k.slice(2), v]));
 function readRoute(): Route {
   const query = new URLSearchParams(location.search);
   const section = query.get("section");
   const record = query.get("record");
   const segment = query.get("segment");
-  return { section: sections.includes(section as Route["section"]) ? section as Route["section"] : "customers", view: query.get("view") === "new" ? "new" : "list", record_id: record && /^[A-Za-z0-9_-]{1,128}$/.test(record) ? record : null, segment_id: segment && /^[A-Za-z0-9_-]{1,128}$/.test(segment) ? segment : null };
+  return { section: sections.includes(section as Route["section"]) ? section as Route["section"] : "customers", view: query.get("view") === "new" ? "new" : "list", record_id: record && /^[A-Za-z0-9_-]{1,128}$/.test(record) ? record : null, segment_id: segment && /^[A-Za-z0-9_-]{1,128}$/.test(segment) ? segment : null, params: readParams(query) };
 }
 route = readRoute();
 syncChrome();
@@ -120,6 +122,8 @@ function navigate(patch: Partial<Route>, replace = false) {
   else url.searchParams.delete("segment");
   if (route.record_id) url.searchParams.set("record", route.record_id);
   else url.searchParams.delete("record");
+  for (const key of [...url.searchParams.keys()]) if (key.startsWith("p.")) url.searchParams.delete(key);
+  for (const [name, value] of Object.entries(route.params ?? {})) url.searchParams.set(`p.${name}`, value);
   history[replace ? "replaceState" : "pushState"](null, "", url);
   pushAll();
 }
@@ -146,7 +150,9 @@ function handle(conn: Conn, request: Record<string, unknown>) {
     if (call.verb === "screen.route.patch") {
       const patch = call.args;
       if ((patch.section !== undefined && !sections.includes(patch.section as Route["section"])) || (patch.view !== undefined && !["list", "new"].includes(patch.view as string)) || ["record_id", "segment_id"].some(key => patch[key] !== undefined && patch[key] !== null && (typeof patch[key] !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(patch[key] as string)))) throw new ApiError("Invalid local route.", 400);
-      navigate({ ...(patch.section ? { section: patch.section as Route["section"] } : {}), ...(patch.view ? { view: patch.view as Route["view"] } : {}), ...(patch.record_id !== undefined ? { record_id: patch.record_id as string | null } : {}), ...(patch.segment_id !== undefined ? { segment_id: patch.segment_id as string | null } : {}) }, patch.replace === true);
+      const params = patch.params;
+      if (params !== undefined && (typeof params !== "object" || params === null || Array.isArray(params) || Object.keys(params).length > 6 || Object.entries(params).some(([k, v]) => !/^[a-z_]{1,24}$/.test(k) || typeof v !== "string" || v.length < 1 || v.length > 200))) throw new ApiError("Invalid local route.", 400);
+      navigate({ ...(patch.section ? { section: patch.section as Route["section"] } : {}), ...(patch.view ? { view: patch.view as Route["view"] } : {}), ...(patch.record_id !== undefined ? { record_id: patch.record_id as string | null } : {}), ...(patch.params !== undefined ? { params: patch.params as Record<string, string> } : {}), ...(patch.segment_id !== undefined ? { segment_id: patch.segment_id as string | null } : {}) }, patch.replace === true);
       reply(conn, call, {});
     } else if (call.verb === "screen.preview.show") {
       showPreview(call.args);
@@ -185,7 +191,7 @@ window.addEventListener("message", event => {
   connection.start();
 });
 
-for (const button of document.querySelectorAll<HTMLButtonElement>("[data-section]")) button.addEventListener("click", () => navigate({ section: button.dataset.section as Route["section"], view: "list", record_id: null, segment_id: null }));
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-section]")) button.addEventListener("click", () => navigate({ section: button.dataset.section as Route["section"], view: "list", record_id: null, segment_id: null, params: {} }));
 window.addEventListener("popstate", () => {
   clearPreviews();
   route = readRoute();

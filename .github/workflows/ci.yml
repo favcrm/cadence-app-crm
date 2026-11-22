@@ -152,9 +152,9 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --location --retry 3 \
-            https://github.com/favcrm/cadence/releases/download/v0.3.19/cadence-v0.3.19-x86_64-linux.tar.gz \
+            https://github.com/favcrm/cadence/releases/download/v0.5.1/cadence-v0.5.1-x86_64-linux.tar.gz \
             --output "$RUNNER_TEMP/cadence-check.tgz"
-          printf '%s  %s\n' eb32fa7a16632bf1c782b1f6882a29f098cc41167548ba21b518541e1984626f "$RUNNER_TEMP/cadence-check.tgz" | sha256sum --check
+          printf '%s  %s\n' 502095fffd318debd61049836894933faaf571f499c851a60fed99e297b90aef "$RUNNER_TEMP/cadence-check.tgz" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/cadence-check"
           tar -xzf "$RUNNER_TEMP/cadence-check.tgz" -C "$RUNNER_TEMP/cadence-check"
           BIN=$(dirname "$(find "$RUNNER_TEMP/cadence-check" -name cadence -type f | head -1)")

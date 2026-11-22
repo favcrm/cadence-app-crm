@@ -836,4 +836,24 @@ export const zhTW: Record<string, string> = {
   "Could not load earlier activity. Reload the customer and try again.": "無法載入較早的活動記錄，請重新載入客戶資料後再試。",
   "Customer access changed. Reload to continue.": "客戶存取權限已變更，請重新載入以繼續。",
   "Only recent changes are shown; earlier history may be unavailable after access is enabled.": "只顯示最近的變更；啟用存取控制後，較早的歷程可能無法顯示。",
+  "Read-only view. Edits are disabled on this board.": "唯讀檢視。此看板已停用編輯。",
+  "Read-only view. Sign in as the operator to edit.": "唯讀檢視。請以操作員身分登入以進行編輯。",
+};
+
+/**
+ * Hong Kong written Traditional Chinese. The read-only wording is spelled out
+ * for zh-HK; every other key falls back to the shared zh-TW text, which is
+ * already written Traditional Chinese.
+ */
+export const zhHK: Record<string, string> = {
+  ...zhTW,
+  "Read-only view. Record creation and edits are unavailable.": "唯讀檢視。無法建立或編輯紀錄。",
+  "Read-only view. A verified operator creates customer records.": "唯讀檢視。只有已驗證的操作員可建立客戶紀錄。",
+  "Read-only view. Segment creation and edits are unavailable.": "唯讀檢視。無法建立或編輯客戶分群。",
+  "Read-only view. A verified operator creates saved segments.": "唯讀檢視。只有已驗證的操作員可建立已儲存的客戶分群。",
+  "Read-only view. Campaign creation and edits are unavailable.": "唯讀檢視。無法建立或編輯行銷活動。",
+  "Read-only view. A verified operator saves content revisions.": "唯讀檢視。只有已驗證的操作員可儲存內容修訂。",
+  "Read-only view. A verified operator sends campaigns.": "唯讀檢視。只有已驗證的操作員可發送行銷活動。",
+  "Read-only view. Edits are disabled on this board.": "唯讀檢視。此看板已停用編輯功能。",
+  "Read-only view. Sign in as the operator to edit.": "唯讀檢視。請以操作員身分登入以進行編輯。",
 };
