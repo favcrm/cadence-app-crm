@@ -15,6 +15,6 @@ export function navigateLogical(href: string, options?: { replace?: boolean }): 
   // App-local vocabulary only; never parse or forward a host URL.
   const match = /^crm:(customers|segments|campaigns)(?:\/(new|[A-Za-z0-9_-]{1,128}))?$/.exec(href);
   if (!match) throw new ApiError("CRM navigation destination is not admitted", 400);
-  void patchRoute({ section: match[1] as Route["section"], view: match[2] === "new" ? "new" : "list", record_id: match[2] && match[2] !== "new" ? match[2] : null, segment_id: null, ...(options?.replace ? { replace: true } : {}) }).catch(() => undefined);
+  void patchRoute({ section: match[1] as Route["section"], view: match[2] === "new" ? "new" : "list", record_id: match[2] && match[2] !== "new" ? match[2] : null, segment_id: null, params: {}, ...(options?.replace ? { replace: true } : {}) }).catch(() => undefined);
 }
 export const FrameNavigationAdapter: NavigationAdapter = { href: () => "#", modifiedClicks: "prevent", navigate: navigateLogical };

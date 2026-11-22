@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
+import { views } from './crm_views.mjs';
 import { root, hash, files, safePath, parseJson, inputs, sourceDigest, operationInventory } from './screen_inputs.mjs';
 const env = inputs(process.argv.slice(2));
 const fail = message => { throw new Error(message); };
@@ -11,7 +12,7 @@ const decoder = new TextDecoder('utf-8',{fatal:true});
 const out = safePath(root,'app/screens/crm');
 const SCREEN_ASSET_CAP=2097152, SCREEN_TOTAL_CAP=2097152, SCREEN_MANIFEST_CAP=32768;
 const decl = parseJson(decoder.decode(readFileSync(safePath(out,'screens.json'))),SCREEN_MANIFEST_CAP);
-exact(decl,['contract','app','entry','assets','provenance','may','host_contract','tools','operations','navigation'],['remote_images','startup']);
+exact(decl,['contract','app','entry','assets','provenance','may','host_contract','tools','operations','navigation','views'],['remote_images','startup']);
 if (decl.contract !== 'app-screens/v2' || decl.app !== 'crm' || decl.entry !== 'client.js' || decl.host_contract !== 'screen-records.v1') fail('CRM screen contract mismatch');
 if (JSON.stringify(decl.may) !== JSON.stringify(['records.call','records.slot']) || Object.keys(decl.tools ?? {}).length || !decl.tools || Array.isArray(decl.tools) || typeof decl.tools !== 'object' || (decl.remote_images !== undefined && JSON.stringify(decl.remote_images) !== '[]')) fail('Unexpected bridge authority');
 if (JSON.stringify(decl.operations) !== JSON.stringify(operationInventory())) fail('Operations differ from the source inventory');
@@ -21,6 +22,16 @@ if (Object.keys(expected).some(k => decl.provenance[k] !== expected[k])) fail('S
 exact(decl.navigation,['section_query','default_section','sections']);
 const navigation={section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]};
 if (JSON.stringify(decl.navigation) !== JSON.stringify(navigation)) fail('CRM navigation mismatch');
+// Declared views (app-kit 0.8.0 grammar): at most 20, unique ids, a declared section, at most 6 params of date|string|enum (at most 20 values).
+if (JSON.stringify(decl.views) !== JSON.stringify(views)) fail('CRM views mismatch');
+if (decl.views.length > 20 || new Set(decl.views.map(v=>v.id)).size !== decl.views.length) fail('CRM views exceed bounds');
+for (const v of decl.views) {
+  exact(v,['id','label','section','params'],['record_id']);
+  if (!/^[a-z0-9_-]{1,32}$/.test(v.id) || !decl.navigation.sections.some(s=>s.id===v.section)) fail(`CRM view ${v.id} is malformed`);
+  const locales=Object.entries(v.label); if (!locales.length || locales.length > 8 || !v.label.en || !v.label['zh-TW'] || locales.some(([,l])=>typeof l!=='string' || !l.length || l.length > 60)) fail(`CRM view ${v.id} label is malformed`);
+  const names=Object.keys(v.params); if (names.length > 6 || names.some(n=>!/^[a-z_]{1,24}$/.test(n))) fail(`CRM view ${v.id} params are malformed`);
+  for (const p of Object.values(v.params)) if (!['date','string','enum'].includes(p.type) || (p.type==='enum' && !(Array.isArray(p.values) && p.values.length >= 1 && p.values.length <= 20 && p.values.every(x=>typeof x==='string')))) fail(`CRM view ${v.id} param is malformed`);
+}
 const media={js:'text/javascript',css:'text/css',svg:'image/svg+xml',json:'application/json'};
 if (!Array.isArray(decl.assets) || !decl.assets.length || decl.assets.length > 32) fail('Asset count exceeds bounds');
 let total=0; const names=new Set();
@@ -46,7 +57,7 @@ if (actual.length !== names.size+1 || actual.some(p=>p !== 'screens.json' && !na
 const kitLock=parseJson(decoder.decode(readFileSync(safePath(root,'app-kit.lock.json'))),65536);
 exact(kitLock,['schema','source','version','files']);
 exact(kitLock.source,['kind','repo','source_sha']);
-if (kitLock.schema!=='cadence-crm-app-kit-lock/1' || kitLock.source.kind!=='commit' || kitLock.source.repo!=='favcrm/cadence' || kitLock.source.source_sha!=='9b0120c5fbc7e4b483242adcdb7614a2c5db93f9' || kitLock.version!=='0.7.0') fail('app-kit lock identity mismatch');
+if (kitLock.schema!=='cadence-crm-app-kit-lock/1' || kitLock.source.kind!=='commit' || kitLock.source.repo!=='favcrm/cadence' || kitLock.source.source_sha!=='78c1b290e7e0cb361583d309892edb1462a5c550' || kitLock.version!=='0.8.0') fail('app-kit lock identity mismatch');
 const kitDir=safePath(root,'app-kit'), kitFiles=Object.keys(kitLock.files).sort();
 const actualKit=files(kitDir).map(p=>relative(kitDir,p)).sort();
 if (JSON.stringify(actualKit)!==JSON.stringify(kitFiles)) fail('app-kit file set differs from its lock');

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { views } from "./crm_views.mjs";
 import { root, hash, files, inputs, sourceDigest, operationInventory } from "./screen_inputs.mjs";
 const env = inputs(process.argv.slice(2));
 const ts = env.require("typescript");
@@ -62,7 +63,7 @@ await build({configFile:false,root,define:{'process.env.NODE_ENV':'"production"'
 const SCREEN_ASSET_CAP=2097152, SCREEN_TOTAL_CAP=2097152, SCREEN_MANIFEST_CAP=32768;
 const assets=['runtime.js','client.js','crm.css'].map(path=>{const body=readFileSync(join(out,path));if(body.length>SCREEN_ASSET_CAP)throw new Error(`${path}: ${body.length} exceeds ${SCREEN_ASSET_CAP}`);return {name:path,media_type:path.endsWith('.js')?'text/javascript':'text/css',size:body.length,sha256:`sha256:${hash(body)}`};});
 if(assets.reduce((n,a)=>n+a.size,0)>SCREEN_TOTAL_CAP)throw new Error(`Screen total exceeds ${SCREEN_TOTAL_CAP} bytes`);
-const decl={contract:'app-screens/v2',app:'crm',entry:'client.js',startup:['runtime.js','client.js'],assets,provenance:{source_digest:`sha256:${sourceDigest()}`,sdk_digest:`sha256:${env.pin.archive.sha256}`,toolchain_digest:`sha256:${hash(JSON.stringify(env.pin.toolchain))}`},host_contract:'screen-records.v1',may:['records.call','records.slot'],tools:{},operations,navigation:{section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]}};
+const decl={contract:'app-screens/v2',app:'crm',entry:'client.js',startup:['runtime.js','client.js'],assets,provenance:{source_digest:`sha256:${sourceDigest()}`,sdk_digest:`sha256:${env.pin.archive.sha256}`,toolchain_digest:`sha256:${hash(JSON.stringify(env.pin.toolchain))}`},host_contract:'screen-records.v1',may:['records.call','records.slot'],tools:{},operations,navigation:{section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]},views};
 const declaration=JSON.stringify(decl,null,2)+'\n';
 if(Buffer.byteLength(declaration)>SCREEN_MANIFEST_CAP)throw new Error(`Screen declaration exceeds ${SCREEN_MANIFEST_CAP} bytes`);
 writeFileSync(join(out,'screens.json'),declaration);
