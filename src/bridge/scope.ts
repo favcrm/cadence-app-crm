@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import { admitted, channel, type CrmSection, type CrmView } from "./channel";
 
 export interface DisplayScope { installId: string; digest: string }
-export interface Route { section: CrmSection; view: CrmView; record_id: string | null; segment_id: string | null }
+export interface Route { section: CrmSection; view: CrmView; record_id: string | null; segment_id: string | null; params?: Readonly<Record<string, string>> }
 export interface ReadObservation { operation: string; args: Record<string, unknown>; data: unknown }
 export interface ScopeSnapshot { presentationLocale: "en" | "zh-TW"; scope: DisplayScope; digest: string; actions: string[]; route: Route; observations: ReadObservation[] }
 

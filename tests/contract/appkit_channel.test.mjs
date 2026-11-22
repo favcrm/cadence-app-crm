@@ -32,7 +32,7 @@ const push = (extra = {}) => ({
   sources: [],
   defaults: [],
   readiness: [],
-  actions: ["records.list", "records.show", "records.csv.preview", "content.approve"],
+  actions: ["records.list", "records.show", "records.csv.preview", "content.approve", "screen.route.patch"],
   now: "2026-11-05T00:00:00Z",
   resume: null,
   route: { section: "customers", view: "list", record_id: null, segment_id: null },
@@ -76,7 +76,7 @@ async function mount() {
   const channel = createChannel();
   channel.start();
   const ready = await waitFor(() => env.events.find((event) => event.op === "ready"), "ready");
-  expect(ready.accepts).toEqual(["screen.v2", "screen-surfaces.v1", "screen-canvas.v1", "screen-records.v1", "screen-locale.v1"]);
+  expect(ready.accepts).toEqual(["screen.v2", "screen-surfaces.v1", "screen-canvas.v1", "screen-records.v1", "screen-route-params.v1", "screen-locale.v1"]);
   env.host().postMessage(push());
   await waitFor(() => getScope()?.scope.installId === "install-test", "PUSH scope");
   return { channel, ...env };
@@ -195,6 +195,23 @@ test("a frame is not read-only until the host mounts it in the chat canvas", asy
     expect(channel.bridge.getState().surface).toMatchObject({ role: "canvas", readOnly: true });
     host().postMessage({ v: 1, op: "surface", role: "primary", modal: false });
     await waitFor(() => !getCanvasReadOnly(), "primary surface");
+  } finally {
+    retire(channel);
+  }
+});
+
+test("a route's params reach the snapshot and a patch with params is sent as the verb", async () => {
+  const { channel, events, host } = await mount();
+  try {
+    expect(getScope().route.params ?? {}).toEqual({});
+    host().postMessage(push({ route: { section: "customers", view: "list", record_id: null, segment_id: null, params: { tag: "vip", consent: "denied" } } }));
+    await waitFor(() => getScope()?.route.params?.tag === "vip", "route params");
+    expect(getScope().route.params).toEqual({ tag: "vip", consent: "denied" });
+    const pending = channel.request("call", "screen.route.patch", { params: { q: "ann" } });
+    const request = await waitFor(() => events.find((event) => event.op === "call" && event.verb === "screen.route.patch"), "route patch");
+    expect(request.args).toEqual({ params: { q: "ann" } });
+    host().postMessage({ v: 2, op: "reply", id: request.id, ok: true, data: {} });
+    await expect(pending).resolves.toEqual({});
   } finally {
     retire(channel);
   }

@@ -11,6 +11,33 @@ the viewer as read-only and drops the member-only "Read-only view" wording, beca
 already says "Open in CRM to edit". Create, edit, bulk, approve and send controls are hidden;
 reads, navigation and Copy email stay. The full page and the drawer are unchanged.
 
+## Canvas views with filters in 0.4.4
+
+CRM declares five views in `screens.json` next to `navigation` (app-kit 0.8.0,
+`screen-route-params.v1`, opted in with `routeParams: true`), each with an English and a
+zh-TW label. Only filters the lists already apply are declared (`scripts/crm_views.mjs`
+is the one source for the build and the verifier):
+
+| view | params | applied as |
+| --- | --- | --- |
+| `customers` | `q`, `consent` (`granted`, `unknown`, `denied`), `source`, `tag` | `q` is the server search; `consent`, `source` and `tag` narrow the page of customers shown, as the list's own filters do |
+| `segments` | `q` | the list's name/id search |
+| `campaigns` | `q` | the list's name/subject/id search |
+| `segment`, `campaign` | `id` | opens that segment or campaign (a valid id; otherwise the list) |
+
+The assistant opens one with
+`canvas_open {app:"crm", view:"customers", params:{tag:"vip", consent:"granted"}}`.
+The screens read `route.params` when they open: a value the list cannot use (an unknown
+`consent`, text over 200 characters, a bad id) is ignored and the default stays, and without
+params the list is as it was. When the user changes a filter it is written back with
+`screen.route.patch {params}` so the link and canvas title follow; choosing another section
+clears the params. There is no sort, status or segment filter on Customers and none on
+Campaigns, so none is declared. No storage migration, write or new required host capability
+beyond `screen-route-params.v1`. CI checks the bundle with Cadence `v0.5.1`, the first release
+whose checker admits screen `views`; the publish workflow's `CADENCE_TARGET_VERSION` must be
+`v0.5.1` or later before a release carrying them is tagged. The preview opens a route with
+`?section=customers&p.tag=vip&p.consent=granted`.
+
 ## Canvas padding in 0.4.3
 
 Below 1100px wide (the board chat canvas) the screen keeps a modest inner padding (16px inline,
