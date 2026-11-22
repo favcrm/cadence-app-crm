@@ -746,4 +746,24 @@ export const zhTW: Record<string, string> = {
   "One send can reach up to 500 people. Choose a smaller audience.": "每次寄送最多可寄給 500 人。請選擇較小的受眾。",
   "Finished": "已完成",
   "Finished. The result didn't say how many were accepted.": "已完成。結果未說明被接受的數量。",
+  "Read-only view. Edits are disabled on this board.": "唯讀檢視。此看板已停用編輯。",
+  "Read-only view. Sign in as the operator to edit.": "唯讀檢視。請以操作員身分登入以進行編輯。",
+};
+
+/**
+ * Hong Kong written Traditional Chinese. The read-only wording is spelled out
+ * for zh-HK; every other key falls back to the shared zh-TW text, which is
+ * already written Traditional Chinese.
+ */
+export const zhHK: Record<string, string> = {
+  ...zhTW,
+  "Read-only view. Record creation and edits are unavailable.": "唯讀檢視。無法建立或編輯紀錄。",
+  "Read-only view. A verified operator creates customer records.": "唯讀檢視。只有已驗證的操作員可建立客戶紀錄。",
+  "Read-only view. Segment creation and edits are unavailable.": "唯讀檢視。無法建立或編輯客戶分群。",
+  "Read-only view. A verified operator creates saved segments.": "唯讀檢視。只有已驗證的操作員可建立已儲存的客戶分群。",
+  "Read-only view. Campaign creation and edits are unavailable.": "唯讀檢視。無法建立或編輯行銷活動。",
+  "Read-only view. A verified operator saves content revisions.": "唯讀檢視。只有已驗證的操作員可儲存內容修訂。",
+  "Read-only view. A verified operator sends campaigns.": "唯讀檢視。只有已驗證的操作員可發送行銷活動。",
+  "Read-only view. Edits are disabled on this board.": "唯讀檢視。此看板已停用編輯功能。",
+  "Read-only view. Sign in as the operator to edit.": "唯讀檢視。請以操作員身分登入以進行編輯。",
 };
