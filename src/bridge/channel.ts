@@ -21,6 +21,8 @@ export function createCrmBridge(): ScreenBridge<CrmSection, CrmView, ApiError> {
     // screen-surfaces.v1 and screen-canvas.v1.
     surfaces: true,
     canvas: true,
+    // A declared view's params (a list's filters) ride on the route (app-kit 0.8.0): screen-route-params.v1.
+    routeParams: true,
     calls: CALL_FIELDS,
     slots: SLOT_FIELDS,
     argBytes: {

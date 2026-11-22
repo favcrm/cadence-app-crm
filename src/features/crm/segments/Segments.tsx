@@ -22,6 +22,8 @@ SEGMENT_OPS,
 import type { Viewer } from "../viewer";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { useListMemory } from "../listMemory";
+import { queryPatch,readQueryParams,type QueryParams } from "../../../domain/routeParams";
+import { useRouteParams,useRouteParamSync } from "../useRouteParams";
 import ListPager, { LIST_PAGE_SIZE } from "../ListPager";
 
 /** Human-readable predicate: the same labels the rule form offers.
@@ -275,10 +277,13 @@ function SegmentList({
   const queryState = useCrmQuery(scope, "segments.list", {}, parseSegmentList);
   const segments = queryState.data ?? NO_SEGMENTS;
   const { loading, error } = queryState;
+  const routeParams = useRouteParams();
   const listRef = useListMemory(scope, "segments", viewer.operator === true && queryState.data !== null, queryState.failure);
   const [counts, setCounts] = useState<Record<string, AudiencePreview | null>>({});
-  const [query, setQuery] = useState("");
+  // A declared view (segments {q}) opens the list searched.
+  const [query, setQuery] = useState(() => readQueryParams(routeParams).q);
   const [page, setPage] = useState(0);
+  useRouteParamSync<QueryParams>({ q: query.trim() }, readQueryParams, queryPatch, (next) => { setQuery(next.q); setPage(0); }, 400);
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase();
     return segments.filter(segment => `${segment.name} ${segment.id}`.toLocaleLowerCase().includes(search));
