@@ -16,9 +16,16 @@ const files = [];
 })(root);
 const source = files.map((f) => readFileSync(f, "utf8")).join("\n");
 const readOnly = [...new Set([...source.matchAll(/"(Read-only view\.[^"]*)"/g)].map((m) => m[1]))];
+const customerReadOnly = [
+  "Creating customers is unavailable.",
+  "You can view this customer, but cannot edit it.",
+];
 
 test("the source still has the read-only strings this test guards", () => {
-  expect(readOnly.length).toBeGreaterThanOrEqual(9);
+  expect(readOnly.length).toBeGreaterThanOrEqual(7);
+  for (const key of customerReadOnly) {
+    expect(source).toContain(`"${key}"`);
+  }
 });
 
 test("no read-only string is built by interpolation", () => {
@@ -30,6 +37,10 @@ for (const [name, catalog] of [["zh-TW", zhTW], ["zh-HK", zhHK]]) {
     for (const key of readOnly) {
       expect(catalog[key], `${name}: ${key}`).toBeTruthy();
       expect(catalog[key]).toMatch(/^唯讀檢視。/);
+      expect(catalog[key]).not.toBe(key);
+    }
+    for (const key of customerReadOnly) {
+      expect(catalog[key], `${name}: ${key}`).toBeTruthy();
       expect(catalog[key]).not.toBe(key);
     }
   });

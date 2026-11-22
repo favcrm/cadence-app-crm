@@ -1,0 +1,30 @@
+{
+  "version": 4,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": {
+        "name": "contacts",
+        "type": "json",
+        "nullable": false,
+        "default": [],
+        "json_schema": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "title", "email", "phone"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 120},
+              "title": {"anyOf": [{"type": "string", "maxLength": 120}, {"type": "null"}]},
+              "email": {"anyOf": [{"type": "string", "maxLength": 254}, {"type": "null"}]},
+              "phone": {"anyOf": [{"type": "string", "maxLength": 24}, {"type": "null"}]}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

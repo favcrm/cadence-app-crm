@@ -3,13 +3,20 @@
 Public repository: https://github.com/favcrm/cadence-app-crm.
 App identity stays `crm`; repository names do not change installation or data identities.
 
+## Customer workspace in 0.5.0
+
+Open a customer to replace the list with the profile at any frame width.
+**All customers** returns to the list without losing its filters, page or
+selection. Activity entries open a detail drawer from the profile.
+
 ## Chat canvas
 
 The bridge declares `screen-surfaces.v1` and `screen-canvas.v1` (app-kit 0.7.0). When the
 host mounts CRM read-only in the board chat canvas (`surface.readOnly`), the screen treats
 the viewer as read-only and drops the member-only "Read-only view" wording, because the host
 already says "Open in CRM to edit". Create, edit, bulk, approve and send controls are hidden;
-reads, navigation and Copy email stay. The full page and the drawer are unchanged.
+reads, navigation and Copy email stay. Customer profiles use the same main
+pane in the canvas and the full app.
 
 ## Read-only wording in zh-TW and zh-HK (0.4.5)
 
@@ -53,8 +60,8 @@ whose checker admits screen `views`; the publish workflow's `CADENCE_TARGET_VERS
 Below 1100px wide (the board chat canvas) the screen keeps a modest inner padding (16px inline,
 12px block; 12px inline under 36rem) instead of sitting flush against the canvas edges, the same
 rule as Accounting ACC-22. Tag chips keep words whole: they wrap between chips, and a tag too
-long for the row ends in an ellipsis. The full page is unchanged. CSS only: no storage or
-capability change.
+long for the row ends in an ellipsis. These rules apply without changes to
+storage or capabilities.
 
 ## Local development
 

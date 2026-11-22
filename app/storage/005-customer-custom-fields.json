@@ -1,0 +1,45 @@
+{
+  "version": 5,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "customers",
+      "column": {
+        "name": "custom_fields",
+        "type": "json",
+        "nullable": false,
+        "default": {},
+        "json_schema": {
+          "type": "object",
+          "propertyNames": {
+            "allOf": [
+              {"type": "string", "pattern": "^[a-z0-9_]{1,40}$"},
+              {"not": {"enum": [
+                "constructor", "prototype", "__proto__",
+                "action_token", "confirmation_token", "confirmation_nonce", "confirm_token",
+                "csv_confirm_token", "scope_proof", "password", "credentials", "credential",
+                "secret", "session_key", "host_command"
+              ]}}
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "type", "value"],
+            "properties": {
+              "label": {"type": "string", "minLength": 1, "maxLength": 80},
+              "type": {"enum": ["text", "number", "boolean", "date"]},
+              "value": true
+            },
+            "allOf": [
+              {"if": {"properties": {"type": {"const": "text"}}}, "then": {"properties": {"value": {"type": "string", "maxLength": 1000}}}},
+              {"if": {"properties": {"type": {"const": "number"}}}, "then": {"properties": {"value": {"type": "number"}}}},
+              {"if": {"properties": {"type": {"const": "boolean"}}}, "then": {"properties": {"value": {"type": "boolean"}}}},
+              {"if": {"properties": {"type": {"const": "date"}}}, "then": {"properties": {"value": {"type": "string", "format": "date"}}}}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

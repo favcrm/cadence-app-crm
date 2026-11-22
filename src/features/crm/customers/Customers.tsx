@@ -1,8 +1,8 @@
 import { useLocale } from "../locale";
-import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Select,type DrawerTab } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
-import { STACK_BELOW_PX,useContainerWidth } from "../containerWidth";
+import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Resource,Select,useQuery } from "@cadence/screen-ui";
+import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
+import WorkspaceTabs from "../WorkspaceTabs";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
 import { hasParams,queryPatch,readQueryParams,type QueryParams } from "../../../domain/routeParams";
@@ -13,6 +13,7 @@ activityItems,
 buildConsentChange,
 buildCreateProvenance,
 buildCustomerProfile,
+changeCustomerContacts,
 CONSENT_METHODS,
 CONSENT_NOTE_MAX,
 consentLabel,
@@ -21,13 +22,17 @@ formFromProfile,
 friendlyError,
 isConsentChoice,
 newCustomerId,
+readCustomerContacts,
 viewProfile,
 type ConsentSetting,
+type CustomerContactFields,
 type CustomerFormFields,
 } from "../customerProfile";
+import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
-import { hostActions,parseRecord,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
-import type { Viewer } from "../viewer";
+import { isDefiniteCreateRefusal } from "../hostErrors";
+import { appendHistoryPage,hostActions,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
+import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
  * The CRM workspace inside the trusted shared App shell (CAD-781
@@ -64,26 +69,42 @@ export default function Customers({
   onSelect: (recordId: string | null) => void;
   onRecordCreated?: (recordId: string) => void;
 }) {
-  const { t } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
-  // CRM-19: in a narrow frame (the chat canvas) an open record replaces the
-  // list instead of covering most of it. The list is only hidden, so its
-  // page, filters, selection and scroll are exactly as they were.
-  const width = useContainerWidth();
-  const stacked = width !== null && width < STACK_BELOW_PX;
-  const detailOnly = stacked && recordId !== null;
+  const listPane = useRef<HTMLDivElement>(null);
+  const lastOpenRecord = useRef<string | null>(null);
+  useEffect(() => {
+    if (recordId !== null) {
+      lastOpenRecord.current = recordId;
+    } else if (lastOpenRecord.current !== null) {
+      const id = lastOpenRecord.current;
+      lastOpenRecord.current = null;
+      const pane = listPane.current;
+      const opener = pane?.querySelector<HTMLElement>(`[data-record-id="${CSS.escape(id)}"] button.lnk`);
+      (opener ?? pane?.querySelector<HTMLElement>("[data-outlet-heading]"))?.focus();
+    }
+  }, [recordId]);
   // Section navigation lives in the host-owned outlet submenu
   // (CrmOutlet): this pane only renders the active section body.
   return (
     <div className="app-outlet crm" data-outlet="crm">
 
-      <div className="crm-surface" hidden={detailOnly || undefined}>
+      <div className="crm-surface">
         {view === "list" && (
-          <CustomerList
+          <div ref={listPane} hidden={recordId !== null}>
+            <CustomerList
+              scope={scope}
+              viewer={viewer}
+              onSelect={onSelect}
+              onNew={() => onView("new")}
+            />
+          </div>
+        )}
+        {view === "list" && recordId !== null && (
+          <CustomerWorkspace
+            key={recordId}
             scope={scope}
+            recordId={recordId}
             viewer={viewer}
-            onSelect={onSelect}
-            onNew={() => onView("new")}
+            onClose={() => onSelect(null)}
           />
         )}
         {view === "new" && (
@@ -103,21 +124,6 @@ export default function Customers({
           />
         )}
       </div>
-      {recordId !== null && (
-        <CustomerDrawer
-          scope={scope}
-          recordId={recordId}
-          viewer={viewer}
-          canWrite={canWrite}
-          fill={detailOnly ? { backLabel: t("Customers") } : undefined}
-          onClose={() => {
-            onSelect(null);
-            // The list stays mounted (hidden) so selection and scroll survive;
-            // return focus to the row that opened the record once it shows.
-            if (detailOnly) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-record-id="${CSS.escape(recordId)}"] .lnk`)?.focus());
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -136,7 +142,7 @@ function CustomerList({
   onNew: () => void;
 }) {
   const { t, formatNumber } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
+  const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
   // A declared view (customers {q}) opens the list searched; without params the list is as it was left.
   const routeParams = useRouteParams();
   const [initialList] = useState(() => hasParams(routeParams) ? null : readCustomerList(scope));
@@ -205,24 +211,19 @@ function CustomerList({
   // Filters and selection act on the rows already read (this page);
   // the server search stays the only whole-list narrowing.
   const [consentFilter, setConsentFilter] = useState(initialList?.consentFilter ?? "");
-  const [sourceFilter, setSourceFilter] = useState(initialList?.sourceFilter ?? "");
   const [tagFilter, setTagFilter] = useState(initialList?.tagFilter ?? "");
   useRouteParamSync<QueryParams>({ q: committed }, readQueryParams, queryPatch, (next) => {
     jumpRef.current += 1; setJumping(null);
     setQuery(next.q); setCommitted(next.q); setCursors([]); setPage(0);
   });
   const listRef = useListMemory(scope, "customers", viewer.operator === true && queryState.data !== null,
-    queryState.failure, { query, committed, cursors, page, consentFilter, sourceFilter, tagFilter },
-    JSON.stringify([committed, cursor, consentFilter, sourceFilter, tagFilter]));
+    queryState.failure, { query, committed, cursors, page, consentFilter, tagFilter },
+    JSON.stringify([committed, cursor, consentFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const sources = Array.from(
-    new Set(records.map((r) => viewProfile(r.profile).source).filter((v): v is string => v !== null)),
-  ).sort();
   const shown = records.filter((r) => {
     const v = viewProfile(r.profile);
     return (
       (consentFilter === "" || v.consentEmail === consentFilter) &&
-      (sourceFilter === "" || v.source === sourceFilter) &&
       (tagFilter === "" || v.tags.includes(tagFilter))
     );
   });
@@ -264,7 +265,7 @@ function CustomerList({
       jumpRef.current += 1;
       setJumping(null);
       setQuery(""); setCommitted(""); setCursors([]); setPage(0);
-      setConsentFilter(""); setSourceFilter(""); setTagFilter("");
+      setConsentFilter(""); setTagFilter("");
       setSelected(new Set());
     }
   }, [viewer.operator, queryState.failure]);
@@ -272,7 +273,7 @@ function CustomerList({
 
   return (
     <section ref={listRef} aria-label={t("Customers list")} className="crm-list crm-list-controls">
-      <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+      <h3 tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
         {t("Customers")}
       </h3>
       <div className="crm-toolbar crm-list-toolbar">
@@ -304,12 +305,6 @@ function CustomerList({
               ]}
               aria-label={t("Filter by email consent")}
             />
-            <Select
-              value={sourceFilter}
-              onChange={setSourceFilter}
-              options={[{ value: "", label: t("Source: any") }, ...sources.map((v) => ({ value: v, label: v }))]}
-              aria-label={t("Filter by source")}
-            />
             {tagFilter !== "" && (
               <button type="button" className="chip crm-chip-on" onClick={() => setTagFilter("")} aria-label={t("Clear tag filter {tag}").replace("{tag}", () => tagFilter)}>
                 {t("tag")}: {tagFilter} ✕
@@ -317,7 +312,7 @@ function CustomerList({
             )}
           </div>
         )}
-        {canWrite && (
+        {canCreate && (
           <Button variant="primary" className="crm-list-create" onClick={onNew}>
             {t("New customer")}
           </Button>
@@ -335,10 +330,10 @@ function CustomerList({
         )
       )}
       {viewer.operator === false && (
-        <Notice>{t("Sign in as the operator to inspect customer records.")}</Notice>
+        <Notice>{t("You do not have access to customer records.")}</Notice>
       )}
-      {viewer.operator && viewer.readOnly && !viewer.canvas && (
-        <Notice state="read-only">{t("Read-only view. Record creation and edits are unavailable.")}</Notice>
+      {viewer.operator && !viewer.canvas && !canCreate && (
+        <Notice state="read-only">{t("Creating customers is unavailable.")}</Notice>
       )}
       {viewer.operator && loading && (
         <Loading>{t("Reading customers…")}</Loading>
@@ -429,7 +424,7 @@ function CustomerList({
               {
                 key: "email",
                 header: t("Email"),
-                cellClassName: "num text-ink-300 crm-nowrap crm-cell-email",
+                cellClassName: "num text-ink-300 crm-nowrap",
                 cell: (record) => viewProfile(record.profile).email ?? "—",
               },
               {
@@ -455,20 +450,13 @@ function CustomerList({
                 },
               },
               {
-                key: "source",
-                header: t("Source"),
-                cellClassName: "text-ink-300 crm-col-source",
-                cell: (record) => viewProfile(record.profile).source ?? "—",
-              },
-              {
                 key: "consent",
                 header: t("Email consent"),
-                cellClassName: "crm-col-consent",
                 cell: (record) => {
                   const state = viewProfile(record.profile).consentEmail;
                   return (
                     <span className={`chip ${state === "granted" ? "crm-consent-ok" : ""}`} title={t("Email consent")}>
-                      {consentLabel(state)}
+                      {t(consentLabel(state))}
                     </span>
                   );
                 },
@@ -510,6 +498,7 @@ function CustomerForm({
   initial,
   submitLabel,
   pending,
+  submitBlocked = false,
   formError,
   formId,
   hideConsent,
@@ -525,6 +514,7 @@ function CustomerForm({
   /** Edit hides consent: it changes only through Record consent, with provenance. */
   hideConsent?: boolean;
   pending: boolean;
+  submitBlocked?: boolean;
   formError: string | null;
   onSubmit: (fields: CustomerFormFields, provenance: ConsentProvenance | null) => void;
 }) {
@@ -544,12 +534,13 @@ function CustomerForm({
       className={formId ? "grid gap-3" : "card px-4 py-4 grid gap-3"}
       onSubmit={(e) => {
         e.preventDefault();
+        if (pending || submitBlocked) return;
         let provenance: ConsentProvenance | null = null;
         try {
           buildCustomerProfile(fields);
           if (consentMethod && granted) provenance = buildCreateProvenance(method, note);
         } catch (e: unknown) {
-          setFieldError(e instanceof ApiError ? e.message : String(e));
+          setFieldError(e instanceof ApiError ? t(e.message) : String(e));
           return;
         }
         onSubmit(fields, provenance);
@@ -567,6 +558,40 @@ function CustomerForm({
           />
         )}
       </Field>
+      <div className="crm-field-row">
+        <Field label={t("Customer type (optional)")} id="crm-customer-type" className="crm-field">
+          {(c) => (
+            <Select
+              id={c.id}
+              value={fields.customerType}
+              onChange={(value) => {
+                if (value === "" || value === "person" || value === "organization") set({ customerType: value });
+              }}
+              options={[
+                { value: "", label: t("Not specified") },
+                { value: "person", label: t("Person") },
+                { value: "organization", label: t("Organization") },
+              ]}
+              aria-label={t("Customer type")}
+              full
+            />
+          )}
+        </Field>
+        <Field label={t("Website (optional)")} id="crm-website" className="crm-field">
+          {(c) => (
+            <input
+              {...c}
+              className="field"
+              type="url"
+              value={fields.website}
+              onChange={(e) => set({ website: e.target.value })}
+              maxLength={2048}
+              autoComplete="off"
+              placeholder="https://example.com"
+            />
+          )}
+        </Field>
+      </div>
       <div className="crm-field-row">
         <Field label={t("Email (optional)")} id="crm-email" className="crm-field">
           {(c) => (
@@ -596,34 +621,19 @@ function CustomerForm({
           )}
         </Field>
       </div>
-      <div className="crm-field-row">
-        <Field label={t("Tags (optional)")} id="crm-tags" hint={t("Comma separated")} className="crm-field">
-          {(c) => (
-            <input
-              {...c}
-              className="field"
-              value={fields.tags}
-              onChange={(e) => set({ tags: e.target.value })}
-              maxLength={400}
-              autoComplete="off"
-              placeholder={t("vip, newsletter")}
-            />
-          )}
-        </Field>
-        <Field label={t("Source (optional)")} id="crm-source" className="crm-field">
-          {(c) => (
-            <input
-              {...c}
-              className="field"
-              value={fields.source}
-              onChange={(e) => set({ source: e.target.value })}
-              maxLength={40}
-              autoComplete="off"
-              placeholder={t("import")}
-            />
-          )}
-        </Field>
-      </div>
+      <Field label={t("Tags (optional)")} id="crm-tags" hint={t("Comma separated")} className="crm-field">
+        {(c) => (
+          <input
+            {...c}
+            className="field"
+            value={fields.tags}
+            onChange={(e) => set({ tags: e.target.value })}
+            maxLength={400}
+            autoComplete="off"
+            placeholder={t("vip, newsletter")}
+          />
+        )}
+      </Field>
       {!hideConsent && (
       <div className="crm-field-row">
         <Field label={t("Email consent (explicit)")} id="crm-consent-email" hint={t("No marketing until granted")} className="crm-field">
@@ -666,7 +676,7 @@ function CustomerForm({
               />
             )}
           </Field>
-          {method !== "" && (
+          {(method !== "" || note !== "") && (
             <Field label={t("Note (optional)")} id="crm-create-note" className="crm-field">
               {(c) => (
                 <input
@@ -687,7 +697,7 @@ function CustomerForm({
       )}
       {formId === undefined && (
         <div>
-          <Button type="submit" variant="primary" loading={pending} disabled={pending}>
+          <Button type="submit" variant="primary" loading={pending} disabled={pending || submitBlocked}>
             {t(submitLabel)}
           </Button>
         </div>
@@ -735,9 +745,9 @@ function ConsentForm({
       onSubmit={(e) => {
         e.preventDefault();
         try {
-          onSubmit(buildConsentChange(profile, { email, sms, method: granting ? method : "", note }));
+          onSubmit(buildConsentChange(profile, { email, sms, method: granting || note.trim() !== "" ? method : "", note }));
         } catch (error: unknown) {
-          setFieldError(error instanceof ApiError ? error.message : String(error));
+          setFieldError(error instanceof ApiError ? t(error.message) : String(error));
         }
       }}
     >
@@ -747,8 +757,8 @@ function ConsentForm({
             <Select
               id={c.id}
               value={email}
-              onChange={(v) => { setEmail(asSetting(v)); setFieldError(null); }}
-              options={CONSENT_SETTINGS}
+              onChange={(v) => { setEmail(asSetting(v)); setMethod(""); setFieldError(null); }}
+              options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("Email marketing consent")}
               full
             />
@@ -759,23 +769,23 @@ function ConsentForm({
             <Select
               id={c.id}
               value={sms}
-              onChange={(v) => { setSms(asSetting(v)); setFieldError(null); }}
-              options={CONSENT_SETTINGS}
+              onChange={(v) => { setSms(asSetting(v)); setMethod(""); setFieldError(null); }}
+              options={CONSENT_SETTINGS.map((option) => ({ ...option, label: t(option.label) }))}
               aria-label={t("SMS marketing consent")}
               full
             />
           )}
         </Field>
       </div>
-      {granting && (
-        <Field label={t("How was it given?")} id="crm-rc-method" hint={t("Kept in the customer's activity for audit")} className="crm-field">
+      {(granting || note.trim() !== "") && (
+        <Field label={t(granting ? "How was it given?" : "How was this recorded?")} id="crm-rc-method" hint={t("Kept in the customer's activity for audit")} className="crm-field">
           {(c) => (
             <Select
               id={c.id}
               value={method}
               onChange={(v) => { setMethod(v as ConsentMethod | ""); setFieldError(null); }}
               options={[{ value: "", label: t("Choose…") }, ...CONSENT_METHODS.map((option) => ({ ...option, label: t(option.label) }))]}
-              aria-label={t("How consent was given")}
+              aria-label={t(granting ? "How consent was given" : "How this was recorded")}
               full
             />
           )}
@@ -799,6 +809,127 @@ function ConsentForm({
   );
 }
 
+function ContactForm({
+  initial,
+  formId,
+  formError,
+  pending,
+  onSubmit,
+  onRemove,
+}: {
+  initial: CustomerContactFields;
+  formId: string;
+  formError: string | null;
+  pending: boolean;
+  onSubmit: (fields: CustomerContactFields) => void;
+  onRemove?: () => void;
+}) {
+  const { t } = useLocale();
+  const [fields, setFields] = useState(initial);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const set = (patch: Partial<CustomerContactFields>) => setFields((current) => ({ ...current, ...patch }));
+  return (
+    <form id={formId} className="grid gap-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) onSubmit(fields);
+    }}>
+      <Field label={t("Contact name")} id="crm-contact-name" required className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.name} onChange={(event) => set({ name: event.target.value })} maxLength={120} autoComplete="off" />}
+      </Field>
+      <Field label={t("Job title (optional)")} id="crm-contact-title" className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.title} onChange={(event) => set({ title: event.target.value })} maxLength={120} autoComplete="off" />}
+      </Field>
+      <Field label={t("Email (optional)")} id="crm-contact-email" className="crm-field">
+        {(c) => <input {...c} className="field" type="email" value={fields.email} onChange={(event) => set({ email: event.target.value })} maxLength={254} autoComplete="off" />}
+      </Field>
+      <Field label={t("Phone (optional)")} id="crm-contact-phone" className="crm-field">
+        {(c) => <input {...c} className="field" type="tel" value={fields.phone} onChange={(event) => set({ phone: event.target.value })} maxLength={24} autoComplete="off" />}
+      </Field>
+      <p className="text-micro text-ink-500">{t("Contacts share this customer's access. Their marketing consent is not inferred.")}</p>
+      {formError && <ErrorNotice bare>{formError}</ErrorNotice>}
+      {onRemove && (confirmRemove ? (
+        <div className="customer-remove-confirm">
+          <p>{t("Remove this contact from the customer?")}</p>
+          <Button type="button" size="sm" disabled={pending} onClick={onRemove}>{t("Confirm removal")}</Button>
+          <Button type="button" size="sm" disabled={pending} onClick={() => setConfirmRemove(false)}>{t("Keep contact")}</Button>
+        </div>
+      ) : (
+        <div><button type="button" className="lnk" disabled={pending} onClick={() => setConfirmRemove(true)}>{t("Remove contact")}</button></div>
+      ))}
+    </form>
+  );
+}
+
+const CUSTOM_FIELD_TYPES: { value: CustomerCustomFieldType; label: string }[] = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "boolean", label: "Yes or no" },
+  { value: "date", label: "Date" },
+];
+
+function CustomFieldForm({
+  initial, editing, pending, formError, onSubmit, onRemove,
+}: {
+  initial: CustomerCustomFieldForm;
+  editing: boolean;
+  pending: boolean;
+  formError: string | null;
+  onSubmit: (fields: CustomerCustomFieldForm) => void;
+  onRemove?: () => void;
+}) {
+  const { t } = useLocale();
+  const [fields, setFields] = useState(initial);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const set = (patch: Partial<CustomerCustomFieldForm>) => setFields((current) => ({ ...current, ...patch }));
+  return (
+    <form id="crm-customer-custom-field" className="grid gap-3" onSubmit={(event) => {
+      event.preventDefault();
+      if (!pending) onSubmit(fields);
+    }}>
+      <Field label={t("Field label")} id="crm-custom-label" required className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.label} onChange={(event) => set({ label: event.target.value })} maxLength={80} autoComplete="off" />}
+      </Field>
+      <Field label={t("Field key")} id="crm-custom-key" required hint={t("Stable identifier used by agents")} className="crm-field">
+        {(c) => <input {...c} className="field" value={fields.key} onChange={(event) => set({ key: event.target.value })} disabled={editing} maxLength={40} autoComplete="off" placeholder="renewal_date" />}
+      </Field>
+      {editing ? (
+        <p className="text-micro text-ink-500">{t("Type")}: {t(CUSTOM_FIELD_TYPES.find((option) => option.value === fields.type)?.label ?? "Text")}</p>
+      ) : (
+        <Field label={t("Type")} id="crm-custom-type" className="crm-field">
+          {(c) => <Select id={c.id} aria-label={t("Type")} value={fields.type} full
+            onChange={(value) => {
+              if (CUSTOM_FIELD_TYPES.some((option) => option.value === value))
+                set({ type: value as CustomerCustomFieldType, value: "" });
+            }}
+            options={CUSTOM_FIELD_TYPES.map((option) => ({ ...option, label: t(option.label) }))} />}
+        </Field>
+      )}
+      <Field label={t("Value")} id="crm-custom-value" className="crm-field">
+        {(c) => fields.type === "boolean" ? (
+          <Select id={c.id} aria-label={t("Value")} value={fields.value} full
+            onChange={(value) => set({ value })}
+            options={[{ value: "", label: t("Choose") }, { value: "true", label: t("Yes") }, { value: "false", label: t("No") }]} />
+        ) : (
+          <input {...c} className="field" type={fields.type === "date" ? "date" : "text"}
+            inputMode={fields.type === "number" ? "decimal" : undefined} value={fields.value}
+            onChange={(event) => set({ value: event.target.value })} maxLength={fields.type === "text" ? 1000 : undefined} autoComplete="off" />
+        )}
+      </Field>
+      <p className="text-micro text-ink-500">{t("Custom fields share this customer's access. Use consistent keys across your team.")}</p>
+      {formError && <ErrorNotice bare>{formError}</ErrorNotice>}
+      {onRemove && (confirmRemove ? (
+        <div className="customer-remove-confirm">
+          <p>{t("Remove this field from the customer?")}</p>
+          <Button type="button" size="sm" disabled={pending} onClick={onRemove}>{t("Confirm removal")}</Button>
+          <Button type="button" size="sm" disabled={pending} onClick={() => setConfirmRemove(false)}>{t("Keep field")}</Button>
+        </div>
+      ) : (
+        <div><button type="button" className="lnk" disabled={pending} onClick={() => setConfirmRemove(true)}>{t("Remove field")}</button></div>
+      ))}
+    </form>
+  );
+}
+
 function CustomerNew({
   scope,
   viewer,
@@ -811,10 +942,13 @@ function CustomerNew({
   onCancel: () => void;
 }) {
   const { t } = useLocale();
-  const canWrite = viewer.operator === true && !viewer.readOnly;
+  const canCreate = viewer.operator === true && (viewer.canCreate ?? !viewer.readOnly);
+  const creationPolicy = useCrmQuery(scope, "records.list", { limit: 1 }, parseRecordList);
+  const hostAssignedCreateId = creationPolicy.data?.hostAssignedCreateId ?? null;
   const headRef = useRef<HTMLHeadingElement | null>(null);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [creationUncertain, setCreationUncertain] = useState(false);
   // Keyboard users land on the heading when the route changes.
   useEffect(() => {
     headRef.current?.focus();
@@ -829,17 +963,27 @@ function CustomerNew({
           ← {t("Customers")}
         </button>
       </p>
-      {!canWrite ? (
-        viewer.canvas ? null : <Notice className="mt-2" state="read-only">
-          {t("Read-only view. A verified operator creates customer records.")}
-        </Notice>
+      {!canCreate ? (
+        viewer.canvas ? null : (
+          <Notice className="mt-2" state="read-only">
+            {t("Creating customers is unavailable.")}
+          </Notice>
+        )
+      ) : hostAssignedCreateId === null && creationPolicy.error !== null ? (
+        <ErrorNotice onRetry={() => void creationPolicy.store.refresh()}>{creationPolicy.error}</ErrorNotice>
+      ) : hostAssignedCreateId === null ? (
+        <Loading>{t("Checking customer creation…")}</Loading>
       ) : (
         <div className="mt-2">
+          {creationUncertain && (
+            <Notice>{t("Creation could not be confirmed. Check the customer list before trying again.")}</Notice>
+          )}
           <CustomerForm
             initial={EMPTY_CUSTOMER_FORM}
             submitLabel="Create customer"
             consentMethod
             pending={pending}
+            submitBlocked={creationUncertain}
             formError={formError}
             onSubmit={(fields, provenance) => {
               setPending(true);
@@ -853,9 +997,12 @@ function CustomerNew({
                 return;
               }
               void hostActions
-                .create(scope, newCustomerId(), profile, provenance ?? undefined)
+                .create(scope, hostAssignedCreateId ? null : newCustomerId(), profile, provenance ?? undefined)
                 .then((record) => onCreated(record.id))
-                .catch((e: unknown) => setFormError(friendlyError(e)))
+                .catch((e: unknown) => {
+                  if (!isDefiniteCreateRefusal(e)) setCreationUncertain(true);
+                  else setFormError(friendlyError(e));
+                })
                 .finally(() => setPending(false));
             }}
           />
@@ -865,175 +1012,431 @@ function CustomerNew({
   );
 }
 
-export function CustomerDrawer({
+const CUSTOMER_TAB_PREFIX = "crm-customer";
+const CUSTOMER_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "activity", label: "Activity" },
+  { id: "fields", label: "Fields" },
+  { id: "access", label: "Access" },
+] as const;
+type CustomerTab = typeof CUSTOMER_TABS[number]["id"];
+
+function customerAccessRefused(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return [401, 403, 404, 409, 503].includes(error.status) ||
+    ["unauthorized", "forbidden", "not_found", "conflict", "unavailable", "record_changed", "record_access_unavailable"].includes(error.code ?? "");
+}
+
+function CustomerWorkspace({
   scope,
   recordId,
   viewer,
-  canWrite,
-  fill,
   onClose,
 }: {
   scope: HostScope;
   recordId: string;
   viewer: Viewer;
-  canWrite: boolean;
-  /** Narrow frame: the record takes the whole screen with a Back control. */
-  fill?: { backLabel: string };
   onClose: () => void;
 }) {
   const { t, formatDate } = useLocale();
-  const queryState = useCrmQuery(scope, "records.show", { record_id: recordId }, parseRecord);
-  const { loading, error } = queryState;
-  const [mode, setMode] = useState<"view" | "edit" | "consent">("view");
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const [activeTab, setActiveTab] = useState<CustomerTab>("overview");
+  const openTab = (tab: CustomerTab) => {
+    setActiveTab(tab);
+    headingRef.current?.ownerDocument.getElementById(`${CUSTOMER_TAB_PREFIX}-tab-${tab}`)?.focus();
+  };
+  const [selectedActivity, setSelectedActivity] = useState<{ key: string; record: HostRecord } | null>(null);
+  useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [recordId]);
+  // The profile is private. This pane is keyed by mount and record, and
+  // never imports a prior pane's cache or the host's pushed observations.
+  const [recordStore] = useState(() => new Resource(
+    () => hostActions.show(scope, recordId),
+    { discardOnError: customerAccessRefused },
+  ));
+  const { data, error, inFlight } = useQuery(recordStore);
+  const latestRecord = useRef<HostRecord | null>(null);
+  latestRecord.current = data;
+  const historyRequest = useRef(0);
+  const activityListRef = useRef<HTMLOListElement>(null);
+  const historyKeyboardTrigger = useRef<{ element: HTMLElement; previous: Set<string> } | null>(null);
+  const [olderHistory, setOlderHistory] = useState<{ base: HostRecord; value: HostRecord } | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAnnouncement, setHistoryAnnouncement] = useState("");
+  const [historyAccessLost, setHistoryAccessLost] = useState(false);
+  const writeFence = useRef(0);
+  const editOpener = useRef<{ element: HTMLElement | null; tab: CustomerTab } | null>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const previousMode = useRef("view");
+  useEffect(() => () => {
+    historyRequest.current += 1;
+    writeFence.current += 1;
+    recordStore.pause();
+  }, [recordStore]);
+  useEffect(() => {
+    historyRequest.current += 1;
+    setOlderHistory(null);
+    setHistoryBusy(false);
+    setHistoryError(null);
+    setHistoryAnnouncement("");
+    historyKeyboardTrigger.current = null;
+    if (data !== null) setHistoryAccessLost(false);
+  }, [data]);
+  useEffect(() => {
+    const trigger = historyKeyboardTrigger.current;
+    if (olderHistory && trigger && (document.activeElement === trigger.element || document.activeElement === document.body)) {
+      const firstAdded = [...(activityListRef.current?.querySelectorAll<HTMLButtonElement>("[data-activity-key]") ?? [])]
+        .find((button) => !trigger.previous.has(button.dataset.activityKey ?? ""));
+      (firstAdded ?? activityListRef.current)?.focus();
+    }
+    historyKeyboardTrigger.current = null;
+  }, [olderHistory]);
+  const canWrite = canEditCustomer(viewer, data);
+  const [mode, setMode] = useState<"view" | "edit" | "consent" | "contact" | "custom">("view");
   const [editRecord, setEditRecord] = useState<HostRecord | null>(null);
-  const record = mode === "view" ? queryState.data : editRecord;
+  const [contactIndex, setContactIndex] = useState<number | null>(null);
+  const [customKey, setCustomKey] = useState<string | null>(null);
+  const record = data === null ? null : mode === "view" ? data : editRecord;
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   useEffect(() => { setMode("view"); setEditRecord(null); setFormError(null); }, [recordId]);
+  useEffect(() => {
+    const wasEditing = previousMode.current !== "view";
+    previousMode.current = mode;
+    if (!wasEditing || mode !== "view") return;
+    const opener = editOpener.current;
+    editOpener.current = null;
+    if (!opener || opener.tab !== activeTab) return;
+    const frame = requestAnimationFrame(() => {
+      const workspace = workspaceRef.current;
+      if (!workspace || !document.hasFocus() || (document.activeElement !== document.body && document.activeElement !== workspace)) return;
+      const target = opener.element;
+      if (target?.isConnected && workspace.contains(target) && target.getClientRects().length > 0 && !target.matches(":disabled")) {
+        target.focus();
+      } else {
+        headingRef.current?.focus();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mode, activeTab]);
+
+  const rememberEditOpener = () => {
+    editOpener.current = { element: document.activeElement instanceof HTMLElement ? document.activeElement : null, tab: activeTab };
+  };
 
   const view = record ? viewProfile(record.profile) : null;
-  const timeline = record ? activityItems(record, t) : [];
+  const contacts = record ? readCustomerContacts(record.profile) : null;
+  const customFields = record ? readCustomerCustomFields(record.profile) : null;
+  const activityRecord = olderHistory?.base === record ? olderHistory.value : record;
+  const timeline = activityRecord ? activityItems(activityRecord, t) : [];
 
   const initials = view
     ? view.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("")
     : "";
-  const reload = () => { void queryState.store.refresh(); };
-  const ready = record !== null && view !== null;
-
-  const when = (at: number) => formatDate(at * 1000, { dateStyle: "medium" });
-  const tabs: DrawerTab[] =
-    ready && record !== null && view !== null
-      ? [
-          {
-            id: "overview",
-            label: t("Overview"),
-            panel: (
-              <>
-                <section className="crm-sect" aria-label={t("Consent")}>
-                  <h4>{t("Consent")}</h4>
-                  <div className="crm-consent-cards">
-                    <div className="card px-3 py-2" data-consent="email">
-                      <div className="text-label text-ink-300">{t("Email marketing")}</div>
-                      <span className={`chip ${view.consentEmail === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentEmail))}</span>
-                      <div className="text-micro text-ink-500">
-                        {t(view.consentEmail === "granted" ? "Can receive campaigns" : "No marketing until granted")}
-                      </div>
+  const reload = () => { void recordStore.refresh(); };
+  const ready = error === null && !historyAccessLost && viewer.operator === true && record !== null && view !== null;
+  const activity = selectedActivity?.record === record
+    ? timeline.find((item) => item.key === selectedActivity.key)
+    : undefined;
+  const loadOlder = (event: MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+    if (mode !== "view" || !record || !activityRecord?.historyNextCursor || historyBusy) return;
+    const base = record;
+    const page = activityRecord;
+    historyKeyboardTrigger.current = event.detail === 0
+      ? { element: event.currentTarget, previous: new Set(timeline.map((item) => item.key)) }
+      : null;
+    const request = ++historyRequest.current;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    setHistoryAnnouncement("");
+    void hostActions.show(scope, recordId, page.historyNextCursor)
+      .then((next) => {
+        if (historyRequest.current !== request || latestRecord.current !== base) return;
+        setOlderHistory({ base, value: appendHistoryPage(page, next) });
+        setHistoryAnnouncement(t("Earlier activity loaded."));
+      })
+      .catch((error: unknown) => {
+        if (historyRequest.current !== request || latestRecord.current !== base) return;
+        historyKeyboardTrigger.current = null;
+        if (customerAccessRefused(error)) {
+          historyRequest.current += 1;
+          setHistoryBusy(false);
+          setOlderHistory(null);
+          setSelectedActivity(null);
+          setMode("view");
+          setEditRecord(null);
+          writeFence.current += 1;
+          setPending(false);
+          recordStore.reset();
+          setHistoryAccessLost(true);
+        } else {
+          setHistoryError(t("Could not load earlier activity. Reload the customer and try again."));
+        }
+      })
+      .finally(() => {
+        if (historyRequest.current === request) setHistoryBusy(false);
+      });
+  };
+  const openContact = (index: number | null) => {
+    rememberEditOpener();
+    setEditRecord(record);
+    setContactIndex(index);
+    setFormError(null);
+    setMode("contact");
+  };
+  const openCustomField = (key: string | null) => {
+    rememberEditOpener();
+    setEditRecord(record);
+    setCustomKey(key);
+    setFormError(null);
+    setMode("custom");
+  };
+  const when = (at: number, withTime = false) => {
+    const time = at * 1000;
+    return Number.isFinite(time) && !Number.isNaN(new Date(time).getTime())
+      ? formatDate(time, withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" })
+      : t("Not recorded");
+  };
+  const activityRow = (item: (typeof timeline)[number], source: "timeline" | "recent") => (
+    <li key={item.key}>
+      <button
+        type="button"
+        className="customer-activity-row"
+        data-activity-key={source === "timeline" ? item.key : undefined}
+        aria-haspopup="dialog"
+        onClick={() => { if (record) setSelectedActivity({ key: item.key, record }); }}
+      >
+        <span className="customer-activity-copy">
+          <span>{item.text}</span>
+          <span className="num text-micro text-ink-500">{when(item.at)}</span>
+        </span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </li>
+  );
+  const panels = ready && record !== null && view !== null ? {
+    overview: (
+      <div className="customer-workspace-grid">
+        <div className="customer-profile-panel">
+          <section className="crm-sect" aria-label={t("Profile")}>
+            <h4>{t("Profile")}</h4>
+            <Detail
+              className="crm-detail"
+              label={t("Customer fields")}
+              items={[
+                { key: "type", term: t("Customer type"), value: view.customerType === "" ? t("Not specified") : t(view.customerType === "person" ? "Person" : "Organization") },
+                { key: "email", term: t("Email"), value: <span className="num">{view.email ?? "—"}</span> },
+                { key: "phone", term: t("Phone"), value: <span className="num">{view.phone ?? "—"}</span> },
+                { key: "website", term: t("Website"), value: view.website ?? "—" },
+                { key: "tags", term: t("Tags"), value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
+              ]}
+            />
+          </section>
+          <section className="crm-sect" aria-label={t("Contacts")}>
+            <div className="customer-section-heading">
+              <h4>{t("Contacts")}</h4>
+              {canWrite && contacts !== null && contacts.length < 50 && (
+                <Button size="sm" onClick={() => openContact(null)}>{t("Add contact")}</Button>
+              )}
+            </div>
+            {contacts === null ? (
+              <p className="text-secondary text-ink-400">{t("Contacts are unavailable for this record.")}</p>
+            ) : contacts.length === 0 ? (
+              <p className="text-secondary text-ink-400">{t("No contacts recorded yet.")}</p>
+            ) : (
+              <ul className="customer-contacts">
+                {contacts.map((contact, index) => (
+                  <li key={index}>
+                    <div>
+                      <strong>{contact.name}</strong>
+                      {contact.title && <p>{contact.title}</p>}
+                      {contact.email && <p className="num">{contact.email}</p>}
+                      {contact.phone && <p className="num">{contact.phone}</p>}
                     </div>
-                    <div className="card px-3 py-2" data-consent="sms">
-                      <div className="text-label text-ink-300">{t("SMS marketing")}</div>
-                      <span className={`chip ${view.consentSms === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentSms))}</span>
-                      <div className="text-micro text-ink-500">{t(view.consentSms === null ? "Not recorded" : "Per customer choice")}</div>
-                    </div>
-                  </div>
-                </section>
-                <section className="crm-sect" aria-label={t("Profile")}>
-                  <h4>{t("Profile")}</h4>
-                  <Detail
-                    className="crm-detail"
-                    label={t("Customer fields")}
-                    items={[
-                      { key: "email", term: "Email", value: <span className="num">{view.email ?? "—"}</span> },
-                      { key: "phone", term: "Phone", value: <span className="num">{view.phone ?? "—"}</span> },
-                      { key: "tags", term: "Tags", value: view.tags.length > 0 ? view.tags.join(", ") : "—" },
-                      { key: "source", term: "Source", value: view.source ?? "—" },
-                    ]}
-                  />
-                </section>
-              </>
-            ),
-          },
-          {
-            id: "activity",
-            label: t("Activity"),
-            panel:
-              timeline.length > 0 ? (
-                <ol className="crm-timeline" aria-label={t("Activity")}>
-                  {timeline.map((item) => (
-                    <li key={item.key}>
-                      <span>{item.text}</span>
-                      {item.note && <span className="text-micro text-ink-400"> — “{item.note}”</span>}
-                      <div className="num text-micro text-ink-500">{when(item.at)}</div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-secondary text-ink-400">{t("No activity recorded yet.")}</p>
-              ),
-          },
-          {
-            id: "details",
-            label: t("Details"),
-            panel: (
-              <section aria-label={t("Record diagnostics")}>
-                <p className="text-micro text-ink-500 mb-2">
-                  {t("Selection is chat context only — the server re-proves scope on every send.")}
-                </p>
-                <p className="num text-micro text-ink-500">
-                  {t("Record")} <span className="num">{recordId}</span> · {t("revision")} r{record.revision} · {t("digest")}{" "}
-                  {record.digest.slice(0, 18)}…
-                </p>
-              </section>
-            ),
-          },
-        ]
-      : [];
+                    {canWrite && <Button size="sm" aria-label={`${t("Edit contact")} ${contact.name}`} onClick={() => openContact(index)}>{t("Edit")}</Button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="crm-sect" aria-label={t("Consent")}>
+            <h4>{t("Consent")}</h4>
+            <div className="crm-consent-cards">
+              <div className="card px-3 py-2" data-consent="email">
+                <div className="text-label text-ink-300">{t("Email marketing")}</div>
+                <span className={`chip ${view.consentEmail === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentEmail))}</span>
+                <div className="text-micro text-ink-500">
+                  {t(view.consentEmail === "granted" ? "Can receive campaigns" : "No marketing until granted")}
+                </div>
+              </div>
+              <div className="card px-3 py-2" data-consent="sms">
+                <div className="text-label text-ink-300">{t("SMS marketing")}</div>
+                <span className={`chip ${view.consentSms === "granted" ? "crm-consent-ok" : ""}`}>{t(consentLabel(view.consentSms))}</span>
+                <div className="text-micro text-ink-500">{t(view.consentSms === null ? "Not recorded" : "Per customer choice")}</div>
+              </div>
+            </div>
+          </section>
+        </div>
+        <aside className="customer-activity-panel" aria-label={t("Recent activity")}>
+          <div className="customer-section-heading">
+            <h4>{t("Recent activity")}</h4>
+            <Button size="sm" onClick={() => openTab("activity")}>{t("View all activity")}</Button>
+          </div>
+          {timeline.length > 0 ? (
+            <ol className="crm-timeline" aria-label={t("Recent activity")}>
+              {timeline.slice(0, 2).map((item) => activityRow(item, "recent"))}
+            </ol>
+          ) : (
+            <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+          )}
+        </aside>
+      </div>
+    ),
+    activity: (
+      <section className="customer-activity-panel" aria-label={t("Activity")}>
+        <h4>{t("Activity")}</h4>
+        <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
+        {activityRecord?.historyTruncated && !activityRecord.historyNextCursor
+          ? <p className="text-micro text-ink-500">{t(record.recordAccess ? "Only recent changes are shown; earlier history may be unavailable after access is enabled." : "Only recent record changes are shown.")}</p>
+          : record.recordAccess && <p className="text-micro text-ink-500">{t("Earlier activity may not be shown when customer access is enabled.")}</p>}
+        <span role="status" className="sr-only">{historyAnnouncement}</span>
+        {timeline.length > 0 ? (
+          <ol ref={activityListRef} tabIndex={-1} className="crm-timeline" aria-label={t("Activity")}>
+            {timeline.map((item) => activityRow(item, "timeline"))}
+          </ol>
+        ) : (
+          <p className="text-secondary text-ink-400">{t(record.recordAccess ? "No visible activity." : "No activity recorded yet.")}</p>
+        )}
+        {historyError && <ErrorNotice onRetry={reload}>{historyError}</ErrorNotice>}
+        {activityRecord?.historyNextCursor && (
+          <Button size="sm" loading={historyBusy} disabled={historyBusy || mode !== "view"} onClick={loadOlder}>
+            {t("Load earlier activity")}
+          </Button>
+        )}
+      </section>
+    ),
+    fields: (
+      <section className="crm-sect" aria-label={t("Custom fields")}>
+        <div className="customer-section-heading">
+          <h4>{t("Custom fields")}</h4>
+          {canWrite && customFields !== null && Object.keys(customFields).length < 64 && (
+            <Button size="sm" onClick={() => openCustomField(null)}>{t("Add field")}</Button>
+          )}
+        </div>
+        {customFields === null ? (
+          <p className="text-secondary text-ink-400">{t("Custom fields are unavailable for this record.")}</p>
+        ) : Object.keys(customFields).length === 0 ? (
+          <p className="text-secondary text-ink-400">{t("No custom fields recorded yet.")}</p>
+        ) : (
+          <ul className="customer-contacts">
+            {Object.entries(customFields).map(([key, field]) => (
+              <li key={key}>
+                <div>
+                  <strong>{field.label}</strong>
+                  <p>{field.type === "boolean" ? t(field.value ? "Yes" : "No") : String(field.value)}</p>
+                  <p className="num">{key}</p>
+                </div>
+                {canWrite && <Button size="sm" aria-label={`${t("Edit field")} ${field.label}`} onClick={() => openCustomField(key)}>{t("Edit")}</Button>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    ),
+    access: (
+      <section className="crm-sect" aria-label={t("Access")}>
+        <h4>{t("Your access")}</h4>
+        <p>{t(canWrite ? "You can view and edit this customer." : "You can view this customer, but cannot edit it.")}</p>
+        <p className="text-secondary text-ink-400">{t("Customer sharing cannot be managed from this screen.")}</p>
+        <details className="crm-diag">
+          <summary>{t("Record diagnostics")}</summary>
+          <p className="text-micro text-ink-500 mb-2">
+            {t("Selection is chat context only — the server re-proves scope on every send.")}
+          </p>
+          <p className="num text-micro text-ink-500">
+            {t("Record")} <span className="num">{recordId}</span> · {t("revision")} r{record.revision} · {t("digest")}{" "}
+            {record.digest.slice(0, 18)}…
+          </p>
+        </details>
+      </section>
+    ),
+  } : null;
 
   const save = (profile: Record<string, unknown>, provenance?: { method: ConsentMethod; note?: string }) => {
-    if (record === null) return;
+    if (!ready || !canWrite || record === null) return;
+    const fence = writeFence.current;
     setPending(true);
     setFormError(null);
     void hostActions
       .update(scope, recordId, record.revision, profile, provenance)
       .then((next) => {
-        queryState.store.write(() => next);
+        if (writeFence.current !== fence) return;
+        recordStore.write(() => next);
         setMode("view");
       })
-      .catch((e: unknown) => setFormError(friendlyError(e)))
-      .finally(() => setPending(false));
+      .catch((e: unknown) => { if (writeFence.current === fence) setFormError(friendlyError(e)); })
+      .finally(() => { if (writeFence.current === fence) setPending(false); });
   };
 
   return (
-    <FrameDrawer
-      fill={fill}
-      kind="customer"
-      kicker={t("Customer")}
-      label={t("Customer details")}
-      title={loading ? t("Customer details") : (view?.displayName ?? t("Customer details"))}
-      avatar={initials || undefined}
-      subtitle={view?.email ?? undefined}
-      pills={
-        view && ready ? (
-          <>
-            <span className="chip" title={t("Email consent")}>{t("Email")}: {t(consentLabel(view.consentEmail))}</span>
-            <span className="chip" title={t("SMS consent")}>{t("SMS:")} {t(consentLabel(view.consentSms))}</span>
-            {view.tags.map((tag) => (
-              <span key={tag} className="chip">{tag}</span>
-            ))}
-          </>
-        ) : undefined
-      }
-      tabs={tabs}
-      state={
-        loading ? (
-          <Loading>{t("Reading the record…")}</Loading>
-        ) : error !== null ? (
-          <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
-        ) : queryState.updating ? <span role="status"><QueryRefresh updating /></span> : undefined
-      }
-      warning={
-        ready && view !== null && view.consentEmail !== "granted" ? (
-          <>
-            <b>{view.displayName} {t("can't receive campaigns.")}</b>{" "}
-            {view.consentEmail === "denied" ? t("Email consent was withdrawn.") : t("No email consent recorded.")}
-          </>
-        ) : undefined
-      }
-      edit={
-        mode !== "view" && canWrite && ready && record !== null
-          ? mode === "edit"
+    <section ref={workspaceRef} className="customer-workspace" aria-label={t("Customer details")}>
+      <button type="button" className="lnk customer-back" onClick={onClose}>← {t("All customers")}</button>
+      <header className="customer-header">
+        <div className="customer-heading">
+          {ready && initials && <span className="customer-avatar" aria-hidden="true">{initials}</span>}
+          <div>
+            <p className="text-micro text-ink-500">{t("Customer")}</p>
+            <h3 ref={headingRef} tabIndex={-1} data-outlet-heading className="text-cardtitle font-medium text-ink-100">
+              {ready && view ? view.displayName : t("Customer details")}
+            </h3>
+            {ready && view && <p className="customer-contact text-label text-ink-400">{[view.email, view.phone].filter(Boolean).join(" · ")}</p>}
+          </div>
+        </div>
+        {ready && (canWrite || view?.email) && (
+          <div className="customer-actions">
+            {view?.email && (
+              <Button size="sm" onClick={() => void navigator.clipboard?.writeText(view.email ?? "")}>
+                {t("Copy email")}
+              </Button>
+            )}
+            {canWrite && (
+              <>
+                <Button size="sm" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
+                <Button size="sm" variant="primary" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
+              </>
+            )}
+          </div>
+        )}
+      </header>
+      {data === null && (inFlight || (error === null && !historyAccessLost && viewer.operator === true)) ? <Loading>{t("Reading the record…")}</Loading>
+        : error !== null ? <ErrorNotice onRetry={reload}>{error}</ErrorNotice>
+          : historyAccessLost ? <ErrorNotice onRetry={reload}>{t("Customer access changed. Reload to continue.")}</ErrorNotice>
+          : !ready ? <Notice>{t("You do not have access to customer records.")}</Notice>
+            : (
+              <>
+                <span role="status"><QueryRefresh updating={inFlight} /></span>
+                {!canWrite && !viewer.canvas && <Notice state="read-only">{t("You can view this customer, but cannot edit it.")}</Notice>}
+                <WorkspaceTabs
+                  idPrefix={CUSTOMER_TAB_PREFIX}
+                  label="Customer sections"
+                  tabs={CUSTOMER_TABS}
+                  active={activeTab}
+                  onChange={setActiveTab}
+                >
+                  {panels?.[activeTab]}
+                </WorkspaceTabs>
+              </>
+            )}
+      {mode !== "view" && canWrite && ready && record !== null && (
+        <FrameDrawer
+          kind="customer-edit"
+          label={t("Customer details")}
+          title={view?.displayName ?? t("Customer details")}
+          tabs={[]}
+          edit={mode === "edit"
             ? {
                 formId: "crm-customer-edit",
-                title: "Edit profile — saving is refused if the record changed since you opened it",
+                title: t("Edit profile — saving is refused if the record changed since you opened it"),
                 pending,
                 onCancel: () => setMode("view"),
                 body: (
@@ -1058,10 +1461,10 @@ export function CustomerDrawer({
                   />
                 ),
               }
-            : {
+            : mode === "consent" ? {
                 formId: "crm-customer-consent",
-                title: "Record consent",
-                saveLabel: "Save consent",
+                title: t("Record consent"),
+                saveLabel: t("Save consent"),
                 pending,
                 onCancel: () => setMode("view"),
                 body: (
@@ -1074,37 +1477,123 @@ export function CustomerDrawer({
                   />
                 ),
               }
-          : null
-      }
-      secondary={
-        ready ? (
-          <>
-            {view?.email ? (
-              <Button size="sm" onClick={() => void navigator.clipboard?.writeText(view.email ?? "")}>
-                {t("Copy email")}
-              </Button>
-            ) : null}
-            {canWrite ? (
-              <Button size="sm" onClick={() => { setEditRecord(record); setMode("edit"); setFormError(null); }}>
-                {t("Edit")}
-              </Button>
-            ) : null}
-          </>
-        ) : undefined
-      }
-      primary={
-        ready && canWrite ? (
-          <Button size="sm" variant="primary" onClick={() => { setEditRecord(record); setMode("consent"); setFormError(null); }}>
-            {t("Record consent")}
-          </Button>
-        ) : undefined
-      }
-      note={
-        ready && !canWrite && !viewer.canvas
-          ? t(viewer.operator ? "Read-only view. Edits are disabled on this board." : "Read-only view. Sign in as the operator to edit.")
-          : undefined
-      }
-      onClose={onClose}
-    />
+            : mode === "contact" ? {
+                formId: "crm-customer-contact",
+                title: t(contactIndex === null ? "Add contact" : "Edit contact"),
+                saveLabel: t("Save contact"),
+                pending,
+                onCancel: () => setMode("view"),
+                body: contacts === null ? <Notice>{t("Contacts are unavailable for this record.")}</Notice> : (
+                  <ContactForm
+                    key={`${record.revision}-${contactIndex ?? "new"}`}
+                    formId="crm-customer-contact"
+                    initial={{
+                      name: contactIndex === null ? "" : contacts[contactIndex]?.name ?? "",
+                      title: contactIndex === null ? "" : contacts[contactIndex]?.title ?? "",
+                      email: contactIndex === null ? "" : contacts[contactIndex]?.email ?? "",
+                      phone: contactIndex === null ? "" : contacts[contactIndex]?.phone ?? "",
+                    }}
+                    pending={pending}
+                    formError={formError}
+                    onSubmit={(fields) => {
+                      try {
+                        save(changeCustomerContacts(contacts, contactIndex, fields));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    }}
+                    {...(contactIndex === null ? {} : { onRemove: () => {
+                      try {
+                        save(changeCustomerContacts(contacts, contactIndex, null));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    } })}
+                  />
+                ),
+              }
+            : {
+                formId: "crm-customer-custom-field",
+                title: t(customKey === null ? "Add field" : "Edit field"),
+                saveLabel: t("Save field"),
+                pending,
+                onCancel: () => setMode("view"),
+                body: customFields === null ? <Notice>{t("Custom fields are unavailable for this record.")}</Notice> : (
+                  <CustomFieldForm
+                    key={`${record.revision}-${customKey ?? "new"}`}
+                    editing={customKey !== null}
+                    initial={{
+                      key: customKey ?? "",
+                      label: customKey === null ? "" : customFields[customKey]?.label ?? "",
+                      type: customKey === null ? "text" : customFields[customKey]?.type ?? "text",
+                      value: customKey === null ? "" : String(customFields[customKey]?.value ?? ""),
+                    }}
+                    pending={pending}
+                    formError={formError}
+                    onSubmit={(fields) => {
+                      try {
+                        save(changeCustomerCustomFields(customFields, customKey, fields));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    }}
+                    {...(customKey === null ? {} : { onRemove: () => {
+                      try {
+                        save(changeCustomerCustomFields(customFields, customKey, null));
+                      } catch (e: unknown) {
+                        setFormError(friendlyError(e, t));
+                      }
+                    } })}
+                  />
+                ),
+              }
+          }
+          onClose={() => setMode("view")}
+        />
+      )}
+      {ready && mode === "view" && activity && (
+        <FrameDrawer
+          kind="customer-activity"
+          label={t("Activity details")}
+          title={t("Activity details")}
+          tabs={[{
+            id: "details",
+            label: t("Details"),
+            panel: (
+              <div className="customer-activity-details">
+                <section>
+                  <h4>{t("Activity summary")}</h4>
+                  <p>{activity.text}</p>
+                </section>
+                {activity.note && <section><h4>{t("Note")}</h4><p>{activity.note}</p></section>}
+                {activity.changes && activity.changes.length > 0 && (
+                  <section aria-label={t("Changed fields")}>
+                    <h4>{t("Changed fields")}</h4>
+                    <ul className="customer-changes">
+                      {activity.changes.map((change) => (
+                        <li key={change.field}>
+                          <h5>{change.field}</h5>
+                          <dl>
+                            <div><dt>{t("Before")}</dt><dd>{change.before}</dd></div>
+                            <div><dt>{t("After")}</dt><dd>{change.after}</dd></div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                <Detail className="crm-detail" label={t("Activity details")} items={[
+                  { key: "type", term: t("Type"), value: t(activity.kind === "note" ? "Note" : activity.kind === "consent" ? "Consent" : "Record change") },
+                  { key: "actor", term: t("Recorded by"), value: activity.actor === "operator" ? t("the operator") : (activity.actor || t("Not recorded")) },
+                  { key: "date", term: t("Recorded at"), value: when(activity.at, true) },
+                  ...(activity.revision === undefined ? [] : [{ key: "revision", term: t("Revision"), value: `r${activity.revision}` }]),
+                ]} />
+              </div>
+            ),
+          }]}
+          onClose={() => setSelectedActivity(null)}
+        />
+      )}
+    </section>
   );
 }

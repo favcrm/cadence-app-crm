@@ -33,6 +33,7 @@ export interface ListReceipt {
   total: number | null;
   truncated: boolean;
   nextCursor: string | null;
+  hostAssignedCreateId: boolean;
 }
 
 /** One record row as the daemon returns it: identity plus profile. */
@@ -43,8 +44,11 @@ export interface HostRecord {
   kind: string;
   revision: number;
   digest: string;
+  recordAccess?: { canWrite: boolean };
   profile: unknown;
   history?: unknown;
+  historyTruncated?: boolean;
+  historyNextCursor?: string;
   consentHistory?: unknown;
   notes?: CustomerNote[];
 }
@@ -129,6 +133,20 @@ export function parseRecord(value: unknown): HostRecord {
   if (typeof row.id !== "string" || !Number.isSafeInteger(row.revision) || (row.revision as number) < 1 || typeof row.digest !== "string") {
     throw new ApiError("The server returned an invalid app receipt", 502);
   }
+  const access = row.record_access;
+  if (Object.hasOwn(row, "record_access") && (
+    access === null || typeof access !== "object" || Array.isArray(access) ||
+    typeof (access as Record<string, unknown>).can_write !== "boolean"
+  )) throw new ApiError("The server returned an invalid record access decision", 502);
+  const historyTruncated = row.history_truncated;
+  if (Object.hasOwn(row, "history_truncated") && typeof historyTruncated !== "boolean") {
+    throw new ApiError("The server returned an invalid history decision", 502);
+  }
+  const historyNextCursor = row.history_next_cursor;
+  if (Object.hasOwn(row, "history_next_cursor") && (
+    typeof historyNextCursor !== "string" || !/^[a-f0-9]{32}$/.test(historyNextCursor) ||
+    historyTruncated !== true || !Array.isArray(row.history) || row.history.length === 0
+  )) throw new ApiError("The server returned an invalid history cursor", 502);
   return {
     id: row.id,
     install_id: typeof row.install_id === "string" ? row.install_id : "",
@@ -136,8 +154,11 @@ export function parseRecord(value: unknown): HostRecord {
     kind: typeof row.kind === "string" ? row.kind : "",
     revision: row.revision as number,
     digest: row.digest,
+    ...(access === undefined ? {} : { recordAccess: { canWrite: (access as { can_write: boolean }).can_write } }),
     profile: row.profile,
     history: row.history,
+    ...(typeof historyTruncated === "boolean" ? { historyTruncated } : {}),
+    ...(typeof historyNextCursor === "string" ? { historyNextCursor } : {}),
     consentHistory: (row as Record<string, unknown>).consent_history,
     notes: Array.isArray(row.notes)
       ? row.notes.flatMap((item): CustomerNote[] => {
@@ -156,9 +177,33 @@ export function parseRecord(value: unknown): HostRecord {
   };
 }
 
+/** Never combine pages from different records, revisions or access decisions. */
+export function appendHistoryPage(current: HostRecord, page: HostRecord): HostRecord {
+  if (
+    !current.historyNextCursor || !Array.isArray(current.history) || !Array.isArray(page.history) ||
+    page.id !== current.id || page.install_id !== current.install_id ||
+    page.context_id !== current.context_id || page.kind !== current.kind ||
+    page.revision !== current.revision || page.digest !== current.digest ||
+    page.recordAccess?.canWrite !== current.recordAccess?.canWrite ||
+    typeof page.historyTruncated !== "boolean" ||
+    page.historyNextCursor === current.historyNextCursor
+  ) throw new ApiError("Customer changed while loading activity; reload it.", 409, { code: "record_changed" });
+  return {
+    ...current,
+    history: [...current.history, ...page.history],
+    historyTruncated: page.historyTruncated,
+    historyNextCursor: page.historyNextCursor,
+  };
+}
+
 export function parseRecordList(value: unknown): ListReceipt {
-  const page = value as { records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown } | null;
+  const page = value as { records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown; record_access?: unknown } | null;
   if (!Array.isArray(page?.records)) throw new ApiError("The server returned an invalid app receipt", 502);
+  const access = page.record_access;
+  if (Object.hasOwn(page, "record_access") && (
+    access === null || typeof access !== "object" || Array.isArray(access) ||
+    (access as Record<string, unknown>).create_id !== "host"
+  )) throw new ApiError("The server returned an invalid customer creation policy", 502);
   const total = typeof page.total === "number" && Number.isSafeInteger(page.total) && page.total >= page.records.length
     ? page.total : null;
   return {
@@ -166,6 +211,7 @@ export function parseRecordList(value: unknown): ListReceipt {
     total,
     truncated: page.truncated === true,
     nextCursor: typeof page.next_cursor === "string" ? page.next_cursor : null,
+    hostAssignedCreateId: access !== undefined,
   };
 }
 
@@ -200,20 +246,24 @@ export const hostActions = {
     return parseRecordList(value);
   },
   /** `GET …/records/:id` — one row under the same URL scope. */
-  async show(scope: HostScope, recordId: string): Promise<HostRecord> {
+  async show(scope: HostScope, recordId: string, historyCursor?: string): Promise<HostRecord> {
     assertRecordId(recordId);
-    return parseRecord(await serviceCall<unknown>(scope, "records.show", { record_id: recordId }));
+    if (historyCursor !== undefined && !/^[a-f0-9]{32}$/.test(historyCursor)) {
+      throw new ApiError("invalid history cursor", 400);
+    }
+    return parseRecord(await serviceCall<unknown>(scope, "records.show", {
+      record_id: recordId, ...(historyCursor === undefined ? {} : { history_cursor: historyCursor }),
+    }));
   },
-  /** `POST …/records` — body is `{record_id, profile}` plus optional
-   *  `consent_provenance` when the new customer is created Granted. */
+  /** On supporting hosts the record ID is allocated by the host. */
   async create(
     scope: HostScope,
-    recordId: string,
+    recordId: string | null,
     profile: unknown,
     consentProvenance?: ConsentProvenance,
   ): Promise<HostRecord> {
-    assertRecordId(recordId);
-    const body: Record<string, unknown> = { record_id: recordId, profile };
+    if (recordId !== null) assertRecordId(recordId);
+    const body: Record<string, unknown> = { ...(recordId === null ? {} : { record_id: recordId }), profile };
     if (consentProvenance !== undefined) body.consent_provenance = consentProvenance;
     assertCleanBody(body, CREATE_KEYS);
     return parseRecord(await serviceCall<unknown>(scope, "records.create", body));
