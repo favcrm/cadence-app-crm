@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 339275,
-      "sha256": "sha256:5b9b541bcd04658000e59a153d17d068f468723b0d0d0f88d38753a35097f0cd"
+      "size": 343863,
+      "sha256": "sha256:fc14939d154376fb8810ff3eae7c23b9cd7de2d29c57e2203dd7c6dd0a4b3ac0"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:c7f8de522d5ca297639eb6bad63e1db06db82dbf87aa2d818b676bfa51a57814",
+    "source_digest": "sha256:8e69f3074cc5312106645367ebd603bf769a0952ec6a8e10ee31841801ea2d3d",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
@@ -42,6 +42,8 @@
     "records.show",
     "records.create",
     "records.update",
+    "records.aggregate",
+    "records.batch",
     "records.csv.preview",
     "segments.list",
     "segments.show",

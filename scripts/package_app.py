@@ -78,7 +78,16 @@ DESCRIPTOR_CONTRACTS = {
     "app-chat.json": "app-chat/v1",
     "app-storage.json": "app-storage/v1",
 }
-TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens", "storage")
+TOP_DIRS = ("workflows", "rubrics", "templates", "views", "bindings", "screens", "storage", "skills")
+SKILL_DIR = "skills"
+SKILL_MANIFEST = "skill.json"
+SKILL_ENTRY = "SKILL.md"
+SKILL_MANIFEST_KEYS = ("schema", "name", "files")
+SKILL_SUBDIRS = ("scripts", "references")
+MAX_SKILL_MANIFEST_BYTES = 4096
+MAX_SKILL_ENTRY_BYTES = 16 * 1024
+MAX_SKILL_PACKAGE_BYTES = 256 * 1024
+MAX_SKILL_FILES = 32
 STORAGE_DESCRIPTOR = "app-storage.json"
 STORAGE_DIR = "storage"
 STORAGE_CONTRACT = "app-storage/v1"
@@ -114,8 +123,23 @@ STORAGE_DESCRIPTOR_KEYS = (
     "migrations",
     "record_write_schema",
     "record_search_columns",
+    "tables",
 )
-OPTIONAL_DESCRIPTOR_KEYS = ("record_write_schema", "record_search_columns")
+OPTIONAL_DESCRIPTOR_KEYS = ("record_write_schema", "record_search_columns", "tables")
+TABLE_OPTION_KEYS = (
+    "search_columns",
+    "write_schema",
+    "append_only",
+    "read_role",
+    "immutable_columns",
+    "transition_guards",
+    "references",
+    "balanced",
+    "seal_on_create_by",
+    "atomic_children",
+    "lock",
+    "row_owner",
+)
 MIGRATION_KEYS = ("version", "path", "sha256")
 COLUMN_KEYS = ("name", "type", "nullable", "default", "max_length", "enum", "format", "json_schema")
 JSON_SCHEMA_TYPES = ("object", "array", "string", "number", "integer", "boolean", "null")
@@ -676,6 +700,48 @@ def bundle_files(root: Path) -> list[str]:
                 if entry.is_symlink() or not entry.is_file(follow_symlinks=False) or not screen_leaf(entry.name):
                     raise PackageError(f"invalid screen member {rel}")
                 files.append(rel)
+            continue
+        if top == SKILL_DIR:
+            for tag_entry in sorted(os.scandir(root / top), key=lambda e: e.name):
+                tag = tag_entry.name
+                _check_utf8_name(tag, top)
+                if tag.startswith("."):
+                    raise PackageError(f"app source entry '{top}/{tag}': dotfiles are not app content")
+                if tag_entry.is_symlink():
+                    raise PackageError(
+                        f"app source entry '{top}/{tag}': a symlink — an app folder holds real files only"
+                    )
+                if not tag_entry.is_dir(follow_symlinks=False):
+                    raise PackageError(f"app source entry '{top}/{tag}': a skill package is a <tag>/ directory")
+                _check_tag(tag, "skill name")
+                for leaf in sorted(os.scandir(root / top / tag), key=lambda e: e.name):
+                    leaf_name = leaf.name
+                    rel = f"{top}/{tag}/{leaf_name}"
+                    _check_utf8_name(leaf_name, rel)
+                    if leaf_name.startswith("."):
+                        raise PackageError(f"app source entry '{rel}': dotfiles are not app content")
+                    if leaf.is_symlink():
+                        raise PackageError(
+                            f"app source entry '{rel}': a symlink — an app folder holds real files only"
+                        )
+                    if leaf.is_dir(follow_symlinks=False):
+                        if leaf_name not in SKILL_SUBDIRS:
+                            raise PackageError(f"app source entry '{rel}': skill packages only nest scripts/ or references/")
+                        for member in sorted(os.scandir(root / rel), key=lambda e: e.name):
+                            member_name = member.name
+                            member_rel = f"{rel}/{member_name}"
+                            _check_utf8_name(member_name, member_rel)
+                            if member_name.startswith("."):
+                                raise PackageError(f"app source entry '{member_rel}': dotfiles are not app content")
+                            if member.is_symlink():
+                                raise PackageError(f"app source entry '{member_rel}': symlinks refuse")
+                            if member.is_dir(follow_symlinks=False) or not member.is_file(follow_symlinks=False):
+                                raise PackageError(f"app source entry '{member_rel}': nested directory or non-file refuses")
+                            files.append(member_rel)
+                        continue
+                    if not leaf.is_file(follow_symlinks=False):
+                        raise PackageError(f"app source entry '{rel}': not a regular file")
+                    files.append(rel)
             continue
         for entry in sorted(os.scandir(root / top), key=lambda e: e.name):
             name = entry.name
@@ -1371,6 +1437,90 @@ def _check_app_storage(
             if name in seen:
                 raise PackageError(f"{where}: record_search_columns repeats column '{name}'")
             seen.append(name)
+    if "tables" in doc:
+        tables = doc["tables"]
+        if not isinstance(tables, dict) or len(tables) > MAX_STORAGE_TABLES:
+            raise PackageError(f"{where}: {STORAGE_DESCRIPTOR} tables must map up to {MAX_STORAGE_TABLES} declared tables")
+        for table_name, opts in tables.items():
+            if not isinstance(table_name, str) or table_name not in model:
+                raise PackageError(f"{where}: tables.{table_name} names an undeclared table")
+            if not isinstance(opts, dict) or not set(opts).issubset(TABLE_OPTION_KEYS):
+                raise PackageError(f"{where}: tables.{table_name} has invalid option key(s)")
+            if table_name == default_table and ("search_columns" in opts or "write_schema" in opts):
+                raise PackageError(
+                    f"{where}: tables.{table_name} may not declare search_columns or write_schema on default_table"
+                )
+            columns = model[table_name]["columns"]
+            for field_key, allowed_types in (("search_columns", ("text", "json")), ("immutable_columns", ("text",))):
+                if field_key in opts:
+                    cols = opts[field_key]
+                    if not isinstance(cols, list) or not 1 <= len(cols) <= MAX_TABLE_COLUMNS or len(set(cols)) != len(cols):
+                        raise PackageError(f"{where}: tables.{table_name}.{field_key} must list distinct columns")
+                    for col_name in cols:
+                        if not isinstance(col_name, str) or col_name not in columns:
+                            raise PackageError(f"{where}: tables.{table_name}.{field_key} names unknown column '{col_name}'")
+                        if columns[col_name]["type"] not in allowed_types:
+                            raise PackageError(
+                                f"{where}: tables.{table_name}.{field_key} column '{col_name}' must have type {allowed_types}"
+                            )
+            if "write_schema" in opts:
+                _storage_json_schema(opts["write_schema"], where, f"{STORAGE_DESCRIPTOR} tables.{table_name}.write_schema")
+
+
+def _check_skills(contents: list[tuple[str, bytes]], where: str) -> None:
+    by_tag: dict[str, dict[str, bytes]] = {}
+    for rel, data in contents:
+        parts = PurePosixPath(rel).parts
+        if parts and parts[0] == SKILL_DIR:
+            if len(parts) < 3 or len(parts) > 4:
+                raise PackageError(f"{where}: {rel}: invalid skill path")
+            tag = parts[1]
+            _check_tag(tag, "skill name")
+            member = "/".join(parts[2:])
+            by_tag.setdefault(tag, {})[member] = data
+    for tag, members in sorted(by_tag.items()):
+        if SKILL_MANIFEST not in members:
+            raise PackageError(f"{where}: skills/{tag}/ is missing {SKILL_MANIFEST}")
+        raw = members[SKILL_MANIFEST]
+        if len(raw) > MAX_SKILL_MANIFEST_BYTES:
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_MANIFEST} exceeds {MAX_SKILL_MANIFEST_BYTES} bytes")
+        doc = _storage_json(raw, where, f"skills/{tag}/{SKILL_MANIFEST}")
+        if not isinstance(doc, dict) or set(doc) != set(SKILL_MANIFEST_KEYS):
+            raise PackageError(
+                f"{where}: skills/{tag}/{SKILL_MANIFEST} must hold exact keys {sorted(SKILL_MANIFEST_KEYS)}"
+            )
+        if not _is_int(doc["schema"]) or doc["schema"] != 1:
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_MANIFEST} schema must be integer 1")
+        if doc["name"] != tag:
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_MANIFEST} name must match directory '{tag}'")
+        declared = doc["files"]
+        if (
+            not isinstance(declared, list)
+            or not 1 <= len(declared) <= MAX_SKILL_FILES
+            or any(not isinstance(item, str) or not item for item in declared)
+            or len(set(declared)) != len(declared)
+        ):
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_MANIFEST} files must be 1..{MAX_SKILL_FILES} distinct strings")
+        if SKILL_MANIFEST in declared or SKILL_ENTRY not in declared:
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_MANIFEST} files must include {SKILL_ENTRY} and omit {SKILL_MANIFEST}")
+        for entry in declared:
+            parts = entry.split("/")
+            if len(parts) == 1:
+                if parts[0].startswith("."):
+                    raise PackageError(f"{where}: skills/{tag}/{entry}: dotfile refuses")
+            elif len(parts) == 2 and parts[0] in SKILL_SUBDIRS and parts[1] and not parts[1].startswith("."):
+                pass
+            else:
+                raise PackageError(f"{where}: skills/{tag}/{entry}: invalid skill member path")
+        present_files = {k for k in members if k != SKILL_MANIFEST}
+        if set(declared) != present_files:
+            raise PackageError(
+                f"{where}: skills/{tag}/{SKILL_MANIFEST} files {sorted(declared)} != present {sorted(present_files)}"
+            )
+        if len(members[SKILL_ENTRY]) > MAX_SKILL_ENTRY_BYTES:
+            raise PackageError(f"{where}: skills/{tag}/{SKILL_ENTRY} exceeds {MAX_SKILL_ENTRY_BYTES} bytes")
+        if sum(len(b) for b in members.values()) > MAX_SKILL_PACKAGE_BYTES:
+            raise PackageError(f"{where}: skills/{tag}/ exceeds {MAX_SKILL_PACKAGE_BYTES} bytes")
 
 
 def check_pairing(manifest: Manifest, files: list[str], where: str) -> None:
@@ -1485,6 +1635,7 @@ def check_file_bytes(
         if rel in DESCRIPTOR_CONTRACTS:
             _check_descriptor_json(rel, text, where)
     _check_app_storage(contents, where, app)
+    _check_skills(contents, where)
 
 
 def read_manifest(root: Path, files: list[str] | None = None) -> Manifest:
@@ -1890,6 +2041,15 @@ def _check_member_tree(rels: list[str], archive_name: str) -> None:
             files.append(rel)
             dirs.add("screens")
             continue
+        if parts and parts[0] == SKILL_DIR and not rel.endswith("/"):
+            if len(parts) < 3 or len(parts) > 4 or any(p.startswith(".") for p in parts):
+                raise PackageError(f"{archive_name}: member {rel} — invalid skill member path")
+            _check_tag(parts[1], "skill name")
+            if len(parts) == 4 and parts[2] not in SKILL_SUBDIRS:
+                raise PackageError(f"{archive_name}: member {rel} — skills only nest scripts/ or references/")
+            files.append(rel)
+            dirs.add(SKILL_DIR)
+            continue
         if len(parts) != 2 or rel.endswith("/"):
             # A rel that is not exactly `top/name`, or a file member whose
             # name ends in `/` (masquerading as a directory entry), has no
@@ -1950,6 +2110,14 @@ def _check_member_dir(drel: str, archive_name: str, prefix: str, full: str) -> N
             f"{archive_name}: directory member {full} is outside the bundle root {prefix}"
         )
     if drel.rstrip("/") == "screens/crm":
+        return
+    clean_dir = drel.rstrip("/")
+    dir_parts = PurePosixPath(clean_dir).parts
+    if len(dir_parts) == 2 and dir_parts[0] == SKILL_DIR and not dir_parts[1].startswith("."):
+        _check_tag(dir_parts[1], "skill name")
+        return
+    if len(dir_parts) == 3 and dir_parts[0] == SKILL_DIR and not dir_parts[1].startswith(".") and dir_parts[2] in SKILL_SUBDIRS:
+        _check_tag(dir_parts[1], "skill name")
         return
     if not drel or "/" in drel.rstrip("/"):
         raise PackageError(

@@ -31,7 +31,7 @@ type CustomerFormFields,
 import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
-import { appendHistoryPage,hostActions,parseRecordList,type ConsentMethod,type ConsentProvenance,type HostRecord,type HostScope } from "../hostActions";
+import { appendHistoryPage,hostActions,parseRecordList,type ConsentMethod,type ConsentProvenance,type CustomerNoteRecord,type HostRecord,type HostScope } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
@@ -1099,7 +1099,50 @@ function CustomerWorkspace({
   const record = data === null ? null : mode === "view" ? data : editRecord;
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  useEffect(() => { setMode("view"); setEditRecord(null); setFormError(null); }, [recordId]);
+  const [notes, setNotes] = useState<CustomerNoteRecord[]>([]);
+  const [notesUnsupported, setNotesUnsupported] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [notePending, setNotePending] = useState(false);
+  const [noteFormError, setNoteFormError] = useState<string | null>(null);
+  const [confirmArchiveId, setArchiveConfirmId] = useState<string | null>(null);
+  const notesRequest = useRef(0);
+  const refreshNotes = () => {
+    const req = ++notesRequest.current;
+    setNotesError(null);
+    void hostActions.listNotes(scope, recordId)
+      .then((rows) => {
+        if (notesRequest.current !== req) return;
+        setNotes(rows);
+        setNotesUnsupported(false);
+      })
+      .catch((err: unknown) => {
+        if (notesRequest.current !== req) return;
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) {
+          setNotes([]);
+          setNotesUnsupported(true);
+        } else {
+          setNotesError(friendlyError(err));
+        }
+      });
+  };
+  useEffect(() => {
+    setMode("view");
+    setEditRecord(null);
+    setFormError(null);
+    setNoteDraft("");
+    setNoteFormError(null);
+    setArchiveConfirmId(null);
+    setNotes([]);
+    setNotesUnsupported(false);
+    setNotesError(null);
+  }, [recordId, scope]);
+  useEffect(() => {
+    if (viewer.operator === true && data !== null) {
+      refreshNotes();
+    }
+    return () => { notesRequest.current += 1; };
+  }, [recordId, scope, viewer.operator, data !== null]);
   useEffect(() => {
     const wasEditing = previousMode.current !== "view";
     previousMode.current = mode;
@@ -1294,6 +1337,99 @@ function CustomerWorkspace({
     ),
     activity: (
       <section className="customer-activity-panel" aria-label={t("Activity")}>
+        <div className="crm-sect">
+          <h4>{t("Notes")}</h4>
+          {canWrite && !notesUnsupported && (
+            <form
+              className="grid gap-2 mb-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = noteDraft.trim();
+                if (trimmed.length === 0 || trimmed.length > 4000) {
+                  setNoteFormError(t("Note must be 1–4000 characters"));
+                  return;
+                }
+                setNotePending(true);
+                setNoteFormError(null);
+                void hostActions
+                  .createNote(scope, recordId, trimmed)
+                  .then(() => {
+                    setNoteDraft("");
+                    refreshNotes();
+                  })
+                  .catch((err: unknown) => setNoteFormError(friendlyError(err)))
+                  .finally(() => setNotePending(false));
+              }}
+            >
+              <Field label={t("Note text")} id="crm-note-body" className="crm-field">
+                {(c) => (
+                  <textarea
+                    {...c}
+                    className="field"
+                    rows={3}
+                    maxLength={4000}
+                    value={noteDraft}
+                    onChange={(e) => { setNoteDraft(e.target.value); setNoteFormError(null); }}
+                  />
+                )}
+              </Field>
+              {noteFormError && <ErrorNotice bare>{noteFormError}</ErrorNotice>}
+              <div>
+                <Button type="submit" size="sm" variant="primary" loading={notePending} disabled={notePending || !noteDraft.trim()}>
+                  {t("Save note")}
+                </Button>
+              </div>
+            </form>
+          )}
+          {notesUnsupported ? (
+            <p className="text-secondary text-ink-400">{t("Notes are unavailable on this board.")}</p>
+          ) : notesError ? (
+            <ErrorNotice onRetry={refreshNotes}>{notesError}</ErrorNotice>
+          ) : notes.length === 0 ? (
+            <p className="text-secondary text-ink-400">{t("No notes recorded yet.")}</p>
+          ) : (
+            <ul className="customer-contacts" aria-label={t("Notes")}>
+              {notes.map((note) => (
+                <li key={note.id}>
+                  <div>
+                    <p>{note.body}</p>
+                  </div>
+                  {canWrite && (confirmArchiveId === note.id ? (
+                    <div className="customer-remove-confirm">
+                      <p>{t("Archive this note?")}</p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={notePending}
+                        onClick={() => {
+                          setNotePending(true);
+                          setNoteFormError(null);
+                          void hostActions
+                            .archiveNote(scope, note.id, note.revision)
+                            .then(() => {
+                              setArchiveConfirmId(null);
+                              refreshNotes();
+                            })
+                            .catch((err: unknown) => setNoteFormError(friendlyError(err)))
+                            .finally(() => setNotePending(false));
+                        }}
+                      >
+                        {t("Confirm archive")}
+                      </Button>
+                      <Button type="button" size="sm" disabled={notePending} onClick={() => setArchiveConfirmId(null)}>
+                        {t("Keep note")}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button type="button" size="sm" disabled={notePending} onClick={() => setArchiveConfirmId(note.id)}>
+                      {t("Archive")}
+                    </Button>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <h4>{t("Activity")}</h4>
         <p className="text-micro text-ink-500">{t("Shows profile changes and available notes only.")}</p>
         {activityRecord?.historyTruncated && !activityRecord.historyNextCursor

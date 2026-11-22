@@ -63,6 +63,15 @@ export interface CustomerNote {
   created: number;
 }
 
+/** App-owned customer note stored in `table: "notes"` (schema v6). */
+export interface CustomerNoteRecord {
+  id: string;
+  revision: number;
+  customerId: string;
+  body: string;
+  archivedAt: string | null;
+}
+
 /** How consent was given (CAD-1053). Granting requires one; the note is optional (≤280). */
 export type ConsentMethod = "in_person" | "web_form" | "written" | "imported" | "other";
 export interface ConsentProvenance {
@@ -215,6 +224,38 @@ export function parseRecordList(value: unknown): ListReceipt {
   };
 }
 
+export function parseNoteRecord(row: unknown): CustomerNoteRecord {
+  if (!row || typeof row !== "object") throw new ApiError("The server returned an invalid customer note", 502);
+  const item = row as Record<string, unknown>;
+  const profile = item.profile;
+  if (
+    typeof item.id !== "string" ||
+    typeof item.revision !== "number" ||
+    !Number.isSafeInteger(item.revision) ||
+    item.revision < 1 ||
+    !profile ||
+    typeof profile !== "object" ||
+    Array.isArray(profile)
+  ) {
+    throw new ApiError("The server returned an invalid customer note", 502);
+  }
+  const fields = profile as Record<string, unknown>;
+  if (typeof fields.customer_id !== "string" || typeof fields.body !== "string") {
+    throw new ApiError("The server returned an invalid customer note", 502);
+  }
+  const archived = fields.archived_at;
+  if (archived !== undefined && archived !== null && typeof archived !== "string") {
+    throw new ApiError("The server returned an invalid customer note", 502);
+  }
+  return {
+    id: item.id,
+    revision: item.revision,
+    customerId: fields.customer_id,
+    body: fields.body,
+    archivedAt: archived ?? null,
+  };
+}
+
 export const hostActions = {
   guards: { assertScope, assertRecordId, assertCleanBody },
   /** `GET …/records` — the server scopes rows to the URL's install/context.
@@ -284,5 +325,55 @@ export const hostActions = {
     if (consentProvenance !== undefined) body.consent_provenance = consentProvenance;
     assertCleanBody(body, UPDATE_KEYS);
     return parseRecord(await serviceCall<unknown>(scope, "records.update", { record_id: recordId, ...body }));
+  },
+  async listNotes(scope: HostScope, customerId: string): Promise<CustomerNoteRecord[]> {
+    assertRecordId(customerId);
+    const value = await serviceCall<{ records?: unknown }>(scope, "records.list", {
+      table: "notes",
+      filters: [{ field: "customer_id", op: "eq", value: customerId }],
+      limit: 100,
+    });
+    if (!Array.isArray(value?.records)) {
+      throw new ApiError("The server returned an invalid customer notes receipt", 502);
+    }
+    return value.records.map(parseNoteRecord).filter((note) => note.archivedAt === null);
+  },
+  async createNote(
+    scope: HostScope,
+    customerId: string,
+    bodyText: string,
+    noteId?: string,
+  ): Promise<CustomerNoteRecord> {
+    assertRecordId(customerId);
+    const trimmed = bodyText.trim();
+    if (trimmed.length === 0 || trimmed.length > 4000) {
+      throw new ApiError("Note must be 1–4000 characters", 400);
+    }
+    const id = noteId ?? `note-${crypto.randomUUID()}`;
+    assertRecordId(id);
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.create", {
+      table: "notes",
+      record_id: id,
+      profile: { customer_id: customerId, body: trimmed },
+    });
+    return parseNoteRecord(value?.record);
+  },
+  async archiveNote(
+    scope: HostScope,
+    noteId: string,
+    expectedRevision: number,
+    archivedAt = new Date().toISOString(),
+  ): Promise<CustomerNoteRecord> {
+    assertRecordId(noteId);
+    if (!Number.isInteger(expectedRevision) || expectedRevision <= 0) {
+      throw new ApiError("expected record revision must be a positive integer", 400);
+    }
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.update", {
+      table: "notes",
+      record_id: noteId,
+      expected_revision: expectedRevision,
+      profile: { archived_at: archivedAt },
+    });
+    return parseNoteRecord(value?.record);
   },
 };

@@ -1,0 +1,28 @@
+{
+  "version": 6,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "notes",
+      "columns": [
+        {"name": "customer_id", "type": "text", "nullable": false, "max_length": 128},
+        {"name": "body", "type": "text", "nullable": false, "max_length": 4000},
+        {"name": "archived_at", "type": "text", "nullable": true, "default": null, "max_length": 64}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "notes",
+      "name": "notes_customer_id",
+      "columns": ["customer_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "notes",
+      "name": "notes_archived_at",
+      "columns": ["archived_at"],
+      "unique": false
+    }
+  ]
+}
