@@ -140,6 +140,10 @@ function pagedHistory<T extends LocalRecord>(record: T, cursor: unknown) {
 /** The same contract shape the paired host serves: recorded facts only.
  *  `next_decision` is never serialized — the app derives it. */
 export function fixtureCall(verb: string, args: Record<string, unknown>): unknown {
+  // `?owner=required` answers every owner-only table read the way the host answers a member (CRM-28).
+  if (params.get("owner") === "required" && /^(segments|exclusions|suppressions|content|proposals|sender-bindings|sends|smtp|origin)\.(list|show)$/.test(verb)) {
+    throw new ApiError("Only an owner may read this table's records.", 403, { code: "owner_required" });
+  }
   switch (verb) {
     case "records.list": {
       if (args.table === "notes") {

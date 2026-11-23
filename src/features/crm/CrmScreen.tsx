@@ -1,5 +1,6 @@
-import { ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
+import { EmptyState,ErrorNotice,Loading,NavigationProvider } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
+import { useOwnerRefused } from "../../bridge/ownerGate";
 import { FrameNavigationAdapter,patchRoute } from "../../bridge/route";
 import { readRecordParam } from "../../domain/routeParams";
 import { scopeError,useCanvasReadOnly,useScope } from "../../bridge/scope";
@@ -9,12 +10,18 @@ import "./crm-campaign.css";
 import "./crm-drawer.css";
 import Customers from "./customers/Customers";
 import Segments from "./segments/Segments";
-import { CrmLocaleProvider } from "./locale";
+import { CrmLocaleProvider,useTranslate } from "./locale";
 // Waiting longer than this for the first verified host push means the host
 // is unreachable; the screen says so explicitly instead of spinning forever.
 const HOST_PUSH_TIMEOUT_MS = 15000;
+/** A member is refused an owner-only section's reads: one calm state in place of it, nothing partial, no retry. */
+function OwnerOnly({ section }: { section: "segments" | "campaigns" }) {
+  const t = useTranslate();
+  return <EmptyState name="owner-only" title={section === "segments" ? t("Only workspace owners can view segments.") : t("Only workspace owners can view campaigns.")}>{t("Ask a workspace owner if you need this.")}</EmptyState>;
+}
 export default function CrmScreen() {
   const snapshot = useScope();
+  const ownerRefused = useOwnerRefused();
   const canvas = useCanvasReadOnly();
   const [unreachable, setUnreachable] = useState(false);
   // Dismiss a selected detail at once even if the host refuses the route
@@ -50,6 +57,7 @@ export default function CrmScreen() {
     canCreate: !canvas && actions.includes("records.create"),
     canUpdate: !canvas && actions.includes("records.update"),
   };
+  const gated = current.section !== "customers" && ownerRefused.has(current.section) ? current.section : null;
   // The route selects a full customer page or an in-frame segment drawer.
   const props = {
     scope, viewer, view: current.view, recordId: detail !== null && detail === dismissed ? null : current.record_id,
@@ -63,8 +71,8 @@ export default function CrmScreen() {
   // Scope retirement destroys every draft/cache; section navigation doesn't
   // retire the bridge or the persistent host chat.
   return <CrmLocaleProvider locale={snapshot.presentationLocale}><NavigationProvider adapter={FrameNavigationAdapter}>
-    <main className={canvas ? "app-outlet crm crm-canvas" : "app-outlet crm"} key={`${scope.installId}:${snapshot.digest}`}>
-      {current.section === "customers" ? <Customers {...props} /> : current.section === "segments" ? <Segments {...props} /> : <Campaigns {...props} />}
+    <main className={canvas ? "app-outlet crm crm-canvas" : "app-outlet crm"} key={`${scope.installId}:${snapshot.digest}`} data-state={gated ? "owner-only" : undefined}>
+      {gated ? <OwnerOnly section={gated} /> : current.section === "customers" ? <Customers {...props} /> : current.section === "segments" ? <Segments {...props} /> : <Campaigns {...props} />}
     </main>
   </NavigationProvider></CrmLocaleProvider>;
 }
