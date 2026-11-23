@@ -21,8 +21,10 @@ function sha256File(relPath) {
 describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
   it("app-storage.json declares schema v9 with verified 007-009 migrations and tables", () => {
     const manifest = readJson("app/app-storage.json");
-    assert.equal(manifest.schema_version, 9);
-    assert.deepEqual(manifest.compatible_schema_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert.ok(manifest.schema_version >= 9);
+    for (let v = 1; v <= 9; v += 1) {
+      assert.ok(manifest.compatible_schema_versions.includes(v));
+    }
 
     const expectedMigrations = [
       {

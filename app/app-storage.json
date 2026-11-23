@@ -2,7 +2,7 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 9,
+  "schema_version": 10,
   "compatible_schema_versions": [
     1,
     2,
@@ -12,7 +12,8 @@
     6,
     7,
     8,
-    9
+    9,
+    10
   ],
   "default_table": "customers",
   "migrations": [
@@ -60,6 +61,11 @@
       "version": 9,
       "path": "storage/009-touchpoints.json",
       "sha256": "sha256:0545ecb4303b5153cab5d3fc5993be896c7793787b02a15e3805319d208107b1"
+    },
+    {
+      "version": 10,
+      "path": "storage/010-links.json",
+      "sha256": "sha256:87df54e3cf538c3287e806cc8b834b3fda26ee7b5b065704475449ad4c9bd3b8"
     }
   ],
   "tables": {
@@ -157,6 +163,32 @@
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
               "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
               "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
+            }
+          },
+          "provenance": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "links": {
+      "search_columns": ["label", "target_ref", "target_kind"],
+      "immutable_columns": ["customer_id"],
+      "write_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "before", "after", "provenance"],
+        "properties": {
+          "operation": { "enum": ["create", "update"] },
+          "before": { "anyOf": [{ "type": "object" }, { "type": "null" }] },
+          "after": {
+            "type": "object",
+            "required": ["customer_id", "target_kind", "target_ref", "label"],
+            "properties": {
+              "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "target_kind": { "enum": ["issue", "artifact", "quote", "calendar_event", "invoice", "accounting", "url", "other"] },
+              "target_ref": { "type": "string", "minLength": 1, "maxLength": 512 },
+              "label": { "type": "string", "minLength": 1, "maxLength": 200 }
             }
           },
           "provenance": {

@@ -1,0 +1,45 @@
+{
+  "version": 10,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "links",
+      "columns": [
+        {"name": "customer_id", "type": "text", "nullable": false, "max_length": 128},
+        {"name": "deal_id", "type": "text", "nullable": true, "default": null, "max_length": 128},
+        {
+          "name": "target_kind",
+          "type": "text",
+          "nullable": false,
+          "enum": ["issue", "artifact", "quote", "calendar_event", "invoice", "accounting", "url", "other"]
+        },
+        {"name": "target_ref", "type": "text", "nullable": false, "max_length": 512},
+        {"name": "label", "type": "text", "nullable": false, "max_length": 200},
+        {"name": "source_url", "type": "text", "nullable": true, "default": null, "max_length": 2048},
+        {"name": "notes", "type": "text", "nullable": true, "default": null, "max_length": 2000},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "links",
+      "name": "links_customer_id",
+      "columns": ["customer_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "links",
+      "name": "links_deal_id",
+      "columns": ["deal_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "links",
+      "name": "links_target_kind",
+      "columns": ["target_kind"],
+      "unique": false
+    }
+  ]
+}

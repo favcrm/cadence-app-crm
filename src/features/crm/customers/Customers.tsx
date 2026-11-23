@@ -33,7 +33,7 @@ type CustomerFormFields,
 import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
-import { appendHistoryPage,DEAL_STAGES,hostActions,parseRecordList,TOUCHPOINT_CHANNELS,type ConsentMethod,type ConsentProvenance,type CustomerNoteRecord,type DealRecord,type DealStage,type HostRecord,type HostScope,type TaskRecord,type TouchpointChannel,type TouchpointDirection,type TouchpointRecord } from "../hostActions";
+import { appendHistoryPage,DEAL_STAGES,hostActions,LINK_TARGET_KINDS,parseRecordList,TOUCHPOINT_CHANNELS,type ConsentMethod,type ConsentProvenance,type CustomerNoteRecord,type DealRecord,type DealStage,type HostRecord,type HostScope,type LinkRecord,type LinkTargetKind,type TaskRecord,type TouchpointChannel,type TouchpointDirection,type TouchpointRecord } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
@@ -1056,6 +1056,7 @@ const CUSTOMER_TABS = [
   { id: "tasks", label: "Tasks" },
   { id: "activity", label: "Activity" },
   { id: "fields", label: "Fields" },
+  { id: "links", label: "Links" },
   { id: "access", label: "Access" },
 ] as const;
 type CustomerTab = typeof CUSTOMER_TABS[number]["id"];
@@ -1148,6 +1149,23 @@ function CustomerWorkspace({
   const [noteFormError, setNoteFormError] = useState<string | null>(null);
   const [confirmArchiveId, setArchiveConfirmId] = useState<string | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [links, setLinks] = useState<LinkRecord[]>([]);
+  const [linksError, setLinksError] = useState<string | null>(null);
+  const [linkKind, setLinkKind] = useState<LinkTargetKind>("issue");
+  const [linkRef, setLinkRef] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
+  const [linkSourceUrl, setLinkSourceUrl] = useState("");
+  const [linkPending, setLinkPending] = useState(false);
+  const [linkFormError, setLinkFormError] = useState<string | null>(null);
+  useEffect(() => {
+    setLinks([]);
+    setLinksError(null);
+    setLinkKind("issue");
+    setLinkRef("");
+    setLinkLabel("");
+    setLinkSourceUrl("");
+    setLinkFormError(null);
+  }, [recordId, scope]);
   const [deals, setDeals] = useState<DealRecord[]>([]);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [dealTitleDraft, setDealTitleDraft] = useState("");
@@ -1173,6 +1191,7 @@ function CustomerWorkspace({
     setDealsError(null);
     setTasksError(null);
     setTouchpointsError(null);
+    setLinksError(null);
     void hostActions.listDeals(scope, { customerId: recordId, limit: 100 })
       .then((res) => setDeals(res.deals))
       .catch((err: unknown) => {
@@ -1190,6 +1209,12 @@ function CustomerWorkspace({
       .catch((err: unknown) => {
         if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
         else setTouchpointsError(friendlyError(err));
+      });
+    void hostActions.listLinks(scope, recordId)
+      .then((rows) => setLinks(rows))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setLinks([]);
+        else setLinksError(friendlyError(err));
       });
   };
   const refreshNotes = () => {
@@ -1766,6 +1791,88 @@ function CustomerWorkspace({
             ))}
           </ul>
         )}
+      </section>
+    ),
+    links: (
+      <section className="crm-sect" aria-label={t("Links")}>
+        <h4>{t("Links")}</h4>
+        {canWrite && (
+          <form
+            className="grid gap-2 mb-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmedLabel = linkLabel.trim();
+              const trimmedRef = linkRef.trim();
+              if (!trimmedLabel) { setLinkFormError(t("Link label is required.")); return; }
+              if (!trimmedRef) { setLinkFormError(t("Target reference is required.")); return; }
+              setLinkPending(true);
+              setLinkFormError(null);
+              void hostActions
+                .createLink(scope, {
+                  customerId: recordId,
+                  targetKind: linkKind,
+                  targetRef: trimmedRef,
+                  label: trimmedLabel,
+                  sourceUrl: linkSourceUrl.trim() || null,
+                })
+                .then(() => {
+                  setLinkLabel("");
+                  setLinkRef("");
+                  setLinkSourceUrl("");
+                  refreshRelated();
+                })
+                .catch((err: unknown) => setLinkFormError(friendlyError(err)))
+                .finally(() => setLinkPending(false));
+            }}
+          >
+            <div className="crm-field-row flex gap-2">
+              <Field label={t("Link type")} id="crm-link-kind" className="crm-field">
+                {(c) => (
+                  <Select
+                    {...c}
+                    value={linkKind}
+                    onChange={(v) => setLinkKind(v as LinkTargetKind)}
+                    options={LINK_TARGET_KINDS.map((kind) => ({ value: kind, label: t(kind) }))}
+                  />
+                )}
+              </Field>
+              <Field label={t("Link label")} id="crm-link-label" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={200} value={linkLabel} onChange={(e) => { setLinkLabel(e.target.value); setLinkFormError(null); }} />}
+              </Field>
+            </div>
+            <div className="crm-field-row flex gap-2">
+              <Field label={t("Target reference")} id="crm-link-ref" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={512} value={linkRef} onChange={(e) => { setLinkRef(e.target.value); setLinkFormError(null); }} />}
+              </Field>
+              <Field label={t("Source URL (optional)")} id="crm-link-url" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={2048} value={linkSourceUrl} onChange={(e) => { setLinkSourceUrl(e.target.value); setLinkFormError(null); }} />}
+              </Field>
+            </div>
+            {linkFormError && <ErrorNotice bare>{linkFormError}</ErrorNotice>}
+            <div>
+              <Button type="submit" size="sm" loading={linkPending} disabled={linkPending || !linkLabel.trim() || !linkRef.trim()}>
+                {t("Add link")}
+              </Button>
+            </div>
+          </form>
+        )}
+        {linksError ? <ErrorNotice onRetry={refreshRelated}>{linksError}</ErrorNotice>
+          : links.length === 0 ? <p className="text-secondary text-ink-400">{t("No cross-app links recorded yet.")}</p>
+          : (
+            <ul className="customer-contacts" aria-label={t("Links")}>
+              {links.map((link) => (
+                <li key={link.id}>
+                  <div>
+                    <strong>{link.label}</strong> <span className="chip">{t(link.targetKind)}</span>
+                    <p className="num text-micro text-ink-400">{link.targetRef}</p>
+                    {link.sourceUrl && (
+                      <p className="num text-micro text-ink-500">{link.sourceUrl}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
       </section>
     ),
     access: (

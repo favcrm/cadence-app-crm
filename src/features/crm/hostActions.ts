@@ -124,6 +124,30 @@ export interface TouchpointRecord {
   refId: string | null;
 }
 
+export const LINK_TARGET_KINDS = [
+  "issue",
+  "artifact",
+  "quote",
+  "calendar_event",
+  "invoice",
+  "accounting",
+  "url",
+  "other",
+] as const;
+export type LinkTargetKind = (typeof LINK_TARGET_KINDS)[number];
+
+export interface LinkRecord {
+  id: string;
+  revision: number;
+  customerId: string;
+  dealId: string | null;
+  targetKind: LinkTargetKind;
+  targetRef: string;
+  label: string;
+  sourceUrl: string | null;
+  notes: string | null;
+}
+
 export interface MergeCustomerOverrides {
   display_name?: string;
   email?: string | null;
@@ -414,6 +438,34 @@ export function parseTouchpointRecord(row: unknown): TouchpointRecord {
     summary: fields.summary,
     occurredAt: fields.occurred_at,
     refId: typeof fields.ref_id === "string" ? fields.ref_id : null,
+  };
+}
+
+function asLinkTargetKind(value: unknown): LinkTargetKind {
+  return typeof value === "string" && (LINK_TARGET_KINDS as readonly string[]).includes(value)
+    ? (value as LinkTargetKind)
+    : "other";
+}
+
+export function parseLinkRecord(row: unknown): LinkRecord {
+  const { id, revision, fields } = rowEnvelope(row, "link");
+  if (
+    typeof fields.customer_id !== "string" ||
+    typeof fields.target_ref !== "string" ||
+    typeof fields.label !== "string"
+  ) {
+    throw new ApiError("The server returned an invalid link", 502);
+  }
+  return {
+    id,
+    revision,
+    customerId: fields.customer_id,
+    dealId: typeof fields.deal_id === "string" ? fields.deal_id : null,
+    targetKind: asLinkTargetKind(fields.target_kind),
+    targetRef: fields.target_ref,
+    label: fields.label,
+    sourceUrl: typeof fields.source_url === "string" ? fields.source_url : null,
+    notes: typeof fields.notes === "string" ? fields.notes : null,
   };
 }
 
@@ -839,6 +891,76 @@ export const hostActions = {
       },
     });
     return parseTouchpointRecord(value?.record);
+  },
+
+  async listLinks(scope: HostScope, customerId: string): Promise<LinkRecord[]> {
+    assertScope(scope);
+    assertRecordId(customerId);
+    const value = await serviceCall<{ records?: unknown }>(scope, "records.list", {
+      table: "links",
+      filters: [{ field: "customer_id", op: "eq", value: customerId }],
+      limit: 100,
+    });
+    if (!Array.isArray(value?.records)) {
+      throw new ApiError("The server returned an invalid links receipt", 502);
+    }
+    return value.records.map(parseLinkRecord);
+  },
+
+  async createLink(
+    scope: HostScope,
+    input: {
+      customerId: string;
+      dealId?: string | null;
+      targetKind: LinkTargetKind;
+      targetRef: string;
+      label: string;
+      sourceUrl?: string | null;
+      notes?: string | null;
+    },
+    linkId?: string,
+  ): Promise<LinkRecord> {
+    assertScope(scope);
+    assertRecordId(input.customerId);
+    const id = linkId ?? `link-${crypto.randomUUID()}`;
+    assertRecordId(id);
+    const label = input.label.trim();
+    if (!label || label.length > 200) {
+      throw new ApiError("Link label must be 1–200 characters", 400);
+    }
+    const targetRef = input.targetRef.trim();
+    if (!targetRef || targetRef.length > 512) {
+      throw new ApiError("Link target reference must be 1–512 characters", 400);
+    }
+    const rawSourceUrl = input.sourceUrl?.trim() || null;
+    if (rawSourceUrl) {
+      if (rawSourceUrl.length > 2048) {
+        throw new ApiError("Source URL must be at most 2048 characters", 400);
+      }
+      let parsed: URL;
+      try {
+        parsed = new URL(rawSourceUrl);
+      } catch {
+        throw new ApiError("Source URL must be an http or https address without credentials", 400);
+      }
+      if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.username || parsed.password) {
+        throw new ApiError("Source URL must be an http or https address without credentials", 400);
+      }
+    }
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.create", {
+      table: "links",
+      record_id: id,
+      profile: {
+        customer_id: input.customerId,
+        deal_id: input.dealId?.trim() || null,
+        target_kind: input.targetKind,
+        target_ref: targetRef,
+        label,
+        source_url: rawSourceUrl,
+        notes: input.notes?.trim() || null,
+      },
+    });
+    return parseLinkRecord(value?.record);
   },
 
   async mergeCustomers(
