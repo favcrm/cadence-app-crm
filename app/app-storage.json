@@ -2,14 +2,17 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 6,
+  "schema_version": 9,
   "compatible_schema_versions": [
     1,
     2,
     3,
     4,
     5,
-    6
+    6,
+    7,
+    8,
+    9
   ],
   "default_table": "customers",
   "migrations": [
@@ -42,6 +45,21 @@
       "version": 6,
       "path": "storage/006-customer-notes.json",
       "sha256": "sha256:0ffb682824834e2a67e8e5865223e3a939ffad45e55866e4ce51614e52d98716"
+    },
+    {
+      "version": 7,
+      "path": "storage/007-deals.json",
+      "sha256": "sha256:73ae0a0800a8e673362ab73675bfe10adb6105087efd9995dccb1ef62dca411d"
+    },
+    {
+      "version": 8,
+      "path": "storage/008-tasks.json",
+      "sha256": "sha256:95edd78788a2dcc8b46d1e9fabbcdd6f76e79b98eb877d7403e9827ea1eda360"
+    },
+    {
+      "version": 9,
+      "path": "storage/009-touchpoints.json",
+      "sha256": "sha256:0545ecb4303b5153cab5d3fc5993be896c7793787b02a15e3805319d208107b1"
     }
   ],
   "tables": {
@@ -63,6 +81,82 @@
             "properties": {
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
               "body": { "type": "string", "minLength": 1, "maxLength": 4000 }
+            }
+          },
+          "provenance": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "deals": {
+      "search_columns": ["title", "stage", "owner_label"],
+      "write_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "before", "after", "provenance"],
+        "properties": {
+          "operation": { "enum": ["create", "update"] },
+          "before": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          },
+          "after": {
+            "type": "object",
+            "required": ["customer_id", "title"],
+            "properties": {
+              "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "amount_cents": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "provenance": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "tasks": {
+      "search_columns": ["title", "status", "assignee"],
+      "write_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "before", "after", "provenance"],
+        "properties": {
+          "operation": { "enum": ["create", "update"] },
+          "before": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          },
+          "after": {
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+            }
+          },
+          "provenance": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          }
+        }
+      }
+    },
+    "touchpoints": {
+      "search_columns": ["summary", "channel"],
+      "write_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operation", "before", "after", "provenance"],
+        "properties": {
+          "operation": { "enum": ["create", "update"] },
+          "before": {
+            "anyOf": [{ "type": "object" }, { "type": "null" }]
+          },
+          "after": {
+            "type": "object",
+            "required": ["customer_id", "channel", "summary", "occurred_at"],
+            "properties": {
+              "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+              "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
             }
           },
           "provenance": {

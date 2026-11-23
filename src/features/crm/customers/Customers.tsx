@@ -3,6 +3,7 @@ import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,N
 import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
 import ImportCsvDrawer from "./ImportCsvDrawer";
+import MergeCustomerDrawer from "./MergeCustomerDrawer";
 import WorkspaceTabs from "../WorkspaceTabs";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
@@ -32,7 +33,7 @@ type CustomerFormFields,
 import { changeCustomerCustomFields, readCustomerCustomFields, type CustomerCustomFieldForm, type CustomerCustomFieldType } from "../customerCustomFields";
 import { QueryRefresh,useCrmQuery } from "../resources";
 import { isDefiniteCreateRefusal } from "../hostErrors";
-import { appendHistoryPage,hostActions,parseRecordList,type ConsentMethod,type ConsentProvenance,type CustomerNoteRecord,type HostRecord,type HostScope } from "../hostActions";
+import { appendHistoryPage,DEAL_STAGES,hostActions,parseRecordList,TOUCHPOINT_CHANNELS,type ConsentMethod,type ConsentProvenance,type CustomerNoteRecord,type DealRecord,type DealStage,type HostRecord,type HostScope,type TaskRecord,type TouchpointChannel,type TouchpointDirection,type TouchpointRecord } from "../hostActions";
 import { canEditCustomer, type Viewer } from "../viewer";
 
 /**
@@ -106,6 +107,7 @@ export default function Customers({
             recordId={recordId}
             viewer={viewer}
             onClose={() => onSelect(null)}
+            onMerged={(targetId) => onSelect(targetId)}
           />
         )}
         {view === "new" && (
@@ -1050,6 +1052,8 @@ function CustomerNew({
 const CUSTOMER_TAB_PREFIX = "crm-customer";
 const CUSTOMER_TABS = [
   { id: "overview", label: "Overview" },
+  { id: "deals", label: "Deals" },
+  { id: "tasks", label: "Tasks" },
   { id: "activity", label: "Activity" },
   { id: "fields", label: "Fields" },
   { id: "access", label: "Access" },
@@ -1067,11 +1071,13 @@ function CustomerWorkspace({
   recordId,
   viewer,
   onClose,
+  onMerged,
 }: {
   scope: HostScope;
   recordId: string;
   viewer: Viewer;
   onClose: () => void;
+  onMerged: (targetId: string) => void;
 }) {
   const { t, formatDate } = useLocale();
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -1141,7 +1147,51 @@ function CustomerWorkspace({
   const [notePending, setNotePending] = useState(false);
   const [noteFormError, setNoteFormError] = useState<string | null>(null);
   const [confirmArchiveId, setArchiveConfirmId] = useState<string | null>(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [deals, setDeals] = useState<DealRecord[]>([]);
+  const [dealsError, setDealsError] = useState<string | null>(null);
+  const [dealTitleDraft, setDealTitleDraft] = useState("");
+  const [dealAmountDraft, setDealAmountDraft] = useState("0");
+  const [dealStageDraft, setDealStageDraft] = useState<DealStage>("lead");
+  const [dealPending, setDealPending] = useState(false);
+  const [dealFormError, setDealFormError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<TaskRecord[]>([]);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [taskTitleDraft, setTaskTitleDraft] = useState("");
+  const [taskDueDraft, setTaskDueDraft] = useState("");
+  const [taskPending, setTaskPending] = useState(false);
+  const [taskFormError, setTaskFormError] = useState<string | null>(null);
+  const [touchpoints, setTouchpoints] = useState<TouchpointRecord[]>([]);
+  const [touchpointsError, setTouchpointsError] = useState<string | null>(null);
+  const [tpChannel, setTpChannel] = useState<TouchpointChannel>("note");
+  const [tpDirection, setTpDirection] = useState<TouchpointDirection>("outbound");
+  const [tpSummary, setTpSummary] = useState("");
+  const [tpPending, setTpPending] = useState(false);
+  const [tpFormError, setTpFormError] = useState<string | null>(null);
   const notesRequest = useRef(0);
+  const refreshRelated = () => {
+    setDealsError(null);
+    setTasksError(null);
+    setTouchpointsError(null);
+    void hostActions.listDeals(scope, { customerId: recordId, limit: 100 })
+      .then((res) => setDeals(res.deals))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setDeals([]);
+        else setDealsError(friendlyError(err));
+      });
+    void hostActions.listTasks(scope, { customerId: recordId, limit: 100 })
+      .then((res) => setTasks(res.tasks))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTasks([]);
+        else setTasksError(friendlyError(err));
+      });
+    void hostActions.listTouchpoints(scope, recordId)
+      .then((rows) => setTouchpoints(rows))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
+        else setTouchpointsError(friendlyError(err));
+      });
+  };
   const refreshNotes = () => {
     const req = ++notesRequest.current;
     setNotesError(null);
@@ -1163,6 +1213,7 @@ function CustomerWorkspace({
   };
   useEffect(() => {
     setMode("view");
+    setMergeOpen(false);
     setEditRecord(null);
     setFormError(null);
     setNoteDraft("");
@@ -1171,10 +1222,14 @@ function CustomerWorkspace({
     setNotes([]);
     setNotesUnsupported(false);
     setNotesError(null);
+    setDeals([]);
+    setTasks([]);
+    setTouchpoints([]);
   }, [recordId, scope]);
   useEffect(() => {
     if (viewer.operator === true && data !== null) {
       refreshNotes();
+      refreshRelated();
     }
     return () => { notesRequest.current += 1; };
   }, [recordId, scope, viewer.operator, data !== null]);
@@ -1370,8 +1425,207 @@ function CustomerWorkspace({
         </aside>
       </div>
     ),
+    deals: (
+      <section className="crm-sect" aria-label={t("Deals")}>
+        <h4>{t("Deals")}</h4>
+        {canWrite && (
+          <form
+            className="grid gap-2 mb-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = dealTitleDraft.trim();
+              const parsed = Number(dealAmountDraft);
+              if (!trimmed) { setDealFormError(t("Deal title is required.")); return; }
+              if (!Number.isFinite(parsed) || parsed < 0) { setDealFormError(t("Enter a valid deal value.")); return; }
+              setDealPending(true);
+              setDealFormError(null);
+              void hostActions
+                .createDeal(scope, { customerId: recordId, title: trimmed, stage: dealStageDraft, amountCents: Math.round(parsed * 100) })
+                .then(() => { setDealTitleDraft(""); setDealAmountDraft("0"); refreshRelated(); })
+                .catch((err: unknown) => setDealFormError(friendlyError(err)))
+                .finally(() => setDealPending(false));
+            }}
+          >
+            <div className="crm-field-row flex gap-2">
+              <Field label={t("Deal title")} id="crm-cust-deal-title" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={200} value={dealTitleDraft} onChange={(e) => setDealTitleDraft(e.target.value)} />}
+              </Field>
+              <Field label={t("Stage")} id="crm-cust-deal-stage" className="crm-field">
+                {(c) => (
+                  <Select
+                    {...c}
+                    value={dealStageDraft}
+                    onChange={(v) => setDealStageDraft(v as DealStage)}
+                    options={DEAL_STAGES.map((s) => ({ value: s, label: t(s) }))}
+                  />
+                )}
+              </Field>
+              <Field label={t("Amount")} id="crm-cust-deal-amount" className="crm-field">
+                {(c) => <input {...c} type="number" min="0" step="0.01" className="field" value={dealAmountDraft} onChange={(e) => setDealAmountDraft(e.target.value)} />}
+              </Field>
+            </div>
+            {dealFormError && <ErrorNotice bare>{dealFormError}</ErrorNotice>}
+            <div>
+              <Button type="submit" size="sm" variant="primary" loading={dealPending} disabled={dealPending || !dealTitleDraft.trim()}>
+                {t("Add deal")}
+              </Button>
+            </div>
+          </form>
+        )}
+        {dealsError ? <ErrorNotice onRetry={refreshRelated}>{dealsError}</ErrorNotice>
+          : deals.length === 0 ? <p className="text-secondary text-ink-400">{t("No deals linked to this customer.")}</p>
+          : (
+            <ul className="customer-contacts" aria-label={t("Deals")}>
+              {deals.map((deal) => (
+                <li key={deal.id}>
+                  <div>
+                    <strong>{deal.title}</strong>
+                    <p className="num">{deal.stage} · {deal.currency} {(deal.amountCents / 100).toLocaleString()}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
+    ),
+    tasks: (
+      <section className="crm-sect" aria-label={t("Tasks")}>
+        <h4>{t("Tasks")}</h4>
+        {canWrite && (
+          <form
+            className="grid gap-2 mb-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = taskTitleDraft.trim();
+              if (!trimmed) { setTaskFormError(t("Task title is required.")); return; }
+              setTaskPending(true);
+              setTaskFormError(null);
+              void hostActions
+                .createTask(scope, { customerId: recordId, title: trimmed, dueAt: taskDueDraft.trim() || null })
+                .then(() => { setTaskTitleDraft(""); setTaskDueDraft(""); refreshRelated(); })
+                .catch((err: unknown) => setTaskFormError(friendlyError(err)))
+                .finally(() => setTaskPending(false));
+            }}
+          >
+            <div className="crm-field-row flex gap-2">
+              <Field label={t("Task title")} id="crm-cust-task-title" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={200} value={taskTitleDraft} onChange={(e) => setTaskTitleDraft(e.target.value)} />}
+              </Field>
+              <Field label={t("Due date")} id="crm-cust-task-due" className="crm-field">
+                {(c) => <input {...c} type="date" className="field" value={taskDueDraft} onChange={(e) => setTaskDueDraft(e.target.value)} />}
+              </Field>
+            </div>
+            {taskFormError && <ErrorNotice bare>{taskFormError}</ErrorNotice>}
+            <div>
+              <Button type="submit" size="sm" variant="primary" loading={taskPending} disabled={taskPending || !taskTitleDraft.trim()}>
+                {t("Add task")}
+              </Button>
+            </div>
+          </form>
+        )}
+        {tasksError ? <ErrorNotice onRetry={refreshRelated}>{tasksError}</ErrorNotice>
+          : tasks.length === 0 ? <p className="text-secondary text-ink-400">{t("No tasks linked to this customer.")}</p>
+          : (
+            <ul className="customer-contacts" aria-label={t("Tasks")}>
+              {tasks.map((task) => (
+                <li key={task.id}>
+                  <div>
+                    <strong>{task.title}</strong>
+                    <p className="num">{task.status}{task.dueAt ? ` · ${task.dueAt.slice(0, 10)}` : ""}</p>
+                  </div>
+                  {canWrite && task.status === "open" && (
+                    <Button
+                      size="sm"
+                      disabled={taskPending}
+                      onClick={() => {
+                        setTaskPending(true);
+                        void hostActions.updateTask(scope, task.id, task.revision, { status: "done" })
+                          .then(() => refreshRelated())
+                          .finally(() => setTaskPending(false));
+                      }}
+                    >
+                      {t("Mark done")}
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+      </section>
+    ),
     activity: (
       <section className="customer-activity-panel" aria-label={t("Activity")}>
+        <div className="crm-sect">
+          <h4>{t("Touchpoints")}</h4>
+          {canWrite && (
+            <form
+              className="grid gap-2 mb-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = tpSummary.trim();
+                if (!trimmed) { setTpFormError(t("Touchpoint summary is required.")); return; }
+                setTpPending(true);
+                setTpFormError(null);
+                void hostActions
+                  .createTouchpoint(scope, { customerId: recordId, channel: tpChannel, direction: tpDirection, summary: trimmed })
+                  .then(() => { setTpSummary(""); refreshRelated(); })
+                  .catch((err: unknown) => setTpFormError(friendlyError(err)))
+                  .finally(() => setTpPending(false));
+              }}
+            >
+              <div className="crm-field-row flex gap-2">
+                <Field label={t("Channel")} id="crm-tp-channel" className="crm-field">
+                  {(c) => (
+                    <Select
+                      {...c}
+                      value={tpChannel}
+                      onChange={(v) => setTpChannel(v as TouchpointChannel)}
+                      options={TOUCHPOINT_CHANNELS.map((ch) => ({ value: ch, label: t(ch) }))}
+                    />
+                  )}
+                </Field>
+                <Field label={t("Direction")} id="crm-tp-dir" className="crm-field">
+                  {(c) => (
+                    <Select
+                      {...c}
+                      value={tpDirection}
+                      onChange={(v) => setTpDirection(v as TouchpointDirection)}
+                      options={[
+                        { value: "outbound", label: t("Outbound") },
+                        { value: "inbound", label: t("Inbound") },
+                        { value: "internal", label: t("Internal") },
+                      ]}
+                    />
+                  )}
+                </Field>
+              </div>
+              <Field label={t("Interaction summary")} id="crm-tp-summary" className="crm-field">
+                {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
+              </Field>
+              {tpFormError && <ErrorNotice bare>{tpFormError}</ErrorNotice>}
+              <div>
+                <Button type="submit" size="sm" loading={tpPending} disabled={tpPending || !tpSummary.trim()}>
+                  {t("Log touchpoint")}
+                </Button>
+              </div>
+            </form>
+          )}
+          {touchpointsError ? <ErrorNotice onRetry={refreshRelated}>{touchpointsError}</ErrorNotice>
+            : touchpoints.length === 0 ? <p className="text-secondary text-ink-400">{t("No touchpoints recorded yet.")}</p>
+            : (
+              <ul className="customer-contacts" aria-label={t("Touchpoints")}>
+                {touchpoints.map((tp) => (
+                  <li key={tp.id}>
+                    <div>
+                      <strong>{tp.channel} ({tp.direction})</strong>
+                      <p>{tp.summary}</p>
+                      <p className="num text-micro text-ink-500">{tp.occurredAt.slice(0, 10)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+        </div>
         <div className="crm-sect">
           <h4>{t("Notes")}</h4>
           {canWrite && !notesUnsupported && (
@@ -1572,6 +1826,9 @@ function CustomerWorkspace({
             )}
             {canWrite && (
               <>
+                {viewer.canMerge && (
+                  <Button size="sm" onClick={() => setMergeOpen(true)}>{t("Merge duplicate")}</Button>
+                )}
                 <Button size="sm" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("consent"); setFormError(null); }}>{t("Record consent")}</Button>
                 <Button size="sm" variant="primary" onClick={() => { rememberEditOpener(); setEditRecord(record); setMode("edit"); setFormError(null); }}>{t("Edit")}</Button>
               </>
@@ -1720,6 +1977,17 @@ function CustomerWorkspace({
               }
           }
           onClose={() => setMode("view")}
+        />
+      )}
+      {ready && mergeOpen && canWrite && viewer.canMerge && record !== null && (
+        <MergeCustomerDrawer
+          scope={scope}
+          source={record}
+          onClose={() => setMergeOpen(false)}
+          onMerged={(targetId) => {
+            setMergeOpen(false);
+            onMerged(targetId);
+          }}
         />
       )}
       {ready && mode === "view" && activity && (

@@ -8,7 +8,9 @@ import "./crm-layout.css";
 import "./crm-campaign.css";
 import "./crm-drawer.css";
 import Customers from "./customers/Customers";
+import Deals from "./deals/Deals";
 import Segments from "./segments/Segments";
+import Tasks from "./tasks/Tasks";
 import { CrmLocaleProvider } from "./locale";
 // Waiting longer than this for the first verified host push means the host
 // is unreachable; the screen says so explicitly instead of spinning forever.
@@ -22,10 +24,10 @@ export default function CrmScreen() {
   const [dismissed, setDismissed] = useState<string | null>(null);
   const detail = snapshot?.route.record_id == null ? null : `${snapshot.route.section}:${snapshot.route.record_id}`;
   useEffect(() => { setDismissed(null); }, [detail]);
-  // The `segment` and `campaign` views name a record in an `id` param: open it
-  // as the route's record and drop the param. Customers take no `id`.
+  // The `customer`, `segment`, and `campaign` views name a record in an `id` param: open it
+  // as the route's record and drop the param.
   const route = snapshot?.route;
-  const named = route && route.record_id === null && route.view === "list" && route.section !== "customers" ? readRecordParam(route.params) : null;
+  const named = route && route.record_id === null && route.view === "list" ? readRecordParam(route.params) : null;
   useEffect(() => {
     if (named === null) return;
     void patchRoute({ view: "list", record_id: named, params: {} }).catch(() => undefined);
@@ -42,13 +44,27 @@ export default function CrmScreen() {
       : <Loading>Waiting for the verified CRM mount…</Loading>;
   }
   const { scope, route: current, actions } = snapshot;
-  const prefix = current.section === "customers" ? "records" : current.section === "segments" ? "segments" : "content";
+  const prefix =
+    current.section === "customers" || current.section === "deals" || current.section === "tasks"
+      ? "records"
+      : current.section === "segments"
+        ? "segments"
+        : "content";
   const viewer = {
     operator: actions.includes(`${prefix}.list`),
     canvas,
-    readOnly: canvas || !actions.includes(current.section === "customers" ? "records.create" : current.section === "segments" ? "segments.save" : "content.save"),
+    readOnly:
+      canvas ||
+      !actions.includes(
+        current.section === "segments"
+          ? "segments.save"
+          : current.section === "campaigns"
+            ? "content.save"
+            : "records.create",
+      ),
     canCreate: !canvas && actions.includes("records.create"),
     canUpdate: !canvas && actions.includes("records.update"),
+    canMerge: !canvas && actions.includes("records.merge"),
   };
   // The route selects a full customer page or an in-frame segment drawer.
   const props = {
@@ -58,13 +74,23 @@ export default function CrmScreen() {
       setDismissed(id === null ? detail : null);
       void patchRoute({ view: "list", record_id: id }).catch(() => undefined);
     },
-    onRecordCreated: (id: string) => { void patchRoute({ view: "list", record_id: id, segment_id: null }).catch(() => undefined); },
   };
+  const onRecordCreated = (id: string) => { void patchRoute({ view: "list", record_id: id, segment_id: null }).catch(() => undefined); };
   // Scope retirement destroys every draft/cache; section navigation doesn't
   // retire the bridge or the persistent host chat.
   return <CrmLocaleProvider locale={snapshot.presentationLocale}><NavigationProvider adapter={FrameNavigationAdapter}>
     <main className={canvas ? "app-outlet crm crm-canvas" : "app-outlet crm"} key={`${scope.installId}:${snapshot.digest}`}>
-      {current.section === "customers" ? <Customers {...props} /> : current.section === "segments" ? <Segments {...props} /> : <Campaigns {...props} />}
+      {current.section === "customers" ? (
+        <Customers {...props} onRecordCreated={onRecordCreated} />
+      ) : current.section === "deals" ? (
+        <Deals {...props} />
+      ) : current.section === "tasks" ? (
+        <Tasks {...props} />
+      ) : current.section === "segments" ? (
+        <Segments {...props} />
+      ) : (
+        <Campaigns {...props} />
+      )}
     </main>
   </NavigationProvider></CrmLocaleProvider>;
 }

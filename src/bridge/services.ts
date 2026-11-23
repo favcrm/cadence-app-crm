@@ -24,6 +24,13 @@ export interface CallArgs {
   "records.aggregate": { table?: string; query?: string; filters?: RecordFilter[]; group_by?: string[]; sum?: string[] };
   "records.batch": { items: Array<{ record_id: string; profile: unknown; table?: string }>; consent_provenance?: unknown };
   "records.csv.preview": { csv_text: string };
+  "records.merge": {
+    source_id: string;
+    target_id: string;
+    expected_source_revision: number;
+    expected_target_revision: number;
+    overrides?: Record<string, unknown>;
+  };
   "segments.list": Bag; "segments.show": { segment_id: string };
   "segments.save": { segment_id: string; name: string; predicates: unknown[]; expected_revision?: number };
   "exclusions.list": Bag; "exclusions.show": { list_id: string };
@@ -49,7 +56,7 @@ export interface CallArgs {
   "sends.prepare": { campaign_id: string; audience_freeze_id: string; request_id: string; base?: Base; exclusion_list_id?: string; max_recipients?: number };
   "sends.show": { send_id: string }; "sends.list": { campaign_id?: string };
   "smtp.show": Bag; "origin.show": Bag;
-  "screen.route.patch": { section?: "customers" | "segments" | "campaigns"; view?: "list" | "new"; record_id?: string | null; segment_id?: string | null; params?: Readonly<Record<string, string>>; replace?: boolean };
+  "screen.route.patch": { section?: "customers" | "deals" | "tasks" | "segments" | "campaigns"; view?: "list" | "new"; record_id?: string | null; segment_id?: string | null; params?: Readonly<Record<string, string>>; replace?: boolean };
   "screen.preview.show": { preview_id: string; document: string; anchor: Rect; mode: "draft" | "saved" };
   "screen.preview.clear": { preview_id: string };
 }
@@ -74,7 +81,7 @@ export const CALL_FIELDS: Record<keyof CallArgs, readonly string[]> = {
   "records.update": ["record_id", "expected_revision", "table", "profile", "consent_provenance"],
   "records.aggregate": ["table", "query", "filters", "group_by", "sum"],
   "records.batch": ["items", "consent_provenance"],
-  "records.csv.preview": ["csv_text"], "segments.list": [], "segments.show": ["segment_id"], "segments.save": ["segment_id", "name", "predicates", "expected_revision"],
+  "records.csv.preview": ["csv_text"], "records.merge": ["source_id", "target_id", "expected_source_revision", "expected_target_revision", "overrides"], "segments.list": [], "segments.show": ["segment_id"], "segments.save": ["segment_id", "name", "predicates", "expected_revision"],
   "exclusions.list": [], "exclusions.show": ["list_id"], "exclusions.save": ["list_id", "name", "member_ids", "expected_revision"],
   "suppressions.list": [], "suppressions.add": ["email", "customer_id", "reason"],
   "audience.preview": ["base", "exclusion_list_id"], "audience.prepare": ["freeze_id", "base", "exclusion_list_id", "max_recipients"], "audience.show": ["freeze_id"],
@@ -102,7 +109,7 @@ export function cleanArgs(verb: string, args: Bag, slot: boolean): Bag {
   return value;
 }
 export const WRITE_VERBS: readonly string[] = [
-  "records.create", "records.update", "records.batch", "segments.save", "exclusions.save", "suppressions.add",
+  "records.create", "records.update", "records.batch", "records.merge", "segments.save", "exclusions.save", "suppressions.add",
   "audience.prepare", "content.save", "content.clone", "proposals.apply", "proposals.discard",
   "sender-bindings.save", "records.csv.import", "records.csv.confirm", "content.approve",
   "smtp.bind", "smtp.rebind", "smtp.revoke", "smtp.test-send", "sends.approve", "sends.resolve",

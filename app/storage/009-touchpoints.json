@@ -1,0 +1,43 @@
+{
+  "version": 9,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "touchpoints",
+      "columns": [
+        {"name": "customer_id", "type": "text", "nullable": false, "max_length": 128},
+        {
+          "name": "channel",
+          "type": "text",
+          "nullable": false,
+          "enum": ["email", "whatsapp", "phone", "meeting", "note", "other"]
+        },
+        {
+          "name": "direction",
+          "type": "text",
+          "nullable": false,
+          "default": "outbound",
+          "enum": ["inbound", "outbound", "internal"]
+        },
+        {"name": "summary", "type": "text", "nullable": false, "max_length": 2000},
+        {"name": "occurred_at", "type": "text", "nullable": false, "max_length": 64},
+        {"name": "ref_id", "type": "text", "nullable": true, "default": null, "max_length": 128},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "touchpoints",
+      "name": "touchpoints_customer_id",
+      "columns": ["customer_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "touchpoints",
+      "name": "touchpoints_occurred_at",
+      "columns": ["occurred_at"],
+      "unique": false
+    }
+  ]
+}

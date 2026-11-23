@@ -446,6 +446,9 @@ class BuildAndExclusionTests(unittest.TestCase):
                 f"{root}/storage/004-customer-contacts.json",
                 f"{root}/storage/005-customer-custom-fields.json",
                 f"{root}/storage/006-customer-notes.json",
+                f"{root}/storage/007-deals.json",
+                f"{root}/storage/008-tasks.json",
+                f"{root}/storage/009-touchpoints.json",
             },
         )
         self.assertEqual(
@@ -699,17 +702,26 @@ class StorageContractTests(unittest.TestCase):
         self.assertEqual(doc["contract"], "app-storage/v1")
         self.assertEqual(doc["app"], "crm")
         self.assertEqual(doc["record_kind"], "customer")
-        self.assertEqual(doc["schema_version"], 6)
-        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(doc["schema_version"], 9)
+        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5, 6, 7, 8, 9])
         self.assertEqual(doc["default_table"], "customers")
-        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5, 6])
+        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5, 6, 7, 8, 9])
         fields_migration = "storage/005-customer-custom-fields.json"
         notes_migration = "storage/006-customer-notes.json"
+        deals_migration = "storage/007-deals.json"
+        tasks_migration = "storage/008-tasks.json"
+        touchpoints_migration = "storage/009-touchpoints.json"
         self.assertEqual(dict(contents)[fields_migration], (REPO / "app" / fields_migration).read_bytes())
         self.assertEqual(dict(contents)[notes_migration], (REPO / "app" / notes_migration).read_bytes())
+        self.assertEqual(dict(contents)[deals_migration], (REPO / "app" / deals_migration).read_bytes())
+        self.assertEqual(dict(contents)[tasks_migration], (REPO / "app" / tasks_migration).read_bytes())
+        self.assertEqual(dict(contents)[touchpoints_migration], (REPO / "app" / touchpoints_migration).read_bytes())
         self.assertIn("notes", doc["tables"])
         self.assertEqual(doc["tables"]["notes"]["search_columns"], ["body"])
         self.assertEqual(doc["tables"]["notes"]["immutable_columns"], ["customer_id"])
+        self.assertIn("deals", doc["tables"])
+        self.assertIn("tasks", doc["tables"])
+        self.assertIn("touchpoints", doc["tables"])
         self.assertIsInstance(doc["record_write_schema"], dict)
         self.assertIn("if", doc["record_write_schema"])
         self.assertEqual(
@@ -886,8 +898,8 @@ class StorageContractTests(unittest.TestCase):
     def test_undeclared_storage_member_refuses(self):
         bundle = self.dir / "extra"
         shutil.copytree(REPO / "app", bundle)
-        (bundle / "storage" / "009-extra.json").write_text(
-            '{"version": 9, "operations": []}\n', encoding="utf-8"
+        (bundle / "storage" / "010-extra.json").write_text(
+            '{"version": 10, "operations": []}\n', encoding="utf-8"
         )
         with self.assertRaisesRegex(pkg.PackageError, "undeclared storage"):
             self.read(bundle)

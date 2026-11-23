@@ -7,7 +7,7 @@ import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, t
 export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
 export const fixtureActions = [
-  "records.list", "records.show", "records.create", "records.update", "records.aggregate", "records.batch", "records.csv.preview",
+  "records.list", "records.show", "records.create", "records.update", "records.aggregate", "records.batch", "records.csv.preview", "records.merge",
   "segments.list", "segments.show", "segments.save", "audience.preview",
   "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list", "sends.show",
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
@@ -45,6 +45,52 @@ const noteRows: NoteRow[] = [
     revision: 1,
     digest: fixtureDigest,
     profile: { customer_id: "ada", body: "Met at Hong Kong trade fair; prefers concise quarterly updates.", archived_at: null },
+  },
+];
+type GenericTableRow = {
+  id: string;
+  install_id: string;
+  context_id: string;
+  kind: string;
+  table: string;
+  revision: number;
+  digest: string;
+  profile: Record<string, unknown>;
+};
+const dealRows: GenericTableRow[] = [
+  {
+    id: "deal-ada-1",
+    install_id: fixtureInstallId,
+    context_id: "",
+    kind: "customer",
+    table: "deals",
+    revision: 1,
+    digest: fixtureDigest,
+    profile: { customer_id: "ada", title: "Annual Enterprise Plan", stage: "proposal", amount_cents: 2400000, currency: "HKD", expected_close_date: "2026-12-15", owner_label: "Owner", notes: null, synthetic: false },
+  },
+];
+const taskRows: GenericTableRow[] = [
+  {
+    id: "task-ada-1",
+    install_id: fixtureInstallId,
+    context_id: "",
+    kind: "customer",
+    table: "tasks",
+    revision: 1,
+    digest: fixtureDigest,
+    profile: { customer_id: "ada", deal_id: "deal-ada-1", title: "Send signed proposal", status: "open", due_at: "2026-11-30", assignee: "Owner", notes: null, synthetic: false },
+  },
+];
+const touchpointRows: GenericTableRow[] = [
+  {
+    id: "tp-ada-1",
+    install_id: fixtureInstallId,
+    context_id: "",
+    kind: "customer",
+    table: "touchpoints",
+    revision: 1,
+    digest: fixtureDigest,
+    profile: { customer_id: "ada", channel: "meeting", direction: "inbound", summary: "Reviewed annual pricing options.", occurred_at: "2026-11-22T10:00:00Z", ref_id: null, synthetic: false },
   },
 ];
 const ownedRecordIds = new Set<string>();
@@ -153,6 +199,20 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
         const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
         return { records: rows.slice(0, limit), total: rows.length, truncated: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1]!.id : null };
       }
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+        const filters = Array.isArray(args.filters) ? (args.filters as Array<{ field?: unknown; op?: unknown; value?: unknown }>) : [];
+        const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
+        let rows = store.filter((row) => JSON.stringify(row.profile).toLowerCase().includes(query));
+        for (const f of filters) {
+          if (typeof f.field === "string" && f.op === "eq") {
+            const key = f.field;
+            rows = rows.filter((r) => r.profile[key] === f.value);
+          }
+        }
+        const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
+        return { records: rows.slice(0, limit), total: rows.length, truncated: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1]!.id : null };
+      }
       const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
       const rows = records.filter(r => `${r.profile.display_name} ${r.profile.email ?? ""} ${r.profile.tags.join(" ")}`.toLowerCase().includes(query));
       const start = args.cursor === undefined ? 0 : rows.findIndex(row => row.id === args.cursor) + 1;
@@ -166,6 +226,10 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     case "records.show": {
       if (args.table === "notes") {
         return { record: noteRows.find((r) => r.id === args.record_id) ?? missing() };
+      }
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+        return { record: store.find((r) => r.id === args.record_id) ?? missing() };
       }
       const record = records.find(r => r.id === args.record_id) ?? missing();
       const visible = recordAccess === "read" || recordAccess === "write"
@@ -212,6 +276,28 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
           profile: { customer_id: customerId, body: body.trim(), archived_at: archivedAt },
         };
         if (existing) noteRows.splice(noteRows.indexOf(existing), 1, row); else noteRows.push(row);
+        return { record: row };
+      }
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+        const rowId = args.record_id;
+        requireId(rowId);
+        const existing = store.find((r) => r.id === rowId);
+        if (verb === "records.create" && existing) throw new ApiError("That local record already exists.", 409, { code: "conflict" });
+        if (verb === "records.update" && !existing) missing();
+        requireRevision(existing, args.expected_revision);
+        const patch = args.profile !== null && typeof args.profile === "object" && !Array.isArray(args.profile) ? (args.profile as Record<string, unknown>) : {};
+        const row: GenericTableRow = {
+          id: rowId,
+          install_id: fixtureInstallId,
+          context_id: "",
+          kind: "customer",
+          table: args.table,
+          revision: (existing?.revision ?? 0) + 1,
+          digest: fixtureDigest,
+          profile: { ...(existing?.profile ?? {}), ...patch },
+        };
+        if (existing) store.splice(store.indexOf(existing), 1, row); else store.push(row);
         return { record: row };
       }
       if (verb === "records.update" && recordAccess === "read" && (typeof args.record_id !== "string" || !ownedRecordIds.has(args.record_id))) throw new ApiError("This fixture customer is read-only.", 403, { code: "forbidden" });
@@ -335,8 +421,47 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     case "smtp.show": return { binding: fixtureSmtpBinding };
     case "audience.show": missing();
     case "records.aggregate": {
+      if (args.table === "deals") {
+        const groups = new Map<string, { count: number; amount_cents: number }>();
+        for (const d of dealRows) {
+          const st = typeof d.profile.stage === "string" ? d.profile.stage : "lead";
+          const cur = groups.get(st) ?? { count: 0, amount_cents: 0 };
+          cur.count += 1;
+          cur.amount_cents += typeof d.profile.amount_cents === "number" ? d.profile.amount_cents : 0;
+          groups.set(st, cur);
+        }
+        return {
+          groups: [...groups.entries()].map(([stage, v]) => ({ key: { stage }, count: v.count, sums: { amount_cents: v.amount_cents } })),
+          total_groups: groups.size,
+          truncated: false,
+        };
+      }
       const source = args.table === "notes" ? noteRows.map((n) => n.profile) : records.map((r) => r.profile);
       return { groups: [{ key: {}, count: source.length, sums: {} }], total_groups: 1, truncated: false };
+    }
+    case "records.merge": {
+      const source = records.find((r) => r.id === args.source_id) ?? missing();
+      const target = records.find((r) => r.id === args.target_id) ?? missing();
+      if (source.id === target.id) throw new ApiError("Choose two different customers.", 400);
+      for (const list of [noteRows, dealRows, taskRows, touchpointRows]) {
+        for (const item of list) {
+          if ((item.profile as { customer_id?: unknown }).customer_id === source.id) {
+            (item.profile as { customer_id: string }).customer_id = target.id;
+            item.revision += 1;
+          }
+        }
+      }
+      const overrides = (args.overrides && typeof args.overrides === "object" ? args.overrides : {}) as Record<string, unknown>;
+      target.profile = {
+        ...target.profile,
+        ...(typeof overrides.display_name === "string" ? { display_name: overrides.display_name } : {}),
+        ...(overrides.email !== undefined ? { email: overrides.email as string | null } : { email: target.profile.email ?? source.profile.email }),
+        ...(overrides.phone !== undefined ? { phone: overrides.phone as string | null } : { phone: target.profile.phone ?? source.profile.phone }),
+        tags: [...new Set([...target.profile.tags, ...source.profile.tags])].slice(0, 16),
+      };
+      target.revision += 1;
+      records.splice(records.indexOf(source), 1);
+      return { record: target, merged_source_id: source.id, reparented: { notes: 0, deals: 0, tasks: 0, touchpoints: 0 } };
     }
     case "records.csv.preview": {
       const csvText = typeof args.csv_text === "string" ? args.csv_text : "";

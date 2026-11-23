@@ -4,8 +4,11 @@
 export const views = [
   { id: 'customers', label: { en: 'Customers', 'zh-TW': '客戶' }, section: 'customers',
     params: { q: { type: 'string' } } },
+  { id: 'deals', label: { en: 'Pipeline', 'zh-TW': '商機' }, section: 'deals', params: { q: { type: 'string' } } },
+  { id: 'tasks', label: { en: 'Tasks', 'zh-TW': '待辦' }, section: 'tasks', params: { q: { type: 'string' } } },
   { id: 'segments', label: { en: 'Segments', 'zh-TW': '客群' }, section: 'segments', params: { q: { type: 'string' } } },
   { id: 'campaigns', label: { en: 'Campaigns', 'zh-TW': '行銷活動' }, section: 'campaigns', params: { q: { type: 'string' } } },
+  { id: 'customer', label: { en: 'Customer by id', 'zh-TW': '指定客戶' }, section: 'customers', params: { id: { type: 'string' } } },
   { id: 'segment', label: { en: 'Segment by id', 'zh-TW': '指定客群' }, section: 'segments', params: { id: { type: 'string' } } },
   { id: 'campaign', label: { en: 'Campaign by id', 'zh-TW': '指定行銷活動' }, section: 'campaigns', params: { id: { type: 'string' } } },
 ];
