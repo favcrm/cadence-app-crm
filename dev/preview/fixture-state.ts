@@ -93,6 +93,27 @@ const touchpointRows: GenericTableRow[] = [
     profile: { customer_id: "ada", channel: "meeting", direction: "inbound", summary: "Reviewed annual pricing options.", occurred_at: "2026-11-22T10:00:00Z", ref_id: null, synthetic: false },
   },
 ];
+const linkRows: GenericTableRow[] = [
+  {
+    id: "link-ada-1",
+    install_id: fixtureInstallId,
+    context_id: "",
+    kind: "customer",
+    table: "links",
+    revision: 1,
+    digest: fixtureDigest,
+    profile: {
+      customer_id: "ada",
+      deal_id: "deal-ada-1",
+      target_kind: "quote",
+      target_ref: "quote-2026-001",
+      label: "Annual plan quote",
+      source_url: "https://example.invalid/quotes/2026-001",
+      notes: null,
+      synthetic: false,
+    },
+  },
+];
 const ownedRecordIds = new Set<string>();
 const segments: Segment[] = [{ id: "vip", revision: 1, name: "VIP customers", segment_type: "dynamic", predicates: [{ field: "tag", op: "eq", value: "vip" }], digest: fixtureDigest }, { id: "selected", revision: 1, name: "Selected accounts", segment_type: "static", predicates: [], member_ids: ["ada", "sam"], digest: fixtureDigest }];
 const fixtureSender = { name: "Fixture sender", address: "preview@example.invalid" };
@@ -203,8 +224,8 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
         const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
         return { records: rows.slice(0, limit), total: rows.length, truncated: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1]!.id : null };
       }
-      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
-        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints" || args.table === "links") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : args.table === "touchpoints" ? touchpointRows : linkRows;
         const filters = Array.isArray(args.filters) ? (args.filters as Array<{ field?: unknown; op?: unknown; value?: unknown }>) : [];
         const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
         let rows = store.filter((row) => JSON.stringify(row.profile).toLowerCase().includes(query));
@@ -231,8 +252,8 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       if (args.table === "notes") {
         return { record: noteRows.find((r) => r.id === args.record_id) ?? missing() };
       }
-      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
-        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints" || args.table === "links") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : args.table === "touchpoints" ? touchpointRows : linkRows;
         return { record: store.find((r) => r.id === args.record_id) ?? missing() };
       }
       const record = records.find(r => r.id === args.record_id) ?? missing();
@@ -282,8 +303,8 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
         if (existing) noteRows.splice(noteRows.indexOf(existing), 1, row); else noteRows.push(row);
         return { record: row };
       }
-      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints") {
-        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : touchpointRows;
+      if (args.table === "deals" || args.table === "tasks" || args.table === "touchpoints" || args.table === "links") {
+        const store = args.table === "deals" ? dealRows : args.table === "tasks" ? taskRows : args.table === "touchpoints" ? touchpointRows : linkRows;
         const rowId = args.record_id;
         requireId(rowId);
         const existing = store.find((r) => r.id === rowId);
@@ -447,11 +468,19 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       const source = records.find((r) => r.id === args.source_id) ?? missing();
       const target = records.find((r) => r.id === args.target_id) ?? missing();
       if (source.id === target.id) throw new ApiError("Choose two different customers.", 400);
-      for (const list of [noteRows, dealRows, taskRows, touchpointRows]) {
+      const reparentedCounts: Record<string, number> = { notes: 0, deals: 0, tasks: 0, touchpoints: 0, links: 0 };
+      for (const [tableName, list] of [
+        ["notes", noteRows],
+        ["deals", dealRows],
+        ["tasks", taskRows],
+        ["touchpoints", touchpointRows],
+        ["links", linkRows],
+      ] as const) {
         for (const item of list) {
           if ((item.profile as { customer_id?: unknown }).customer_id === source.id) {
             (item.profile as { customer_id: string }).customer_id = target.id;
             item.revision += 1;
+            reparentedCounts[tableName] += 1;
           }
         }
       }
@@ -465,7 +494,7 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       };
       target.revision += 1;
       records.splice(records.indexOf(source), 1);
-      return { record: target, merged_source_id: source.id, reparented: { notes: 0, deals: 0, tasks: 0, touchpoints: 0 } };
+      return { record: target, merged_source_id: source.id, reparented: reparentedCounts };
     }
     case "records.csv.preview": {
       const csvText = typeof args.csv_text === "string" ? args.csv_text : "";
