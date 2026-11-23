@@ -276,9 +276,11 @@ function CustomerList({
 
   return (
     <section ref={listRef} aria-label={t("Customers list")} className="crm-list crm-list-controls">
-      <h3 tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
-        {t("Customers")}
-      </h3>
+      {!viewer.canvas && (
+        <h3 tabIndex={-1} className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+          {t("Customers")}
+        </h3>
+      )}
       <div className="crm-toolbar crm-list-toolbar">
         <div className="crm-search">
           <label className="sr-only" htmlFor="crm-customer-search">

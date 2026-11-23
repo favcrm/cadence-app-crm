@@ -55,6 +55,22 @@
   }
 }
 
+/* CRM-27: the canvas header names the view, so the list heading is not
+   rendered in the canvas role. The role (not the viewport) decides the
+   padding, so an expanded full-width canvas keeps even side gutters too:
+   1.25rem normally, 1rem at phone width. Declared after the media queries
+   above so it wins at every width. */
+main.crm.crm-canvas {
+  padding-inline: 1.25rem;
+  padding-block: 0.75rem;
+}
+
+@media (max-width: 36rem) {
+  main.crm.crm-canvas {
+    padding-inline: 1rem;
+  }
+}
+
 /* Outlet headings are focused programmatically after navigation
    (tabIndex=-1) and are not interactive, so the full-width native ring
    adds no affordance. Controls and links keep their own keyboard
