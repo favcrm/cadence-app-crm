@@ -7,7 +7,7 @@ import { checkCampaignId, checkCampaignName, checkContent, checkContentFields, t
 export const fixtureDigest = `sha256:${"0".repeat(64)}`;
 export const fixtureInstallId = "crm-local-fixture";
 export const fixtureActions = [
-  "records.list", "records.show", "records.create", "records.update", "records.aggregate", "records.batch",
+  "records.list", "records.show", "records.create", "records.update", "records.aggregate", "records.batch", "records.csv.preview",
   "segments.list", "segments.show", "segments.save", "audience.preview",
   "content.list", "content.show", "content.save", "content.clone", "content.render", "proposals.list", "sends.list", "sends.show",
   "sender-bindings.list", "exclusions.list", "suppressions.list", "smtp.show", "origin.show", "audience.show",
@@ -337,6 +337,130 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     case "records.aggregate": {
       const source = args.table === "notes" ? noteRows.map((n) => n.profile) : records.map((r) => r.profile);
       return { groups: [{ key: {}, count: source.length, sums: {} }], total_groups: 1, truncated: false };
+    }
+    case "records.csv.preview": {
+      const csvText = typeof args.csv_text === "string" ? args.csv_text : "";
+      if (!csvText.trim()) throw new ApiError("CSV content cannot be empty.", 400, { code: "validation_failed" });
+      if (new TextEncoder().encode(csvText).byteLength > 120 * 1024) {
+        throw new ApiError("CSV exceeds the 120 KB limit.", 413, { code: "payload_too_large" });
+      }
+      const parseLine = (line: string): string[] => {
+        const out: string[] = [];
+        let cur = "";
+        let quoted = false;
+        for (let i = 0; i < line.length; i += 1) {
+          const ch = line[i]!;
+          if (quoted) {
+            if (ch === '"' && line[i + 1] === '"') {
+              cur += '"';
+              i += 1;
+            } else if (ch === '"') quoted = false;
+            else cur += ch;
+          } else if (ch === '"') quoted = true;
+          else if (ch === ",") {
+            out.push(cur);
+            cur = "";
+          } else cur += ch;
+        }
+        out.push(cur);
+        return out;
+      };
+      const lines = csvText.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
+      const headers = lines[0] ? parseLine(lines[0]).map((h) => h.trim()) : [];
+      const aliases: Record<string, string> = {
+        display_name: "display_name", name: "display_name", full_name: "display_name", customer_name: "display_name",
+        email: "email", email_address: "email", e_mail: "email",
+        phone: "phone", phone_number: "phone", mobile: "phone", telephone: "phone", tel: "phone",
+        tags: "tags", tag: "tags", labels: "tags", label: "tags",
+        source: "source", lead_source: "source", origin: "source",
+        customer_type: "customer_type", type: "customer_type",
+        website: "website", url: "website", homepage: "website",
+      };
+      const consentHeaders = new Set(["consent", "email_consent", "consent_email", "sms_consent", "consent_sms", "opt_in", "marketing_consent"]);
+      const mapped_headers: string[] = [];
+      const unmapped_headers: string[] = [];
+      const colFields = headers.map((h) => {
+        const key = h.toLowerCase().replace(/[\s-]+/g, "_");
+        const canonical = aliases[key];
+        if (canonical) { mapped_headers.push(canonical); return canonical; }
+        unmapped_headers.push(h);
+        return null;
+      });
+      const warnings: string[] = [];
+      if (headers.some((h) => consentHeaders.has(h.toLowerCase().replace(/[\s-]+/g, "_")))) {
+        warnings.push("Consent columns were ignored; imported customers default to email: unknown, sms: unknown.");
+      }
+      const existingByEmail = new Map<string, { id: string; revision: number }>();
+      for (const r of records) {
+        if (typeof r.profile.email === "string" && r.profile.email.trim()) {
+          existingByEmail.set(r.profile.email.trim().toLowerCase(), { id: r.id, revision: r.revision });
+        }
+      }
+      const seenInCsv = new Map<string, number>();
+      const rows: Array<Record<string, unknown>> = [];
+      const batch_items: Array<{ record_id: string; profile: Record<string, unknown> }> = [];
+      let dupExisting = 0; let dupInCsv = 0; let invalid = 0;
+      for (let i = 1; i < Math.min(lines.length, 201); i += 1) {
+        const cells = parseLine(lines[i]!);
+        const rec: Record<string, string> = {};
+        colFields.forEach((field, idx) => {
+          if (field && rec[field] === undefined) rec[field] = (cells[idx] ?? "").trim();
+        });
+        const displayName = rec.display_name || null;
+        const email = rec.email ? rec.email.toLowerCase() : null;
+        const errors: string[] = [];
+        if (!displayName) errors.push("display_name is required.");
+        if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) errors.push("email must be a valid email address.");
+        if (errors.length > 0) {
+          invalid += 1;
+          rows.push({ row_number: i, status: "invalid", display_name: displayName, email, errors });
+          continue;
+        }
+        const match = email ? existingByEmail.get(email) : undefined;
+        if (match) {
+          dupExisting += 1;
+          rows.push({ row_number: i, status: "duplicate_existing", existing_record_id: match.id, existing_revision: match.revision, display_name: displayName, email, errors: [] });
+          continue;
+        }
+        if (email && seenInCsv.has(email)) {
+          dupInCsv += 1;
+          rows.push({ row_number: i, status: "duplicate_in_csv", duplicate_of_row: seenInCsv.get(email), display_name: displayName, email, errors: [] });
+          continue;
+        }
+        if (email) seenInCsv.set(email, i);
+        const tags = (rec.tags ?? "").split(/[;,]/).map((t) => t.trim()).filter(Boolean);
+        const profile = {
+          schema: 1,
+          display_name: displayName!,
+          email,
+          phone: rec.phone || null,
+          source: rec.source || null,
+          customer_type: rec.customer_type === "person" || rec.customer_type === "organization" ? rec.customer_type : null,
+          website: rec.website || null,
+          tags,
+          consent: { email: "unknown", sms: "unknown" },
+        };
+        const record_id = `imp-fixture-r${i}`;
+        batch_items.push({ record_id, profile });
+        rows.push({ row_number: i, status: "valid", record_id, display_name: displayName, email, profile, errors: [] });
+      }
+      return {
+        preview_token: "fixture-csv-preview",
+        headers,
+        mapped_headers,
+        unmapped_headers,
+        warnings,
+        summary: {
+          total_rows: rows.length,
+          valid_new: batch_items.length,
+          duplicate_existing: dupExisting,
+          duplicate_in_csv: dupInCsv,
+          invalid,
+          max_rows: 200,
+        },
+        rows,
+        batch_items,
+      };
     }
     case "records.batch": {
       const items = Array.isArray(args.items) ? (args.items as Array<{ record_id: string; profile: unknown; table?: string }>) : [];

@@ -376,4 +376,204 @@ export const hostActions = {
     });
     return parseNoteRecord(value?.record);
   },
+
+  async previewCsv(scope: HostScope, csvText: string): Promise<CsvPreviewReceipt> {
+    assertScope(scope);
+    if (typeof csvText !== "string" || csvText.trim().length === 0) {
+      throw new ApiError("CSV content cannot be empty.", 400, { code: "validation_failed" });
+    }
+    if (new TextEncoder().encode(csvText).byteLength > CRM_CSV_MAX_BYTES) {
+      throw new ApiError("CSV exceeds the 120 KB limit.", 400, { code: "validation_failed" });
+    }
+    const value = await serviceCall<unknown>(scope, "records.csv.preview", {
+      csv_text: csvText,
+    });
+    return parseCsvPreviewReceipt(value);
+  },
+
+  async batchCreate(scope: HostScope, items: CsvPreviewBatchItem[]): Promise<BatchCreateReceipt> {
+    assertScope(scope);
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new ApiError("Select at least one valid row to import.", 400, { code: "validation_failed" });
+    }
+    if (items.length > CRM_CSV_MAX_ROWS) {
+      throw new ApiError("A single CSV import cannot exceed 200 customers.", 400, { code: "validation_failed" });
+    }
+    const value = await serviceCall<{ created?: unknown }>(scope, "records.batch", {
+      items,
+    });
+    const created = typeof value?.created === "number" && Number.isFinite(value.created)
+      ? value.created
+      : items.length;
+    return { created };
+  },
 };
+
+export const CRM_CSV_MAX_BYTES = 120 * 1024;
+export const CRM_CSV_MAX_ROWS = 200;
+
+export type CsvPreviewRowStatus = "valid" | "duplicate_existing" | "duplicate_in_csv" | "invalid";
+
+export type CsvPreviewProfile = {
+  schema: 1;
+  display_name: string;
+  email: string | null;
+  phone: string | null;
+  source: string | null;
+  customer_type: "person" | "organization" | null;
+  website: string | null;
+  tags: string[];
+  consent: { email: "unknown"; sms: "unknown" };
+};
+
+export type CsvPreviewRow = {
+  row_number: number;
+  status: CsvPreviewRowStatus;
+  record_id?: string;
+  existing_record_id?: string;
+  existing_revision?: number;
+  duplicate_of_row?: number;
+  display_name: string | null;
+  email: string | null;
+  profile?: CsvPreviewProfile;
+  errors: string[];
+};
+
+export type CsvPreviewBatchItem = {
+  record_id: string;
+  profile: CsvPreviewProfile;
+};
+
+export type CsvPreviewSummary = {
+  total_rows: number;
+  valid_new: number;
+  duplicate_existing: number;
+  duplicate_in_csv: number;
+  invalid: number;
+  max_rows: number;
+};
+
+export type CsvPreviewReceipt = {
+  preview_token: string;
+  headers: string[];
+  mapped_headers: string[];
+  unmapped_headers: string[];
+  warnings: string[];
+  summary: CsvPreviewSummary;
+  rows: CsvPreviewRow[];
+  batch_items: CsvPreviewBatchItem[];
+};
+
+export type BatchCreateReceipt = {
+  created: number;
+};
+
+function asCsvStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function asNonNegativeInt(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : fallback;
+}
+
+function parseCsvRowStatus(value: unknown): CsvPreviewRowStatus {
+  if (value === "valid" || value === "valid_new") return "valid";
+  if (value === "duplicate_existing" || value === "duplicate_in_csv" || value === "invalid") {
+    return value;
+  }
+  throw new Error("CSV preview response returned an unknown row status.");
+}
+
+function parseCsvPreviewProfile(value: unknown): CsvPreviewProfile | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.display_name !== "string") return undefined;
+  return {
+    schema: 1,
+    display_name: raw.display_name,
+    email: typeof raw.email === "string" ? raw.email : null,
+    phone: typeof raw.phone === "string" ? raw.phone : null,
+    source: typeof raw.source === "string" ? raw.source : null,
+    customer_type:
+      raw.customer_type === "person" || raw.customer_type === "organization"
+        ? raw.customer_type
+        : null,
+    website: typeof raw.website === "string" ? raw.website : null,
+    tags: asCsvStringList(raw.tags),
+    consent: { email: "unknown", sms: "unknown" },
+  };
+}
+
+export function parseCsvPreviewReceipt(raw: unknown): CsvPreviewReceipt {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Host returned an unreadable CSV preview receipt.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.preview_token !== "string" || obj.preview_token === "") {
+    throw new Error("Host CSV preview response omitted preview_token.");
+  }
+  if (!obj.summary || typeof obj.summary !== "object" || Array.isArray(obj.summary)) {
+    throw new Error("Host CSV preview response omitted summary.");
+  }
+  const sum = obj.summary as Record<string, unknown>;
+  if (!Array.isArray(obj.rows) || !Array.isArray(obj.batch_items)) {
+    throw new Error("Host CSV preview response omitted rows or batch_items.");
+  }
+  const rows: CsvPreviewRow[] = obj.rows.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("Host CSV preview row was unreadable.");
+    }
+    const row = entry as Record<string, unknown>;
+    const rowNumber = asNonNegativeInt(row.row_number, -1);
+    if (rowNumber < 1) throw new Error("Host CSV preview row omitted row_number.");
+    const profile = parseCsvPreviewProfile(row.profile);
+    return {
+      row_number: rowNumber,
+      status: parseCsvRowStatus(row.status),
+      ...(typeof row.record_id === "string" ? { record_id: row.record_id } : {}),
+      ...(typeof row.existing_record_id === "string"
+        ? { existing_record_id: row.existing_record_id }
+        : {}),
+      ...(typeof row.existing_revision === "number"
+        ? { existing_revision: row.existing_revision }
+        : {}),
+      ...(typeof row.duplicate_of_row === "number"
+        ? { duplicate_of_row: row.duplicate_of_row }
+        : {}),
+      display_name: typeof row.display_name === "string" ? row.display_name : null,
+      email: typeof row.email === "string" ? row.email : null,
+      ...(profile ? { profile } : {}),
+      errors: asCsvStringList(row.errors),
+    };
+  });
+  const batch_items: CsvPreviewBatchItem[] = [];
+  for (const item of obj.batch_items) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("Host CSV batch item was unreadable.");
+    }
+    const rawItem = item as Record<string, unknown>;
+    const profile = parseCsvPreviewProfile(rawItem.profile);
+    if (typeof rawItem.record_id !== "string" || rawItem.record_id === "" || !profile) {
+      throw new Error("Host CSV batch item missed record_id or profile.");
+    }
+    batch_items.push({ record_id: rawItem.record_id, profile });
+  }
+  return {
+    preview_token: obj.preview_token,
+    headers: asCsvStringList(obj.headers),
+    mapped_headers: asCsvStringList(obj.mapped_headers),
+    unmapped_headers: asCsvStringList(obj.unmapped_headers),
+    warnings: asCsvStringList(obj.warnings),
+    summary: {
+      total_rows: asNonNegativeInt(sum.total_rows, rows.length),
+      valid_new: asNonNegativeInt(sum.valid_new, batch_items.length),
+      duplicate_existing: asNonNegativeInt(sum.duplicate_existing, 0),
+      duplicate_in_csv: asNonNegativeInt(sum.duplicate_in_csv, 0),
+      invalid: asNonNegativeInt(sum.invalid, 0),
+      max_rows: asNonNegativeInt(sum.max_rows, CRM_CSV_MAX_ROWS),
+    },
+    rows,
+    batch_items,
+  };
+}

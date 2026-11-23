@@ -134,9 +134,20 @@
   margin-bottom: 0;
 }
 
+.crm-list-toolbar .crm-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
 .crm-list-toolbar .crm-list-create {
   margin-left: auto;
   padding-inline: 0.75rem;
+}
+
+.crm-list-toolbar .crm-list-actions .crm-list-create {
+  margin-left: 0;
 }
 
 .crm-list-controls .crm-pager {
@@ -165,6 +176,7 @@
     flex-basis: 100%;
   }
 
+  .crm-list-toolbar .crm-list-actions,
   .crm-list-toolbar .crm-list-create {
     margin-left: 0;
   }

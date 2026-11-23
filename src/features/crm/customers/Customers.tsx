@@ -2,6 +2,7 @@ import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Resource,Select,useQuery } from "@cadence/screen-ui";
 import { useEffect,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
+import ImportCsvDrawer from "./ImportCsvDrawer";
 import WorkspaceTabs from "../WorkspaceTabs";
 import { onScopeRetired } from "../../../bridge/scope";
 import { readCustomerList,useListMemory } from "../listMemory";
@@ -220,6 +221,8 @@ function CustomerList({
     queryState.failure, { query, committed, cursors, page, consentFilter, tagFilter },
     JSON.stringify([committed, cursor, consentFilter, tagFilter]));
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBanner, setImportBanner] = useState<string | null>(null);
   const shown = records.filter((r) => {
     const v = viewProfile(r.profile);
     return (
@@ -313,11 +316,41 @@ function CustomerList({
           </div>
         )}
         {canCreate && (
-          <Button variant="primary" className="crm-list-create" onClick={onNew}>
-            {t("New customer")}
-          </Button>
+          <div className="crm-list-actions">
+            {!viewer.canvas && (
+              <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                {t("Import CSV")}
+              </Button>
+            )}
+            <Button variant="primary" className="crm-list-create" onClick={onNew}>
+              {t("New customer")}
+            </Button>
+          </div>
         )}
       </div>
+      {importBanner && (
+        <Notice>
+          <span>{importBanner}</span>{" "}
+          <button type="button" className="lnk" onClick={() => setImportBanner(null)}>
+            {t("Dismiss")}
+          </button>
+        </Notice>
+      )}
+      {importOpen && (
+        <ImportCsvDrawer
+          scope={scope}
+          onClose={() => setImportOpen(false)}
+          onImported={(created) => {
+            setImportOpen(false);
+            setImportBanner(
+              created === 1
+                ? t("Imported 1 customer.")
+                : t("Imported {count} customers.").replace("{count}", () => String(created)),
+            );
+            void queryState.store.refresh();
+          }}
+        />
+      )}
       {viewer.operator === null && (
         viewer.access === "unavailable" ? (
           // CAD-1193: a completed unanswered check is unavailable, not
