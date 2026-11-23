@@ -83,9 +83,11 @@ export default function CampaignList({
 
   return (
     <section ref={listRef} aria-label={t("Campaigns list")} className="crm-list crm-list-controls">
-      <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
-        {t("Campaigns")}
-      </h3>
+      {!viewer.canvas && (
+        <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+          {t("Campaigns")}
+        </h3>
+      )}
       <div className="crm-toolbar crm-list-toolbar">
         <div className="crm-search">
           <label className="sr-only" htmlFor="crm-campaign-search">{t("Search campaigns")}</label>
