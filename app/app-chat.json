@@ -12,6 +12,24 @@
       }
     },
     {
+      "id": "deals",
+      "label": "Pipeline",
+      "prompts": ["What deals are in proposal stage?", "Total open pipeline by stage"],
+      "record": {
+        "label": "Deal",
+        "prompts": ["Advance this deal stage", "Log a task for this deal"]
+      }
+    },
+    {
+      "id": "tasks",
+      "label": "Tasks",
+      "prompts": ["What tasks are due soon?", "Show open follow-ups"],
+      "record": {
+        "label": "Task",
+        "prompts": ["Mark this task done", "Reschedule due date"]
+      }
+    },
+    {
       "id": "segments",
       "label": "Segments",
       "prompts": ["Build a segment for…", "Who can I email today?"],

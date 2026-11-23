@@ -5,6 +5,7 @@ export interface Viewer {
   canvas?: boolean;
   canCreate?: boolean;
   canUpdate?: boolean;
+  canMerge?: boolean;
   access?: "unavailable";
   onRetryAccess?: () => void;
 }

@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 357240,
-      "sha256": "sha256:1513a00791d19f858b79557b6925479eab3691235d97e8405e1d53bafcdbf83e"
+      "size": 394888,
+      "sha256": "sha256:b3c79e4a22ad2edc3737683055bbb907969bbb416a8cebaf06a215ef892d4dd7"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:2d328be706e84c369592a16c82c8092ffd212c2e74c22a8ac61acfd7818bced3",
+    "source_digest": "sha256:1292455c9b26df7dfa71ba17cb5618a8462029f7609e0b8954d8add4643441d3",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
@@ -45,6 +45,7 @@
     "records.aggregate",
     "records.batch",
     "records.csv.preview",
+    "records.merge",
     "segments.list",
     "segments.show",
     "segments.save",
@@ -102,6 +103,14 @@
         "label": "Customers"
       },
       {
+        "id": "deals",
+        "label": "Pipeline"
+      },
+      {
+        "id": "tasks",
+        "label": "Tasks"
+      },
+      {
         "id": "segments",
         "label": "Segments"
       },
@@ -119,6 +128,32 @@
         "zh-TW": "客戶"
       },
       "section": "customers",
+      "params": {
+        "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "deals",
+      "label": {
+        "en": "Pipeline",
+        "zh-TW": "商機"
+      },
+      "section": "deals",
+      "params": {
+        "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "tasks",
+      "label": {
+        "en": "Tasks",
+        "zh-TW": "待辦"
+      },
+      "section": "tasks",
       "params": {
         "q": {
           "type": "string"
@@ -147,6 +182,19 @@
       "section": "campaigns",
       "params": {
         "q": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "id": "customer",
+      "label": {
+        "en": "Customer by id",
+        "zh-TW": "指定客戶"
+      },
+      "section": "customers",
+      "params": {
+        "id": {
           "type": "string"
         }
       }

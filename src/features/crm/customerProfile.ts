@@ -503,7 +503,8 @@ export function activityItems(record: HostRecord, t: Translate = identity): Acti
       const parts = here.map((entry) => activityConsentText(entry, t));
       const who = row.actor === "operator" ? t("the operator") : row.actor;
       const created = row.operation === "create" || (row.operation === undefined && row.revision === 1);
-      const lead = created ? t("Created") : parts.length === 0 ? t("Profile edited") : "";
+      const merged = row.operation === "merge_target";
+      const lead = created ? t("Created") : merged ? t("Customer merged") : parts.length === 0 ? t("Profile edited") : "";
       const text = [lead, ...parts].filter(Boolean).join(" · ") + ` ${t("by {who}").replace("{who}", () => who)}`;
       const note = here.find((entry) => entry.note)?.note;
       const changes = activityChanges(row.before, row.after, record.profile, t);

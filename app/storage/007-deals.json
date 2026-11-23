@@ -1,0 +1,40 @@
+{
+  "version": 7,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "deals",
+      "columns": [
+        {"name": "customer_id", "type": "text", "nullable": false, "max_length": 128},
+        {"name": "title", "type": "text", "nullable": false, "max_length": 200},
+        {
+          "name": "stage",
+          "type": "text",
+          "nullable": false,
+          "default": "lead",
+          "enum": ["lead", "qualified", "proposal", "won", "lost"]
+        },
+        {"name": "amount_cents", "type": "integer", "nullable": false, "default": 0},
+        {"name": "currency", "type": "text", "nullable": false, "default": "HKD", "max_length": 8},
+        {"name": "expected_close_date", "type": "text", "nullable": true, "default": null, "max_length": 32},
+        {"name": "owner_label", "type": "text", "nullable": true, "default": null, "max_length": 120},
+        {"name": "notes", "type": "text", "nullable": true, "default": null, "max_length": 2000},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "deals",
+      "name": "deals_customer_id",
+      "columns": ["customer_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "deals",
+      "name": "deals_stage",
+      "columns": ["stage"],
+      "unique": false
+    }
+  ]
+}

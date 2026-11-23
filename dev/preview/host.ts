@@ -3,7 +3,7 @@ import { fixtureCall, inertHtml, fixtureDigest as digest, fixtureInstallId as in
 import "./shell";
 import type { Route } from "../../src/bridge/scope";
 
-const sections = ["customers", "segments", "campaigns"] as const;
+const sections = ["customers", "deals", "tasks", "segments", "campaigns"] as const;
 const unavailable = () => new ApiError("Unavailable offline. No live data was changed, sent or approved.", 503, { code: "unavailable" });
 
 // CRM-19 canvas mode: ?canvas=<px> mounts the screen alone in a frame of that
@@ -17,7 +17,7 @@ const presentationLocale = (options.get("lang") ?? options.get("locale")) === "z
 // `surface` message, app-kit 0.7.0) and narrows the actions the way the host does.
 const asCanvasSurface = options.get("surface") === "canvas";
 const readOnlyMount = asCanvasSurface || options.get("readonly") === "1";
-const offeredActions = readOnlyMount ? fixtureActions.filter(verb => /\.(list|show|render)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
+const offeredActions = readOnlyMount ? fixtureActions.filter(verb => /\.(list|show|render|aggregate)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
 if (canvas !== null) {
   document.documentElement.dataset.canvas = "";
   document.documentElement.style.setProperty("--canvas-width", `${canvas}px`);

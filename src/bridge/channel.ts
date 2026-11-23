@@ -8,7 +8,7 @@ import { resetOwnerGate } from "./ownerGate";
 import { bindBridgeScope, type DisplayScope } from "./scope";
 import { CALL_FIELDS, OPERATIONS, SLOT_FIELDS, WRITE_VERBS } from "./services";
 
-export type CrmSection = "customers" | "segments" | "campaigns";
+export type CrmSection = "customers" | "deals" | "tasks" | "segments" | "campaigns";
 export type CrmView = "list" | "new";
 export type CampaignLeaveState = { publish: (unsaved: boolean) => void; release: () => void };
 
@@ -38,7 +38,7 @@ export function createCrmBridge(): ScreenBridge<CrmSection, CrmView, ApiError> {
     singleFlight: ["records.csv."],
     writeVerbs: WRITE_VERBS,
     route: {
-      sections: ["customers", "segments", "campaigns"],
+      sections: ["customers", "deals", "tasks", "segments", "campaigns"],
       defaultSection: "customers",
       views: ["list", "new"],
     },

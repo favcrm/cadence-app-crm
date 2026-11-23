@@ -56,6 +56,8 @@ beforeAll(async () => {
     return React.createElement("p", { "data-section": label }, state);
   };
   mock.module("../../src/features/crm/customers/Customers.tsx", () => ({ default: stub("customers", "records.list") }));
+  mock.module("../../src/features/crm/deals/Deals.tsx", () => ({ default: stub("deals", "records.list") }));
+  mock.module("../../src/features/crm/tasks/Tasks.tsx", () => ({ default: stub("tasks", "records.list") }));
   mock.module("../../src/features/crm/segments/Segments.tsx", () => ({ default: stub("segments", "segments.list") }));
   mock.module("../../src/features/crm/campaigns/CrmCampaigns.tsx", () => ({ default: stub("campaigns", "content.list") }));
   gate = await import("../../src/bridge/ownerGate.ts");

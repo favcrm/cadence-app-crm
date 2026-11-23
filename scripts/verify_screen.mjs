@@ -20,7 +20,7 @@ exact(decl.provenance,['source_digest','sdk_digest','toolchain_digest']);
 const expected = {source_digest:`sha256:${sourceDigest()}`,sdk_digest:`sha256:${env.pin.archive.sha256}`,toolchain_digest:`sha256:${hash(JSON.stringify(env.pin.toolchain))}`};
 if (Object.keys(expected).some(k => decl.provenance[k] !== expected[k])) fail('Source/SDK/toolchain provenance mismatch');
 exact(decl.navigation,['section_query','default_section','sections']);
-const navigation={section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]};
+const navigation={section_query:'crm',default_section:'customers',sections:[{id:'customers',label:'Customers'},{id:'deals',label:'Pipeline'},{id:'tasks',label:'Tasks'},{id:'segments',label:'Segments'},{id:'campaigns',label:'Campaigns'}]};
 if (JSON.stringify(decl.navigation) !== JSON.stringify(navigation)) fail('CRM navigation mismatch');
 // Declared views (app-kit 0.8.0 grammar): at most 20, unique ids, a declared section, at most 6 params of date|string|enum (at most 20 values).
 if (JSON.stringify(decl.views) !== JSON.stringify(views)) fail('CRM views mismatch');

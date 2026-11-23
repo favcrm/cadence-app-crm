@@ -72,6 +72,71 @@ export interface CustomerNoteRecord {
   archivedAt: string | null;
 }
 
+export type DealStage = "lead" | "qualified" | "proposal" | "won" | "lost";
+export const DEAL_STAGES: readonly DealStage[] = ["lead", "qualified", "proposal", "won", "lost"];
+
+export interface DealRecord {
+  id: string;
+  revision: number;
+  customerId: string;
+  title: string;
+  stage: DealStage;
+  amountCents: number;
+  currency: string;
+  expectedCloseDate: string | null;
+  ownerLabel: string | null;
+  notes: string | null;
+}
+
+export interface DealStageAggregate {
+  stage: DealStage;
+  count: number;
+  amountCents: number;
+}
+
+export type TaskStatus = "open" | "done" | "cancelled";
+export const TASK_STATUSES: readonly TaskStatus[] = ["open", "done", "cancelled"];
+
+export interface TaskRecord {
+  id: string;
+  revision: number;
+  customerId: string | null;
+  dealId: string | null;
+  title: string;
+  status: TaskStatus;
+  dueAt: string | null;
+  assignee: string | null;
+  notes: string | null;
+}
+
+export type TouchpointChannel = "email" | "whatsapp" | "phone" | "meeting" | "note" | "other";
+export const TOUCHPOINT_CHANNELS: readonly TouchpointChannel[] = ["email", "whatsapp", "phone", "meeting", "note", "other"];
+export type TouchpointDirection = "inbound" | "outbound" | "internal";
+
+export interface TouchpointRecord {
+  id: string;
+  revision: number;
+  customerId: string;
+  channel: TouchpointChannel;
+  direction: TouchpointDirection;
+  summary: string;
+  occurredAt: string;
+  refId: string | null;
+}
+
+export interface MergeCustomerOverrides {
+  display_name?: string;
+  email?: string | null;
+  phone?: string | null;
+  source?: string | null;
+}
+
+export interface MergeResult {
+  record: HostRecord;
+  mergedSourceId: string;
+  reparented: Record<string, number>;
+}
+
 /** How consent was given (CAD-1053). Granting requires one; the note is optional (≤280). */
 export type ConsentMethod = "in_person" | "web_form" | "written" | "imported" | "other";
 export interface ConsentProvenance {
@@ -256,6 +321,102 @@ export function parseNoteRecord(row: unknown): CustomerNoteRecord {
   };
 }
 
+function asDealStage(value: unknown): DealStage {
+  return value === "lead" || value === "qualified" || value === "proposal" || value === "won" || value === "lost"
+    ? value
+    : "lead";
+}
+
+function asTaskStatus(value: unknown): TaskStatus {
+  return value === "open" || value === "done" || value === "cancelled" ? value : "open";
+}
+
+function asTouchpointChannel(value: unknown): TouchpointChannel {
+  return value === "email" || value === "whatsapp" || value === "phone" || value === "meeting" || value === "note" || value === "other"
+    ? value
+    : "other";
+}
+
+function asTouchpointDirection(value: unknown): TouchpointDirection {
+  return value === "inbound" || value === "outbound" || value === "internal" ? value : "outbound";
+}
+
+function rowEnvelope(row: unknown, label: string): { id: string; revision: number; fields: Record<string, unknown> } {
+  if (!row || typeof row !== "object") throw new ApiError(`The server returned an invalid ${label}`, 502);
+  const item = row as Record<string, unknown>;
+  const profile = item.profile;
+  if (
+    typeof item.id !== "string" ||
+    typeof item.revision !== "number" ||
+    !Number.isSafeInteger(item.revision) ||
+    item.revision < 1 ||
+    !profile ||
+    typeof profile !== "object" ||
+    Array.isArray(profile)
+  ) {
+    throw new ApiError(`The server returned an invalid ${label}`, 502);
+  }
+  return { id: item.id, revision: item.revision, fields: profile as Record<string, unknown> };
+}
+
+export function parseDealRecord(row: unknown): DealRecord {
+  const { id, revision, fields } = rowEnvelope(row, "deal");
+  if (typeof fields.customer_id !== "string" || typeof fields.title !== "string") {
+    throw new ApiError("The server returned an invalid deal", 502);
+  }
+  return {
+    id,
+    revision,
+    customerId: fields.customer_id,
+    title: fields.title,
+    stage: asDealStage(fields.stage),
+    amountCents: typeof fields.amount_cents === "number" && Number.isFinite(fields.amount_cents) ? Math.trunc(fields.amount_cents) : 0,
+    currency: typeof fields.currency === "string" && fields.currency ? fields.currency : "HKD",
+    expectedCloseDate: typeof fields.expected_close_date === "string" ? fields.expected_close_date : null,
+    ownerLabel: typeof fields.owner_label === "string" ? fields.owner_label : null,
+    notes: typeof fields.notes === "string" ? fields.notes : null,
+  };
+}
+
+export function parseTaskRecord(row: unknown): TaskRecord {
+  const { id, revision, fields } = rowEnvelope(row, "task");
+  if (typeof fields.title !== "string") {
+    throw new ApiError("The server returned an invalid task", 502);
+  }
+  return {
+    id,
+    revision,
+    customerId: typeof fields.customer_id === "string" ? fields.customer_id : null,
+    dealId: typeof fields.deal_id === "string" ? fields.deal_id : null,
+    title: fields.title,
+    status: asTaskStatus(fields.status),
+    dueAt: typeof fields.due_at === "string" ? fields.due_at : null,
+    assignee: typeof fields.assignee === "string" ? fields.assignee : null,
+    notes: typeof fields.notes === "string" ? fields.notes : null,
+  };
+}
+
+export function parseTouchpointRecord(row: unknown): TouchpointRecord {
+  const { id, revision, fields } = rowEnvelope(row, "touchpoint");
+  if (
+    typeof fields.customer_id !== "string" ||
+    typeof fields.summary !== "string" ||
+    typeof fields.occurred_at !== "string"
+  ) {
+    throw new ApiError("The server returned an invalid touchpoint", 502);
+  }
+  return {
+    id,
+    revision,
+    customerId: fields.customer_id,
+    channel: asTouchpointChannel(fields.channel),
+    direction: asTouchpointDirection(fields.direction),
+    summary: fields.summary,
+    occurredAt: fields.occurred_at,
+    refId: typeof fields.ref_id === "string" ? fields.ref_id : null,
+  };
+}
+
 export const hostActions = {
   guards: { assertScope, assertRecordId, assertCleanBody },
   /** `GET …/records` — the server scopes rows to the URL's install/context.
@@ -406,6 +567,315 @@ export const hostActions = {
       ? value.created
       : items.length;
     return { created };
+  },
+
+  async listDeals(
+    scope: HostScope,
+    opts?: { query?: string; stage?: DealStage | ""; customerId?: string; limit?: number; cursor?: string },
+  ): Promise<{ deals: DealRecord[]; total: number | null; truncated: boolean; nextCursor: string | null }> {
+    assertScope(scope);
+    const filters: Array<{ field: string; op: "eq"; value: unknown }> = [];
+    if (opts?.stage) filters.push({ field: "stage", op: "eq", value: opts.stage });
+    if (opts?.customerId) {
+      assertRecordId(opts.customerId);
+      filters.push({ field: "customer_id", op: "eq", value: opts.customerId });
+    }
+    const value = await serviceCall<{ records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown }>(
+      scope,
+      "records.list",
+      {
+        table: "deals",
+        ...(opts?.query ? { query: opts.query } : {}),
+        ...(filters.length > 0 ? { filters } : {}),
+        ...(opts?.limit ? { limit: opts.limit } : {}),
+        ...(opts?.cursor ? { cursor: opts.cursor } : {}),
+      },
+    );
+    if (!Array.isArray(value?.records)) throw new ApiError("The server returned an invalid deals receipt", 502);
+    return {
+      deals: value.records.map(parseDealRecord),
+      total: typeof value.total === "number" && Number.isSafeInteger(value.total) ? value.total : null,
+      truncated: value.truncated === true,
+      nextCursor: typeof value.next_cursor === "string" ? value.next_cursor : null,
+    };
+  },
+
+  async aggregateDealsByStage(scope: HostScope, query?: string): Promise<DealStageAggregate[]> {
+    assertScope(scope);
+    const value = await serviceCall<{ groups?: unknown }>(scope, "records.aggregate", {
+      table: "deals",
+      group_by: ["stage"],
+      sum: ["amount_cents"],
+      ...(query ? { query } : {}),
+    });
+    const byStage = new Map<DealStage, DealStageAggregate>();
+    for (const stage of DEAL_STAGES) {
+      byStage.set(stage, { stage, count: 0, amountCents: 0 });
+    }
+    if (Array.isArray(value?.groups)) {
+      for (const entry of value.groups) {
+        if (!entry || typeof entry !== "object") continue;
+        const g = entry as { key?: { stage?: unknown }; count?: unknown; sums?: { amount_cents?: unknown } };
+        const stage = asDealStage(g.key?.stage);
+        const count = typeof g.count === "number" && Number.isFinite(g.count) ? g.count : 0;
+        const amountCents =
+          typeof g.sums?.amount_cents === "number" && Number.isFinite(g.sums.amount_cents)
+            ? g.sums.amount_cents
+            : 0;
+        byStage.set(stage, { stage, count, amountCents });
+      }
+    }
+    return DEAL_STAGES.map((stage) => byStage.get(stage)!);
+  },
+
+  async createDeal(
+    scope: HostScope,
+    input: {
+      customerId: string;
+      title: string;
+      stage: DealStage;
+      amountCents: number;
+      currency?: string;
+      expectedCloseDate?: string | null;
+      ownerLabel?: string | null;
+      notes?: string | null;
+    },
+    dealId?: string,
+  ): Promise<DealRecord> {
+    assertScope(scope);
+    assertRecordId(input.customerId);
+    const id = dealId ?? `deal-${crypto.randomUUID()}`;
+    assertRecordId(id);
+    const title = input.title.trim();
+    if (!title || title.length > 200) throw new ApiError("Deal title is required (1–200 characters)", 400);
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.create", {
+      table: "deals",
+      record_id: id,
+      profile: {
+        customer_id: input.customerId,
+        title,
+        stage: input.stage,
+        amount_cents: Math.max(0, Math.trunc(input.amountCents)),
+        currency: (input.currency?.trim() || "HKD").slice(0, 8),
+        expected_close_date: input.expectedCloseDate?.trim() || null,
+        owner_label: input.ownerLabel?.trim() || null,
+        notes: input.notes?.trim() || null,
+      },
+    });
+    return parseDealRecord(value?.record);
+  },
+
+  async updateDeal(
+    scope: HostScope,
+    dealId: string,
+    expectedRevision: number,
+    patch: Partial<{
+      title: string;
+      stage: DealStage;
+      amountCents: number;
+      currency: string;
+      expectedCloseDate: string | null;
+      ownerLabel: string | null;
+      notes: string | null;
+    }>,
+  ): Promise<DealRecord> {
+    assertScope(scope);
+    assertRecordId(dealId);
+    if (!Number.isInteger(expectedRevision) || expectedRevision <= 0) {
+      throw new ApiError("expected record revision must be a positive integer", 400);
+    }
+    const profile: Record<string, unknown> = {};
+    if (patch.title !== undefined) profile.title = patch.title.trim();
+    if (patch.stage !== undefined) profile.stage = patch.stage;
+    if (patch.amountCents !== undefined) profile.amount_cents = Math.max(0, Math.trunc(patch.amountCents));
+    if (patch.currency !== undefined) profile.currency = patch.currency.trim() || "HKD";
+    if (patch.expectedCloseDate !== undefined) profile.expected_close_date = patch.expectedCloseDate?.trim() || null;
+    if (patch.ownerLabel !== undefined) profile.owner_label = patch.ownerLabel?.trim() || null;
+    if (patch.notes !== undefined) profile.notes = patch.notes?.trim() || null;
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.update", {
+      table: "deals",
+      record_id: dealId,
+      expected_revision: expectedRevision,
+      profile,
+    });
+    return parseDealRecord(value?.record);
+  },
+
+  async listTasks(
+    scope: HostScope,
+    opts?: { query?: string; status?: TaskStatus | ""; customerId?: string; limit?: number; cursor?: string },
+  ): Promise<{ tasks: TaskRecord[]; total: number | null; truncated: boolean; nextCursor: string | null }> {
+    assertScope(scope);
+    const filters: Array<{ field: string; op: "eq"; value: unknown }> = [];
+    if (opts?.status) filters.push({ field: "status", op: "eq", value: opts.status });
+    if (opts?.customerId) {
+      assertRecordId(opts.customerId);
+      filters.push({ field: "customer_id", op: "eq", value: opts.customerId });
+    }
+    const value = await serviceCall<{ records?: unknown; total?: unknown; truncated?: unknown; next_cursor?: unknown }>(
+      scope,
+      "records.list",
+      {
+        table: "tasks",
+        ...(opts?.query ? { query: opts.query } : {}),
+        ...(filters.length > 0 ? { filters } : {}),
+        ...(opts?.limit ? { limit: opts.limit } : {}),
+        ...(opts?.cursor ? { cursor: opts.cursor } : {}),
+      },
+    );
+    if (!Array.isArray(value?.records)) throw new ApiError("The server returned an invalid tasks receipt", 502);
+    return {
+      tasks: value.records.map(parseTaskRecord),
+      total: typeof value.total === "number" && Number.isSafeInteger(value.total) ? value.total : null,
+      truncated: value.truncated === true,
+      nextCursor: typeof value.next_cursor === "string" ? value.next_cursor : null,
+    };
+  },
+
+  async createTask(
+    scope: HostScope,
+    input: {
+      title: string;
+      customerId?: string | null;
+      dealId?: string | null;
+      status?: TaskStatus;
+      dueAt?: string | null;
+      assignee?: string | null;
+      notes?: string | null;
+    },
+    taskId?: string,
+  ): Promise<TaskRecord> {
+    assertScope(scope);
+    if (input.customerId) assertRecordId(input.customerId);
+    if (input.dealId) assertRecordId(input.dealId);
+    const id = taskId ?? `task-${crypto.randomUUID()}`;
+    assertRecordId(id);
+    const title = input.title.trim();
+    if (!title || title.length > 200) throw new ApiError("Task title is required (1–200 characters)", 400);
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.create", {
+      table: "tasks",
+      record_id: id,
+      profile: {
+        customer_id: input.customerId || null,
+        deal_id: input.dealId || null,
+        title,
+        status: input.status ?? "open",
+        due_at: input.dueAt?.trim() || null,
+        assignee: input.assignee?.trim() || null,
+        notes: input.notes?.trim() || null,
+      },
+    });
+    return parseTaskRecord(value?.record);
+  },
+
+  async updateTask(
+    scope: HostScope,
+    taskId: string,
+    expectedRevision: number,
+    patch: Partial<{ title: string; status: TaskStatus; dueAt: string | null; assignee: string | null; notes: string | null }>,
+  ): Promise<TaskRecord> {
+    assertScope(scope);
+    assertRecordId(taskId);
+    if (!Number.isInteger(expectedRevision) || expectedRevision <= 0) {
+      throw new ApiError("expected record revision must be a positive integer", 400);
+    }
+    const profile: Record<string, unknown> = {};
+    if (patch.title !== undefined) profile.title = patch.title.trim();
+    if (patch.status !== undefined) profile.status = patch.status;
+    if (patch.dueAt !== undefined) profile.due_at = patch.dueAt?.trim() || null;
+    if (patch.assignee !== undefined) profile.assignee = patch.assignee?.trim() || null;
+    if (patch.notes !== undefined) profile.notes = patch.notes?.trim() || null;
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.update", {
+      table: "tasks",
+      record_id: taskId,
+      expected_revision: expectedRevision,
+      profile,
+    });
+    return parseTaskRecord(value?.record);
+  },
+
+  async listTouchpoints(scope: HostScope, customerId: string): Promise<TouchpointRecord[]> {
+    assertScope(scope);
+    assertRecordId(customerId);
+    const value = await serviceCall<{ records?: unknown }>(scope, "records.list", {
+      table: "touchpoints",
+      filters: [{ field: "customer_id", op: "eq", value: customerId }],
+      limit: 100,
+    });
+    if (!Array.isArray(value?.records)) {
+      throw new ApiError("The server returned an invalid touchpoints receipt", 502);
+    }
+    return value.records.map(parseTouchpointRecord);
+  },
+
+  async createTouchpoint(
+    scope: HostScope,
+    input: {
+      customerId: string;
+      channel: TouchpointChannel;
+      direction: TouchpointDirection;
+      summary: string;
+      occurredAt?: string;
+    },
+    touchpointId?: string,
+  ): Promise<TouchpointRecord> {
+    assertScope(scope);
+    assertRecordId(input.customerId);
+    const id = touchpointId ?? `tp-${crypto.randomUUID()}`;
+    assertRecordId(id);
+    const summary = input.summary.trim();
+    if (!summary || summary.length > 2000) {
+      throw new ApiError("Touchpoint summary must be 1–2000 characters", 400);
+    }
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.create", {
+      table: "touchpoints",
+      record_id: id,
+      profile: {
+        customer_id: input.customerId,
+        channel: input.channel,
+        direction: input.direction,
+        summary,
+        occurred_at: input.occurredAt?.trim() || new Date().toISOString(),
+      },
+    });
+    return parseTouchpointRecord(value?.record);
+  },
+
+  async mergeCustomers(
+    scope: HostScope,
+    input: {
+      sourceId: string;
+      targetId: string;
+      expectedSourceRevision: number;
+      expectedTargetRevision: number;
+      overrides?: MergeCustomerOverrides;
+    },
+  ): Promise<MergeResult> {
+    assertScope(scope);
+    assertRecordId(input.sourceId);
+    assertRecordId(input.targetId);
+    if (input.sourceId === input.targetId) {
+      throw new ApiError("Choose a different customer to merge into.", 400);
+    }
+    const value = await serviceCall<{
+      record?: unknown;
+      merged_source_id?: unknown;
+      reparented?: unknown;
+    }>(scope, "records.merge", {
+      source_id: input.sourceId,
+      target_id: input.targetId,
+      expected_source_revision: input.expectedSourceRevision,
+      expected_target_revision: input.expectedTargetRevision,
+      ...(input.overrides && Object.keys(input.overrides).length > 0 ? { overrides: input.overrides } : {}),
+    });
+    return {
+      record: parseRecord(value),
+      mergedSourceId: typeof value?.merged_source_id === "string" ? value.merged_source_id : input.sourceId,
+      reparented:
+        value?.reparented && typeof value.reparented === "object" && !Array.isArray(value.reparented)
+          ? (value.reparented as Record<string, number>)
+          : {},
+    };
   },
 };
 

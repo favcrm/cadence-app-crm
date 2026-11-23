@@ -1,0 +1,46 @@
+{
+  "version": 8,
+  "operations": [
+    {
+      "op": "create_table",
+      "table": "tasks",
+      "columns": [
+        {"name": "customer_id", "type": "text", "nullable": true, "default": null, "max_length": 128},
+        {"name": "deal_id", "type": "text", "nullable": true, "default": null, "max_length": 128},
+        {"name": "title", "type": "text", "nullable": false, "max_length": 200},
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "open",
+          "enum": ["open", "done", "cancelled"]
+        },
+        {"name": "due_at", "type": "text", "nullable": true, "default": null, "max_length": 64},
+        {"name": "assignee", "type": "text", "nullable": true, "default": null, "max_length": 120},
+        {"name": "notes", "type": "text", "nullable": true, "default": null, "max_length": 2000},
+        {"name": "synthetic", "type": "boolean", "nullable": false, "default": false}
+      ]
+    },
+    {
+      "op": "create_index",
+      "table": "tasks",
+      "name": "tasks_customer_id",
+      "columns": ["customer_id"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "tasks",
+      "name": "tasks_status",
+      "columns": ["status"],
+      "unique": false
+    },
+    {
+      "op": "create_index",
+      "table": "tasks",
+      "name": "tasks_due_at",
+      "columns": ["due_at"],
+      "unique": false
+    }
+  ]
+}
