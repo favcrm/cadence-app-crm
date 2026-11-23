@@ -9,6 +9,17 @@ Open a customer to replace the list with the profile at any frame width.
 **All customers** returns to the list without losing its filters, page or
 selection. Activity entries open a detail drawer from the profile.
 
+## Owner-only sections in 0.7.1
+
+Customers are member-readable; Segments and Campaigns (and the `segments`, `segment`,
+`campaigns`, `campaign` canvas views) are owner-only. When a member's first `.list`/`.show`
+read of such a section is refused `owner_required`, the single `serviceCall` path records it
+(`src/bridge/ownerGate.ts`) and that section shows "Only workspace owners can view segments." /
+"...campaigns." with the hint "Ask a workspace owner if you need this." (English, zh-TW and
+zh-HK; text only), with no partial data and no further reads. Customers keep loading in the
+same mount; every other refusal is handled as before. The dev preview answers those reads
+this way with `?owner=required`.
+
 ## Chat canvas
 
 The bridge declares `screen-surfaces.v1` and `screen-canvas.v1` (app-kit 0.7.0). When the

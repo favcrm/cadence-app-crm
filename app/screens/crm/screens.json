@@ -16,8 +16,8 @@
     {
       "name": "client.js",
       "media_type": "text/javascript",
-      "size": 355855,
-      "sha256": "sha256:3fe2cb4c0485879c149e054e328268dfe66015f37c50986bd1da559962dfeda0"
+      "size": 357240,
+      "sha256": "sha256:1513a00791d19f858b79557b6925479eab3691235d97e8405e1d53bafcdbf83e"
     },
     {
       "name": "crm.css",
@@ -27,7 +27,7 @@
     }
   ],
   "provenance": {
-    "source_digest": "sha256:b632263caa9f604fbb8a6614804348748be74d815efeaf525624d898d8d7a6a5",
+    "source_digest": "sha256:2d328be706e84c369592a16c82c8092ffd212c2e74c22a8ac61acfd7818bced3",
     "sdk_digest": "sha256:fd65c974511e63b3996e9fa7e438fb4e39df5f508d11636116ef150fcc123e35",
     "toolchain_digest": "sha256:e21cfc8222db408abe6ba5a482520639d9cf4b96481c19aff4b4246af8a65e42"
   },
