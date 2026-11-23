@@ -314,9 +314,11 @@ function SegmentList({
 
   return (
     <section ref={listRef} aria-label={t("Segments list")} className="crm-list crm-list-controls">
-      <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
-        {t("Segments")}
-      </h3>
+      {!viewer.canvas && (
+        <h3 className="text-cardtitle font-medium text-ink-100" data-outlet-heading>
+          {t("Segments")}
+        </h3>
+      )}
       <div className="crm-toolbar crm-list-toolbar">
         <div className="crm-search">
           <label className="sr-only" htmlFor="crm-segment-search">{t("Search segments")}</label>

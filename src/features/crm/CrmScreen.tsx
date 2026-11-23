@@ -63,7 +63,7 @@ export default function CrmScreen() {
   // Scope retirement destroys every draft/cache; section navigation doesn't
   // retire the bridge or the persistent host chat.
   return <CrmLocaleProvider locale={snapshot.presentationLocale}><NavigationProvider adapter={FrameNavigationAdapter}>
-    <main className="app-outlet crm" key={`${scope.installId}:${snapshot.digest}`}>
+    <main className={canvas ? "app-outlet crm crm-canvas" : "app-outlet crm"} key={`${scope.installId}:${snapshot.digest}`}>
       {current.section === "customers" ? <Customers {...props} /> : current.section === "segments" ? <Segments {...props} /> : <Campaigns {...props} />}
     </main>
   </NavigationProvider></CrmLocaleProvider>;
