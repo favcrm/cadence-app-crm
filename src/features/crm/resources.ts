@@ -25,7 +25,8 @@ export function useCrmQuery<T>(scope: HostScope, operation: keyof CallArgs, args
       return result;
     } catch (error) { failures.set(store, error); throw error; }
   }, { freshMs: 0, discardOnError: (e: unknown) => {
-    const denied = e instanceof ApiError && [401, 403].includes(e.status);
+    // owner_required refuses one owner-only section; it is not a revoked grant, so other sections keep their observations.
+    const denied = e instanceof ApiError && [401, 403].includes(e.status) && e.code !== "owner_required";
     if (denied) observationInvalid = true;
     return denied;
   } })(key);

@@ -4,6 +4,7 @@ import {
   type ScreenBridge,
   type ScreenBridgeRuntimeOverrides,
 } from "@cadence/app-kit";
+import { resetOwnerGate } from "./ownerGate";
 import { bindBridgeScope, type DisplayScope } from "./scope";
 import { CALL_FIELDS, OPERATIONS, SLOT_FIELDS, WRITE_VERBS } from "./services";
 
@@ -105,6 +106,7 @@ export class Channel {
   }
 
   resetForTests(): void {
+    resetOwnerGate();
     this.bridge.reset();
   }
 }

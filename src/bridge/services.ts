@@ -1,5 +1,6 @@
 import { ApiError } from "@cadence/screen-ui";
 import { channel } from "./channel";
+import { isOwnerRequired,noteOwnerRequired,sectionOfRead } from "./ownerGate";
 import { assertCurrentScope,requireOperation,type DisplayScope } from "./scope";
 
 type Bag = Record<string, unknown>;
@@ -118,7 +119,11 @@ export const WRITE_VERBS: readonly string[] = [
 export const onWrite = (f: () => void) => channel.onWrite(f);
 export async function serviceCall<T = unknown, K extends keyof CallArgs = keyof CallArgs>(scope: DisplayScope, verb: K, args: CallArgs[K]): Promise<T> {
   assertCurrentScope(scope); requireOperation(verb);
-  return channel.call<T>(scope, verb, cleanArgs(verb, args as Bag, false));
+  const pending = channel.call<T>(scope, verb, cleanArgs(verb, args as Bag, false));
+  // The one place a read refusal is observed: an owner-only section's first refusal gates that section.
+  const section = sectionOfRead(verb);
+  if (section) pending.catch((error: unknown) => { if (isOwnerRequired(error)) noteOwnerRequired(section); });
+  return pending;
 }
 export async function serviceSlot<T = unknown, K extends keyof SlotArgs = keyof SlotArgs>(scope: DisplayScope, verb: K, args: SlotArgs[K]): Promise<T> {
   assertCurrentScope(scope); requireOperation(verb);

@@ -1,3 +1,4 @@
+import { resetOwnerGate } from "./ownerGate";
 import { ApiError } from "@cadence/screen-ui";
 import type { ScreenBridge, ScreenScopeSnapshot } from "@cadence/app-kit";
 import { useSyncExternalStore } from "react";
@@ -90,6 +91,7 @@ export function clearScope(reason: string): void {
   manualError = reason;
   activeBridge?.reset();
   wasError = false;
+  resetOwnerGate();
   retireListeners.forEach((f) => f());
   notify();
 }
