@@ -77,7 +77,10 @@ function clearPreviews() {
 }
 function showPreview(args: Record<string, unknown>) {
   const anchor = args.anchor as { x: number; y: number; w: number; h: number };
-  if (typeof args.preview_id !== "string" || typeof args.document !== "string" || !anchor || ![anchor.x, anchor.y, anchor.w, anchor.h].every(v => Number.isFinite(v) && Math.abs(v) <= 16384) || anchor.w < 0 || anchor.h < 0) throw new Error("Invalid fixture preview geometry.");
+  const source = args.source;
+  if (readOnlyMount) throw new ApiError("Only an owner can control the hosted email preview.", 403, { code: "owner_required" });
+  if (typeof args.preview_id !== "string" || "document" in args || !source || typeof source !== "object" || Array.isArray(source) || !("revision" in source) || !anchor || ![anchor.x, anchor.y, anchor.w, anchor.h].every(v => Number.isFinite(v) && Math.abs(v) <= 16384) || anchor.w < 0 || anchor.h < 0) throw new Error("Invalid fixture preview source or geometry.");
+  const { render } = fixtureCall("content.render", source as Record<string, unknown>) as { render: { html: string } };
   let preview = previews.get(args.preview_id);
   if (!preview) {
     const node = document.createElement("iframe");
@@ -88,7 +91,7 @@ function showPreview(args: Record<string, unknown>) {
     previews.set(args.preview_id, preview);
   }
   // No scripts, forms, external resources or live links gain authority here.
-  const documentText = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width, initial-scale=1">${inertHtml(args.document)}`;
+  const documentText = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width, initial-scale=1">${inertHtml(render.html)}`;
   if (preview.node.srcdoc !== documentText) preview.node.srcdoc = documentText;
   preview.anchor = anchor;
   positionPreviews();
@@ -158,6 +161,7 @@ function handle(conn: Conn, request: Record<string, unknown>) {
       showPreview(call.args);
       reply(conn, call, {});
     } else if (call.verb === "screen.preview.clear") {
+      if (readOnlyMount) throw new ApiError("Only an owner can control the hosted email preview.", 403, { code: "owner_required" });
       const id = call.args.preview_id;
       if (typeof id === "string") {
         previews.get(id)?.node.remove();

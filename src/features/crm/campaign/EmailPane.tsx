@@ -276,6 +276,7 @@ export default function EmailPane({
             <HostPreview
               title={draft !== null ? t("Draft email preview") : `${t("Visual email preview, saved revision")} ${render?.revision == null ? "" : formatNumber(render.revision)}`}
               document={visual.html}
+              source={draft === null ? render?.previewSource ?? null : null}
               mode={draft !== null ? "draft" : "saved"}
               device={device}
             />

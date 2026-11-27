@@ -421,11 +421,12 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     }
     case "content.render": {
       const content = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
+      if (args.revision !== undefined && args.revision !== content.revision) throw new ApiError("The saved campaign moved; reload it to preview.", 409, { code: "revision_conflict" });
       if (args.binding_id !== undefined && !fixtureSenderBindings.some(binding => binding.binding_id === args.binding_id)) throw new ApiError("No matching local sender preview exists.", 404, { code: "not_found" });
       const html = content.mode === "html" ? content.html! : content.blocks.map(block => block.type === "button" ? `<p><strong>${escapeHtml(block.label)}</strong></p>` : `<${block.type === "heading" ? "h1" : "p"}>${escapeHtml(block.text)}</${block.type === "heading" ? "h1" : "p"}>`).join("");
       const rendered = html.replace(/\{\{first_name\|([^}]+)\}\}/g, (_match, fallback: string) => escapeHtml(typeof args.sample_first_name === "string" && args.sample_first_name ? args.sample_first_name : fallback));
       const template = document.createElement("template"); template.innerHTML = rendered;
-      return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
+      return { render: { revision: content.revision, content_digest: content.content_digest, preview_source: { campaign_id: content.campaign_id, revision: content.revision, sample_first_name: args.sample_first_name }, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
     }
     case "proposals.list": return { proposals: [] };
     case "sends.list": { const row = seededSendRow(); return { sends: row ? [row] : [] }; }

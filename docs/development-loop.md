@@ -143,6 +143,9 @@ the editable source and the plain-text disclosure, not a live render of pasted
 input. Switch to Visual after saving to see the sanitized, matching host
 revision; unsaved HTML never reaches the preview. Hosted paste replaces images
 with their alt text before preview or delivery, as the local fixture does.
+The hosted preview takes a saved campaign revision rather than a document
+from the screen and runs only for the owner's live mount. The native
+inert-document command is unchanged.
 The creation modal keeps keyboard focus inside the form after an HTML save
 is refused. The toolbar keeps modes and block inserts on the left with
 Desktop/Mobile on the right. The
