@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,Field,Select } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
+import { useLayoutEffect,useRef,useState } from "react";
 import { campaignChat } from "../../../bridge/chat";
 import type { AudienceScope } from "../audienceClient";
 import { useCrmQuery } from "../resources";
@@ -67,11 +67,20 @@ export default function NewCampaignDialog({
   // and never saves the campaign twice.
   const [campaignId] = useState(() => newAudienceId("cmp"));
   const [saved, setSaved] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const htmlRef = useRef<HTMLTextAreaElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current!;
+    dialog.showModal();
     nameRef.current?.focus();
+    return () => dialog.close();
   }, []);
+
+  useLayoutEffect(() => {
+    if (!pending && error !== null && start === "html") htmlRef.current?.focus({ preventScroll: true });
+  }, [pending, error, start]);
 
   const land = () => {
     setLanding({ campaignId, tab: "email", segmentId: segmentId === "" ? null : segmentId });
@@ -139,23 +148,23 @@ export default function NewCampaignDialog({
 
   const action = t(saved && start === "ai" ? "Send brief again" : startAction(start));
   return (
-    <div className="crm-confirm-wrap" role="presentation" data-new-campaign>
+    <dialog
+      ref={dialogRef}
+      className="crm-confirm-wrap"
+      aria-labelledby="crm-newc-title"
+      data-new-campaign
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!pending) onCancel();
+      }}
+    >
       <div className="crm-confirm-scrim" onClick={pending ? undefined : onCancel} />
       <form
         className="card crm-newc grid gap-3"
         noValidate
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="crm-newc-title"
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !pending) {
-            e.stopPropagation();
-            onCancel();
-          }
         }}
       >
         <div className="crm-newc-head">
@@ -230,6 +239,7 @@ export default function NewCampaignDialog({
             {(c) => (
               <textarea
                 {...c}
+                ref={htmlRef}
                 className="field num"
                 rows={6}
                 value={html}
@@ -283,6 +293,6 @@ export default function NewCampaignDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </dialog>
   );
 }

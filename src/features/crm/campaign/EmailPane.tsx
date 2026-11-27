@@ -268,6 +268,11 @@ export default function EmailPane({
               {t("Save the draft to preview your HTML.")}
             </p>
           )}
+          {visual !== null && mode === "visual" && draft === null && doc?.html?.includes("<img") && (
+            <p className="text-label text-ink-400 mt-2">
+              {t("External images may be hidden in this preview to protect your privacy.")}
+            </p>
+          )}
           {visual !== null && mode === "visual" && (
             <HostPreview
               title={draft !== null ? t("Draft email preview") : `${t("Visual email preview, saved revision")} ${render?.revision == null ? "" : formatNumber(render.revision)}`}

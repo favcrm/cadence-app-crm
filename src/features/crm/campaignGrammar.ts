@@ -574,7 +574,8 @@ export function parseProposalList(value: unknown): ProposalDoc[] {
 export function friendlyCampaignError(error: unknown, savingHtml = false): string {
   if (savingHtml && error instanceof ApiError) {
     if (error.code === "html_unsupported") return "This board does not support pasted HTML. Use the block editor instead.";
-    if (error.code === "failed") return "Could not confirm the HTML save. Check the HTML, or use the block editor if this board does not support pasted HTML.";
+    if (error.status === 413) return "This HTML is too large for the board. Shorten it or use the block editor.";
+    if (error.code === "failed") return "Could not confirm the HTML save. Check the HTML or try a shorter version. If this board does not support pasted HTML, use the block editor.";
   }
   return hostErrorText(error, "The campaign request was refused — retry.");
 }
