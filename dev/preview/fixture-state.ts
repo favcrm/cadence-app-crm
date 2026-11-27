@@ -387,11 +387,14 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       else {
         checkContentFields(args.subject, preheader);
         if (typeof args.html !== "string" || !args.html.trim()) throw new ApiError("Valid email HTML is required.", 400);
+        if (params.get("board") === "blocks") throw new ApiError("Cadence refused this request. Inspect fresh status before retrying an effect.", 400, { code: "failed" });
       }
       if ("draft_audience" in args && !keepsAudience) throw new ApiError("Unknown field draft_audience.", 400, { code: "validation_failed" });
       const content: Content = { draft_audience_full: "draft_audience" in args ? args.draft_audience : existing?.draft_audience_full ?? null, campaign_id: args.campaign_id, name, revision: (existing?.revision ?? 0) + 1, subject: args.subject, preheader, blocks: blocks ?? [], mode: blocks ? "blocks" : "html", html: typeof args.html === "string" ? inertHtml(args.html) : null, text_override: typeof args.text === "string" ? args.text : null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } };
       // An audience-only save (same content) keeps the revision, as AOS-521 does.
-      const unchanged = existing && existing.subject === content.subject && existing.preheader === content.preheader && JSON.stringify(existing.blocks) === JSON.stringify(content.blocks);
+      const unchanged = existing && existing.subject === content.subject && existing.preheader === content.preheader &&
+        existing.mode === content.mode && existing.html === content.html && existing.text_override === content.text_override &&
+        JSON.stringify(existing.blocks) === JSON.stringify(content.blocks);
       if (unchanged) content.revision = existing.revision;
       if (existing) contents.splice(contents.indexOf(existing), 1, content); else contents.push(content);
       changed(existing ? "Campaign draft updated locally." : "Campaign draft created locally.");

@@ -570,7 +570,11 @@ export function parseProposalList(value: unknown): ProposalDoc[] {
   return rows.map((row) => parseProposal({ proposal: row }));
 }
 
-/** Server refusals stay generic; transport failures name the retry. */
-export function friendlyCampaignError(error: unknown): string {
+/** Legacy boards project an unsupported HTML save to a generic refusal. */
+export function friendlyCampaignError(error: unknown, savingHtml = false): string {
+  if (savingHtml && error instanceof ApiError) {
+    if (error.code === "html_unsupported") return "This board does not support pasted HTML. Use the block editor instead.";
+    if (error.code === "failed") return "Could not confirm the HTML save. Check the HTML, or use the block editor if this board does not support pasted HTML.";
+  }
   return hostErrorText(error, "The campaign request was refused — retry.");
 }

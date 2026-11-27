@@ -131,7 +131,7 @@ export default function NewCampaignDialog({
       }
       land();
     } catch (e) {
-      setError(friendlyCampaignError(e));
+      setError(friendlyCampaignError(e, start === "html"));
     } finally {
       setPending(false);
     }
