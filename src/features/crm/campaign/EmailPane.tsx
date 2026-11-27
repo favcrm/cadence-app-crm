@@ -2,6 +2,7 @@ import { useLocale } from "../locale";
 import { Button,ConfirmDialog } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import HostPreview from "../../../bridge/HostPreview";
+import { useScope } from "../../../bridge/scope";
 import type { AudienceScope } from "../audienceClient";
 import {
 friendlyCampaignError,
@@ -85,6 +86,8 @@ export default function EmailPane({
   edit: EmailDraftApi | null;
 }) {
   const { t, formatNumber } = useLocale();
+  const actions = useScope()?.actions;
+  const canPreview = actions?.includes("screen.preview.show") && actions.includes("screen.preview.clear");
   const [mode, setMode] = useState<Mode>("visual");
   const [device, setDevice] = useState<Device>("desktop");
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -272,7 +275,7 @@ export default function EmailPane({
               {t("Save the draft to preview your HTML.")}
             </p>
           )}
-          {visual !== null && mode === "visual" && (
+          {visual !== null && mode === "visual" && (canPreview ? (
             <HostPreview
               title={draft !== null ? t("Draft email preview") : `${t("Visual email preview, saved revision")} ${render?.revision == null ? "" : formatNumber(render.revision)}`}
               document={visual.html}
@@ -280,7 +283,11 @@ export default function EmailPane({
               mode={draft !== null ? "draft" : "saved"}
               device={device}
             />
-          )}
+          ) : (
+            <p className="text-label text-ink-500 mt-2" data-preview="unavailable">
+              {t("Visual preview is unavailable here. Switch to HTML to view the email.")}
+            </p>
+          ))}
           {shown !== null && mode === "html" && !editing && (
             <pre className="crm-preview" data-preview="html">
               {shown.html}

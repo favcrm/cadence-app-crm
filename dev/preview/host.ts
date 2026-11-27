@@ -17,7 +17,10 @@ const presentationLocale = (options.get("lang") ?? options.get("locale")) === "z
 // `surface` message, app-kit 0.7.0) and narrows the actions the way the host does.
 const asCanvasSurface = options.get("surface") === "canvas";
 const readOnlyMount = asCanvasSurface || options.get("readonly") === "1";
-const offeredActions = readOnlyMount ? fixtureActions.filter(verb => /\.(list|show|render|aggregate)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")) : fixtureActions;
+const offeredActions = readOnlyMount
+  ? fixtureActions.filter(verb => !verb.startsWith("screen.preview.") &&
+      (/\.(list|show|render|aggregate)$/.test(verb) || verb === "audience.preview" || verb.startsWith("screen.")))
+  : fixtureActions;
 if (canvas !== null) {
   document.documentElement.dataset.canvas = "";
   document.documentElement.style.setProperty("--canvas-width", `${canvas}px`);
@@ -78,7 +81,6 @@ function clearPreviews() {
 function showPreview(args: Record<string, unknown>) {
   const anchor = args.anchor as { x: number; y: number; w: number; h: number };
   const source = args.source;
-  if (readOnlyMount) throw new ApiError("Only an owner can control the hosted email preview.", 403, { code: "owner_required" });
   if (typeof args.preview_id !== "string" || "document" in args || !source || typeof source !== "object" || Array.isArray(source) || !("revision" in source) || !anchor || ![anchor.x, anchor.y, anchor.w, anchor.h].every(v => Number.isFinite(v) && Math.abs(v) <= 16384) || anchor.w < 0 || anchor.h < 0) throw new Error("Invalid fixture preview source or geometry.");
   const { render } = fixtureCall("content.render", source as Record<string, unknown>) as { render: { html: string } };
   let preview = previews.get(args.preview_id);
@@ -161,7 +163,6 @@ function handle(conn: Conn, request: Record<string, unknown>) {
       showPreview(call.args);
       reply(conn, call, {});
     } else if (call.verb === "screen.preview.clear") {
-      if (readOnlyMount) throw new ApiError("Only an owner can control the hosted email preview.", 403, { code: "owner_required" });
       const id = call.args.preview_id;
       if (typeof id === "string") {
         previews.get(id)?.node.remove();

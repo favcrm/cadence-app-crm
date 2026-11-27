@@ -280,6 +280,7 @@ export const zhTW: Record<string, string> = {
   "On hosted boards, pasted images are replaced with their alt text.": "在託管工作區，貼上的圖片會以替代文字取代。",
   "Draft email preview": "電子郵件草稿預覽",
   "Visual email preview, saved revision": "電子郵件視覺預覽，已儲存版本",
+  "Visual preview is unavailable here. Switch to HTML to view the email.": "此檢視不提供視覺預覽。請切換至 HTML 查看電子郵件。",
   "Advanced: plain-text version": "進階：純文字版本",
   "Write my own": "自行撰寫",
   "Unsaved custom text is saved only when you choose Save.": "只有選擇儲存時，未儲存的自訂文字才會儲存。",
