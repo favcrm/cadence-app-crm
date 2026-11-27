@@ -68,6 +68,7 @@ export default function NewCampaignDialog({
   const [campaignId] = useState(() => newAudienceId("cmp"));
   const [saved, setSaved] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
   const htmlRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -79,7 +80,8 @@ export default function NewCampaignDialog({
   }, []);
 
   useLayoutEffect(() => {
-    if (!pending && error !== null && start === "html") htmlRef.current?.focus({ preventScroll: true });
+    if (pending) formRef.current?.focus({ preventScroll: true });
+    else if (error !== null && start === "html") htmlRef.current?.focus({ preventScroll: true });
   }, [pending, error, start]);
 
   const land = () => {
@@ -157,9 +159,24 @@ export default function NewCampaignDialog({
         e.preventDefault();
         if (!pending) onCancel();
       }}
+      onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        // A native modal makes this document inert outside the dialog, but
+        // the hosted shell is the parent document of this iframe.
+        const stops = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex='0']",
+        )).filter((node) => node.tabIndex >= 0 && node.getClientRects().length > 0);
+        const active = document.activeElement;
+        if (active === (e.shiftKey ? stops[0] : stops.at(-1)) || !stops.some((node) => node === active)) {
+          e.preventDefault();
+          (e.shiftKey ? stops.at(-1) : stops[0])?.focus();
+        }
+      }}
     >
       <div className="crm-confirm-scrim" onClick={pending ? undefined : onCancel} />
       <form
+        ref={formRef}
+        tabIndex={-1}
         className="card crm-newc grid gap-3"
         noValidate
         onSubmit={(e) => {
