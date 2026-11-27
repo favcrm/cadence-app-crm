@@ -141,8 +141,8 @@ height.
 The Email tab keeps the direct visual canvas for block drafts. HTML mode shows
 the editable source and the plain-text disclosure, not a live render of pasted
 input. Switch to Visual after saving to see the sanitized, matching host
-revision; unsaved HTML never reaches the preview. External images may be
-hidden in the inert preview so opening a draft does not contact image hosts.
+revision; unsaved HTML never reaches the preview. Hosted paste replaces images
+with their alt text before preview or delivery, as the local fixture does.
 The creation modal keeps keyboard focus inside the form after an HTML save
 is refused. The toolbar keeps modes and block inserts on the left with
 Desktop/Mobile on the right. The

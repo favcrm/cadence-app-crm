@@ -250,7 +250,7 @@ export default function NewCampaignDialog({
         {start === "html" && (
           <Field
             label={t("HTML")}
-            hint={t("Scripts, forms and tracking pixels are removed; the unsubscribe footer is added for you")}
+            hint={t("Pasted images are replaced with their alt text.")}
             className="crm-field"
           >
             {(c) => (

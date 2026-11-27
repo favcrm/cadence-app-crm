@@ -248,6 +248,7 @@ export default function EmailPane({
               </label>
               <textarea
                 id="cmp-html-source"
+                aria-describedby="cmp-html-images"
                 className="field srcedit"
                 rows={12}
                 spellCheck={false}
@@ -256,6 +257,9 @@ export default function EmailPane({
                 disabled={edit.saving || edit.reloading}
                 onChange={(e) => edit.patch({ html: e.target.value })}
               />
+              <p id="cmp-html-images" className="text-micro text-ink-500">
+                {t("Pasted images are replaced with their alt text.")}
+              </p>
             </div>
           )}
           {!htmlNeedsSave && (mode === "visual" ? visual : shown) === null && (draft !== null ? draftPending : renderPending) && (
@@ -266,11 +270,6 @@ export default function EmailPane({
           {mode === "visual" && htmlNeedsSave && (
             <p className="text-label text-ink-300 mt-2" role="status">
               {t("Save the draft to preview your HTML.")}
-            </p>
-          )}
-          {visual !== null && mode === "visual" && draft === null && doc?.html?.includes("<img") && (
-            <p className="text-label text-ink-400 mt-2">
-              {t("External images may be hidden in this preview to protect your privacy.")}
             </p>
           )}
           {visual !== null && mode === "visual" && (
