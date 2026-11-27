@@ -258,7 +258,7 @@ export default function EmailPane({
                 onChange={(e) => edit.patch({ html: e.target.value })}
               />
               <p id="cmp-html-images" className="text-micro text-ink-500">
-                {t("Pasted images are replaced with their alt text.")}
+                {t("On hosted boards, pasted images are replaced with their alt text.")}
               </p>
             </div>
           )}

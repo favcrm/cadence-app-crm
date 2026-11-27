@@ -277,7 +277,7 @@ export const zhTW: Record<string, string> = {
   "Rendering the draft preview…": "正在呈現草稿預覽…",
   "Rendering the saved email…": "正在呈現已儲存的電子郵件…",
   "Save the draft to preview your HTML.": "請先儲存草稿，再預覽 HTML。",
-  "Pasted images are replaced with their alt text.": "貼上的圖片會以替代文字取代。",
+  "On hosted boards, pasted images are replaced with their alt text.": "在託管工作區，貼上的圖片會以替代文字取代。",
   "Draft email preview": "電子郵件草稿預覽",
   "Visual email preview, saved revision": "電子郵件視覺預覽，已儲存版本",
   "Advanced: plain-text version": "進階：純文字版本",

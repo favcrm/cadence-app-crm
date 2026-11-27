@@ -250,7 +250,7 @@ export default function NewCampaignDialog({
         {start === "html" && (
           <Field
             label={t("HTML")}
-            hint={t("Pasted images are replaced with their alt text.")}
+            hint={t("On hosted boards, pasted images are replaced with their alt text.")}
             className="crm-field"
           >
             {(c) => (

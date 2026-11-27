@@ -165,6 +165,10 @@ export function inertHtml(raw: string) {
   template.innerHTML = raw;
   const allowed: Record<string, true> = { H1: true, H2: true, H3: true, H4: true, P: true, BR: true, STRONG: true, EM: true, B: true, I: true, U: true, S: true, A: true, DIV: true, SPAN: true, TABLE: true, TBODY: true, THEAD: true, TFOOT: true, TR: true, TD: true, TH: true, UL: true, OL: true, LI: true, BLOCKQUOTE: true, HR: true };
   for (const element of template.content.querySelectorAll("*")) {
+    if (element.tagName === "PICTURE") {
+      element.replaceWith(...element.childNodes);
+      continue;
+    }
     if (element.tagName === "IMG") {
       element.replaceWith(element.getAttribute("alt") ?? "");
       continue;
