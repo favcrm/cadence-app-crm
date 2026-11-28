@@ -2,7 +2,7 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 9,
+  "schema_version": 10,
   "compatible_schema_versions": [
     1,
     2,
@@ -12,7 +12,8 @@
     6,
     7,
     8,
-    9
+    9,
+    10
   ],
   "default_table": "customers",
   "migrations": [
@@ -60,6 +61,11 @@
       "version": 9,
       "path": "storage/009-touchpoints.json",
       "sha256": "sha256:0545ecb4303b5153cab5d3fc5993be896c7793787b02a15e3805319d208107b1"
+    },
+    {
+      "version": 10,
+      "path": "storage/010-touchpoint-deal.json",
+      "sha256": "sha256:2912b4d5d436086fbb3c26f6725ee85d15423eb4c1bf489cc2abdd4adec3584c"
     }
   ],
   "tables": {
@@ -155,6 +161,9 @@
             "required": ["customer_id", "channel", "summary", "occurred_at"],
             "properties": {
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+              "deal_id": {
+                "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
+              },
               "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
               "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
             }

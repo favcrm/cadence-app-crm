@@ -142,11 +142,18 @@ jobs:
       - name: Screen typecheck
         run: pnpm run typecheck
 
-      - name: Build real CRM screen (release provenance required)
-        run: pnpm run build
-
-      - name: Verify screen and SDK authority boundary
+      - name: Verify checked-in screen and SDK authority boundary
         run: pnpm run verify
+
+      - name: Rebuild the screen and require identical checked-in assets
+        run: |
+          set -euo pipefail
+          pnpm run build
+          changes=$(git status --porcelain --untracked-files=all -- app/screens/crm)
+          if [ -n "$changes" ]; then
+            echo "::error::CRM screen assets differ from the pinned build. Run pnpm build and commit app/screens/crm."
+            exit 1
+          fi
 
       - name: Check bundle against the current host grammar
         run: |

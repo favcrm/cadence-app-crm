@@ -21,7 +21,7 @@ Use `app_describe` with `app: "crm"` first to inspect the live schema, declared 
 ## 2. Revenue Pipeline, Tasks, Notes & Touchpoints
 - **Deals (`table: "deals"`)**: `customer_id` (required), `title`, `stage` (`lead` | `qualified` | `proposal` | `won` | `lost`), `amount_cents` (integer), `currency` (default `"HKD"`), `expected_close_date`, `owner_label`, `notes`. All deal mutations require owner approval (`tier2_hitl`).
 - **Tasks (`table: "tasks"`)**: `customer_id?`, `deal_id?`, `title`, `status` (`open` | `done` | `cancelled`), `due_at`, `assignee`, `notes`. Supports Tier-1 auto-apply when workspace autonomy enables `tier1_auto_apply` and agent opts into `crm_hygiene_write`.
-- **Touchpoints (`table: "touchpoints"`)**: structured interaction log (`customer_id`, `channel`: `email` | `whatsapp` | `phone` | `meeting` | `note` | `other`, `direction`: `inbound` | `outbound` | `internal`, `summary`, `occurred_at`, `ref_id?`). Supports Tier-1 auto-apply under the same triple lock.
+- **Touchpoints (`table: "touchpoints"`)**: structured interaction log (`customer_id`, optional `deal_id` from that customer's deals, `channel`: `email` | `whatsapp` | `phone` | `meeting` | `note` | `other`, `direction`: `inbound` | `outbound` | `internal`, `summary`, `occurred_at`, `ref_id?`). Use `app_describe` to confirm `deal_id` is available on the installed schema before writing it. Supports Tier-1 auto-apply under the same triple lock.
 - **Notes (`table: "notes"`)**: internal notes (`customer_id`, `body`, `archived_at?`). Read with `filters: [{field: "customer_id", op: "eq", value: "<customer_id>"}]`. Note creates/updates support Tier-1 auto-apply; `customer_id` on `notes` is immutable for normal updates.
 
 ## 3. Segments, Campaigns & Canvas Views

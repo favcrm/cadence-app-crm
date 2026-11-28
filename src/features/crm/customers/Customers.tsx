@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Resource,Select,useQuery } from "@cadence/screen-ui";
-import { useEffect,useRef,useState,type MouseEvent } from "react";
+import { useEffect,useMemo,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
 import ImportCsvDrawer from "./ImportCsvDrawer";
 import MergeCustomerDrawer from "./MergeCustomerDrawer";
@@ -1149,6 +1149,7 @@ function CustomerWorkspace({
   const [confirmArchiveId, setArchiveConfirmId] = useState<string | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deals, setDeals] = useState<DealRecord[]>([]);
+  const dealTitles = useMemo(() => new Map(deals.map((deal) => [deal.id, deal.title])), [deals]);
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [dealTitleDraft, setDealTitleDraft] = useState("");
   const [dealAmountDraft, setDealAmountDraft] = useState("0");
@@ -1165,6 +1166,8 @@ function CustomerWorkspace({
   const [touchpointsError, setTouchpointsError] = useState<string | null>(null);
   const [tpChannel, setTpChannel] = useState<TouchpointChannel>("note");
   const [tpDirection, setTpDirection] = useState<TouchpointDirection>("outbound");
+  const [tpDealId, setTpDealId] = useState("");
+  const selectedDealId = dealTitles.has(tpDealId) ? tpDealId : "";
   const [tpSummary, setTpSummary] = useState("");
   const [tpPending, setTpPending] = useState(false);
   const [tpFormError, setTpFormError] = useState<string | null>(null);
@@ -1225,6 +1228,7 @@ function CustomerWorkspace({
     setDeals([]);
     setTasks([]);
     setTouchpoints([]);
+    setTpDealId("");
   }, [recordId, scope]);
   useEffect(() => {
     if (viewer.operator === true && data !== null) {
@@ -1567,8 +1571,14 @@ function CustomerWorkspace({
                 setTpPending(true);
                 setTpFormError(null);
                 void hostActions
-                  .createTouchpoint(scope, { customerId: recordId, channel: tpChannel, direction: tpDirection, summary: trimmed })
-                  .then(() => { setTpSummary(""); refreshRelated(); })
+                  .createTouchpoint(scope, {
+                    customerId: recordId,
+                    dealId: selectedDealId || undefined,
+                    channel: tpChannel,
+                    direction: tpDirection,
+                    summary: trimmed,
+                  })
+                  .then(() => { setTpSummary(""); setTpDealId(""); refreshRelated(); })
                   .catch((err: unknown) => setTpFormError(friendlyError(err)))
                   .finally(() => setTpPending(false));
               }}
@@ -1599,6 +1609,20 @@ function CustomerWorkspace({
                   )}
                 </Field>
               </div>
+              {deals.length > 0 && (
+                <Field label={t("Deal (optional)")} id="crm-tp-deal" className="crm-field">
+                  {(c) => (
+                    <Select
+                      {...c}
+                      full
+                      value={selectedDealId}
+                      onChange={setTpDealId}
+                      disabled={tpPending}
+                      options={[{ value: "", label: t("No deal") }, ...deals.map((deal) => ({ value: deal.id, label: deal.title }))]}
+                    />
+                  )}
+                </Field>
+              )}
               <Field label={t("Interaction summary")} id="crm-tp-summary" className="crm-field">
                 {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
               </Field>
@@ -1614,15 +1638,23 @@ function CustomerWorkspace({
             : touchpoints.length === 0 ? <p className="text-secondary text-ink-400">{t("No touchpoints recorded yet.")}</p>
             : (
               <ul className="customer-contacts" aria-label={t("Touchpoints")}>
-                {touchpoints.map((tp) => (
-                  <li key={tp.id}>
-                    <div>
-                      <strong>{tp.channel} ({tp.direction})</strong>
-                      <p>{tp.summary}</p>
-                      <p className="num text-micro text-ink-500">{tp.occurredAt.slice(0, 10)}</p>
-                    </div>
-                  </li>
-                ))}
+                {touchpoints.map((tp) => {
+                  const dealTitle = tp.dealId ? dealTitles.get(tp.dealId) : undefined;
+                  return (
+                    <li key={tp.id}>
+                      <div>
+                        <strong>{tp.channel} ({tp.direction})</strong>
+                        <p>{tp.summary}</p>
+                        {tp.dealId && (
+                          <p className="text-micro text-ink-500">
+                            {dealTitle ? `${t("Deal")}: ${dealTitle}` : t("Linked deal")}
+                          </p>
+                        )}
+                        <p className="num text-micro text-ink-500">{tp.occurredAt.slice(0, 10)}</p>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
         </div>

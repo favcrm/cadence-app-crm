@@ -53,6 +53,13 @@ jobs:
       - name: Install locked publisher dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify the checked-in screen before inspecting or uploading it
+        run: |
+          set -euo pipefail
+          mkdir .cadence-ui/package
+          cp -R node_modules/@cadence/screen-ui/. .cadence-ui/package/
+          pnpm run verify
+
       - name: Install the exact pinned Cadence CLI
         env:
           CADENCE_VERSION: ${{ inputs.cadence_version || vars.CADENCE_TARGET_VERSION }}

@@ -117,6 +117,7 @@ export interface TouchpointRecord {
   id: string;
   revision: number;
   customerId: string;
+  dealId: string | null;
   channel: TouchpointChannel;
   direction: TouchpointDirection;
   summary: string;
@@ -409,6 +410,7 @@ export function parseTouchpointRecord(row: unknown): TouchpointRecord {
     id,
     revision,
     customerId: fields.customer_id,
+    dealId: typeof fields.deal_id === "string" ? fields.deal_id : null,
     channel: asTouchpointChannel(fields.channel),
     direction: asTouchpointDirection(fields.direction),
     summary: fields.summary,
@@ -812,6 +814,7 @@ export const hostActions = {
     scope: HostScope,
     input: {
       customerId: string;
+      dealId?: string;
       channel: TouchpointChannel;
       direction: TouchpointDirection;
       summary: string;
@@ -821,6 +824,7 @@ export const hostActions = {
   ): Promise<TouchpointRecord> {
     assertScope(scope);
     assertRecordId(input.customerId);
+    if (input.dealId !== undefined) assertRecordId(input.dealId);
     const id = touchpointId ?? `tp-${crypto.randomUUID()}`;
     assertRecordId(id);
     const summary = input.summary.trim();
@@ -832,6 +836,7 @@ export const hostActions = {
       record_id: id,
       profile: {
         customer_id: input.customerId,
+        ...(input.dealId !== undefined ? { deal_id: input.dealId } : {}),
         channel: input.channel,
         direction: input.direction,
         summary,
