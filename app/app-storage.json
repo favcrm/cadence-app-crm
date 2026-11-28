@@ -71,7 +71,7 @@
     {
       "version": 11,
       "path": "storage/011-crm26-schema-columns.json",
-      "sha256": "sha256:29c23c71b1b1f627bf30520674b0a652631d50f8bea1db2491a333880dba866a"
+      "sha256": "sha256:d24fba2bf5a0b4efb4730b9bd9ba29465f455e4eca61e7def1aaa91751f94593"
     }
   ],
   "tables": {

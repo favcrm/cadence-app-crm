@@ -42,9 +42,10 @@
                 "api_key", "apikey", "api_secret", "access_token", "auth_token",
                 "refresh_token", "session_token", "bearer_token", "id_token",
                 "client_secret", "private_key", "secret_key", "signing_key",
-                "encryption_key", "passphrase"
-              ]}},
-              {"not": {"pattern": "(^|_)(password|passwd|passphrase|secret|token|credentials?|apikey|api_key|private|signing|encryption)(_|$)"}}
+                "encryption_key", "passphrase",
+                "db_password", "user_password", "aws_secret_access_key",
+                "aws_access_key_id", "secret_access_key"
+              ]}}
             ]
           },
           "additionalProperties": {

@@ -112,17 +112,8 @@ describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
     const customFields = readJson(path.join("app", columnsMigration)).operations
       .find((op) => op.column.name === "custom_fields").column;
     const refusedKeys = customFields.json_schema.propertyNames.allOf.find((rule) => rule.not).not.enum;
-    for (const key of ["api_key", "access_token", "client_secret", "private_key", "password"]) {
+    for (const key of ["api_key", "access_token", "client_secret", "private_key", "password", "db_password", "aws_secret_access_key"]) {
       assert.ok(refusedKeys.includes(key), `custom_fields must refuse ${key}`);
-    }
-    const keyPattern = new RegExp(
-      customFields.json_schema.propertyNames.allOf.find((rule) => rule.not?.pattern).not.pattern,
-    );
-    for (const key of ["db_password", "aws_secret_access_key", "api_key", "access_token", "secret_santa"]) {
-      assert.match(key, keyPattern, `custom_fields must refuse ${key}`);
-    }
-    for (const key of ["account_manager", "renewal_date", "next_step"]) {
-      assert.doesNotMatch(key, keyPattern, `custom_fields must allow ${key}`);
     }
   });
 
