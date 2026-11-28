@@ -19,10 +19,10 @@ function sha256File(relPath) {
 }
 
 describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
-  it("app-storage.json declares schema v10 with verified 007-010 migrations and tables", () => {
+  it("app-storage.json declares schema v11 with verified 007-011 migrations and tables", () => {
     const manifest = readJson("app/app-storage.json");
-    assert.equal(manifest.schema_version, 10);
-    assert.deepEqual(manifest.compatible_schema_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    assert.equal(manifest.schema_version, 11);
+    assert.deepEqual(manifest.compatible_schema_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 
     const expectedMigrations = [
       {
@@ -77,11 +77,44 @@ describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
       "other",
     ]);
     const linkMigration = "storage/010-touchpoint-deal.json";
+    assert.equal(
+      manifest.migrations.find((m) => m.version === 10).sha256,
+      `sha256:${sha256File(path.join("app", linkMigration))}`,
+    );
+
+    const columnsMigration = "storage/011-crm26-schema-columns.json";
     assert.deepEqual(manifest.migrations.at(-1), {
-      version: 10,
-      path: linkMigration,
-      sha256: `sha256:${sha256File(path.join("app", linkMigration))}`,
+      version: 11,
+      path: columnsMigration,
+      sha256: `sha256:${sha256File(path.join("app", columnsMigration))}`,
     });
+    const added = {};
+    const nullable = [];
+    for (const op of readJson(path.join("app", columnsMigration)).operations) {
+      assert.equal(op.op, "add_column");
+      (added[op.table] ??= []).push(op.column.name);
+      if (op.column.nullable) nullable.push([op.table, op.column.name]);
+    }
+    assert.deepEqual(added, {
+      deals: ["status", "loss_reason", "source", "next_step", "custom_fields"],
+      tasks: ["priority", "origin", "source_ref"],
+      touchpoints: ["external_ref", "provenance"],
+    });
+    // A stored null is validated against the write schema, so every nullable column needs a null branch.
+    for (const [table, name] of nullable) {
+      const property = manifest.tables[table].write_schema.properties.after.properties[name];
+      assert.ok(property, `write schema missing ${table}.${name}`);
+      assert.ok(
+        (property.anyOf ?? []).some((branch) => branch.type === "null"),
+        `${table}.${name} write schema must accept the stored null`,
+      );
+    }
+    const customFields = readJson(path.join("app", columnsMigration)).operations
+      .find((op) => op.column.name === "custom_fields").column;
+    const refusedKeys = customFields.json_schema.propertyNames.allOf.find((rule) => rule.not).not.enum;
+    for (const key of ["api_key", "access_token", "client_secret", "private_key", "password", "db_password", "aws_secret_access_key"]) {
+      assert.ok(refusedKeys.includes(key), `custom_fields must refuse ${key}`);
+    }
   });
 
   it("bridge services and CRM views expose records.merge and deals/tasks/customer routes", () => {

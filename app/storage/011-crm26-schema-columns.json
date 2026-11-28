@@ -1,0 +1,96 @@
+{
+  "version": 11,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "deals",
+      "column": {"name": "status", "type": "text", "nullable": true, "default": null, "max_length": 32}
+    },
+    {
+      "op": "add_column",
+      "table": "deals",
+      "column": {"name": "loss_reason", "type": "text", "nullable": true, "default": null, "max_length": 200}
+    },
+    {
+      "op": "add_column",
+      "table": "deals",
+      "column": {"name": "source", "type": "text", "nullable": true, "default": null, "max_length": 120}
+    },
+    {
+      "op": "add_column",
+      "table": "deals",
+      "column": {"name": "next_step", "type": "text", "nullable": true, "default": null, "max_length": 200}
+    },
+    {
+      "op": "add_column",
+      "table": "deals",
+      "column": {
+        "name": "custom_fields",
+        "type": "json",
+        "nullable": false,
+        "default": {},
+        "json_schema": {
+          "type": "object",
+          "propertyNames": {
+            "allOf": [
+              {"type": "string", "pattern": "^[a-z0-9_]{1,40}$"},
+              {"not": {"enum": [
+                "constructor", "prototype", "__proto__",
+                "action_token", "confirmation_token", "confirmation_nonce", "confirm_token",
+                "csv_confirm_token", "scope_proof", "password", "credentials", "credential",
+                "secret", "session_key", "host_command",
+                "api_key", "apikey", "api_secret", "access_token", "auth_token",
+                "refresh_token", "session_token", "bearer_token", "id_token",
+                "client_secret", "private_key", "secret_key", "signing_key",
+                "encryption_key", "passphrase",
+                "db_password", "user_password", "aws_secret_access_key",
+                "aws_access_key_id", "secret_access_key"
+              ]}}
+            ]
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "type", "value"],
+            "properties": {
+              "label": {"type": "string", "minLength": 1, "maxLength": 80},
+              "type": {"enum": ["text", "number", "boolean", "date"]},
+              "value": true
+            },
+            "allOf": [
+              {"if": {"properties": {"type": {"const": "text"}}}, "then": {"properties": {"value": {"type": "string", "maxLength": 1000}}}},
+              {"if": {"properties": {"type": {"const": "number"}}}, "then": {"properties": {"value": {"type": "number"}}}},
+              {"if": {"properties": {"type": {"const": "boolean"}}}, "then": {"properties": {"value": {"type": "boolean"}}}},
+              {"if": {"properties": {"type": {"const": "date"}}}, "then": {"properties": {"value": {"type": "string", "format": "date"}}}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "op": "add_column",
+      "table": "tasks",
+      "column": {"name": "priority", "type": "text", "nullable": true, "default": null, "max_length": 16}
+    },
+    {
+      "op": "add_column",
+      "table": "tasks",
+      "column": {"name": "origin", "type": "text", "nullable": true, "default": null, "max_length": 32}
+    },
+    {
+      "op": "add_column",
+      "table": "tasks",
+      "column": {"name": "source_ref", "type": "text", "nullable": true, "default": null, "max_length": 200}
+    },
+    {
+      "op": "add_column",
+      "table": "touchpoints",
+      "column": {"name": "external_ref", "type": "text", "nullable": true, "default": null, "max_length": 200}
+    },
+    {
+      "op": "add_column",
+      "table": "touchpoints",
+      "column": {"name": "provenance", "type": "text", "nullable": true, "default": null, "max_length": 200}
+    }
+  ]
+}

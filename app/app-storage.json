@@ -2,7 +2,7 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 10,
+  "schema_version": 11,
   "compatible_schema_versions": [
     1,
     2,
@@ -13,7 +13,8 @@
     7,
     8,
     9,
-    10
+    10,
+    11
   ],
   "default_table": "customers",
   "migrations": [
@@ -66,6 +67,11 @@
       "version": 10,
       "path": "storage/010-touchpoint-deal.json",
       "sha256": "sha256:2912b4d5d436086fbb3c26f6725ee85d15423eb4c1bf489cc2abdd4adec3584c"
+    },
+    {
+      "version": 11,
+      "path": "storage/011-crm26-schema-columns.json",
+      "sha256": "sha256:d24fba2bf5a0b4efb4730b9bd9ba29465f455e4eca61e7def1aaa91751f94593"
     }
   ],
   "tables": {
@@ -112,7 +118,12 @@
             "properties": {
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
               "title": { "type": "string", "minLength": 1, "maxLength": 200 },
-              "amount_cents": { "type": "integer", "minimum": 0 }
+              "amount_cents": { "type": "integer", "minimum": 0 },
+              "status": { "anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }] },
+              "loss_reason": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
+              "source": { "anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }] },
+              "next_step": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
+              "custom_fields": { "type": "object" }
             }
           },
           "provenance": {
@@ -136,7 +147,10 @@
             "type": "object",
             "required": ["title"],
             "properties": {
-              "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+              "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "priority": { "anyOf": [{ "type": "string", "maxLength": 16 }, { "type": "null" }] },
+              "origin": { "anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }] },
+              "source_ref": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] }
             }
           },
           "provenance": {
@@ -164,6 +178,8 @@
               "deal_id": {
                 "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
               },
+              "external_ref": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
+              "provenance": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
               "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
               "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
             }
