@@ -2,7 +2,7 @@
   "contract": "app-storage/v1",
   "app": "crm",
   "record_kind": "customer",
-  "schema_version": 10,
+  "schema_version": 11,
   "compatible_schema_versions": [
     1,
     2,
@@ -13,7 +13,8 @@
     7,
     8,
     9,
-    10
+    10,
+    11
   ],
   "default_table": "customers",
   "migrations": [
@@ -66,6 +67,11 @@
       "version": 10,
       "path": "storage/010-touchpoint-deal.json",
       "sha256": "sha256:2912b4d5d436086fbb3c26f6725ee85d15423eb4c1bf489cc2abdd4adec3584c"
+    },
+    {
+      "version": 11,
+      "path": "storage/011-crm26-schema-columns.json",
+      "sha256": "sha256:991d5701652bc875ff16283ac4dacaf09e1170f23dae3e3cc5629f7656732da5"
     }
   ],
   "tables": {
@@ -112,7 +118,12 @@
             "properties": {
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
               "title": { "type": "string", "minLength": 1, "maxLength": 200 },
-              "amount_cents": { "type": "integer", "minimum": 0 }
+              "amount_cents": { "type": "integer", "minimum": 0 },
+              "status": { "type": "string", "maxLength": 32 },
+              "loss_reason": { "type": "string", "maxLength": 200 },
+              "source": { "type": "string", "maxLength": 120 },
+              "next_step": { "type": "string", "maxLength": 200 },
+              "custom_fields": { "type": "object" }
             }
           },
           "provenance": {
@@ -136,7 +147,10 @@
             "type": "object",
             "required": ["title"],
             "properties": {
-              "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+              "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "priority": { "type": "string", "maxLength": 16 },
+              "origin": { "type": "string", "maxLength": 32 },
+              "source_ref": { "type": "string", "maxLength": 200 }
             }
           },
           "provenance": {
@@ -164,6 +178,8 @@
               "deal_id": {
                 "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
               },
+              "external_ref": { "type": "string", "maxLength": 200 },
+              "provenance": { "type": "string", "maxLength": 200 },
               "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
               "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
             }

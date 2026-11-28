@@ -450,6 +450,7 @@ class BuildAndExclusionTests(unittest.TestCase):
                 f"{root}/storage/008-tasks.json",
                 f"{root}/storage/009-touchpoints.json",
                 f"{root}/storage/010-touchpoint-deal.json",
+                f"{root}/storage/011-crm26-schema-columns.json",
             },
         )
         self.assertEqual(
@@ -703,10 +704,10 @@ class StorageContractTests(unittest.TestCase):
         self.assertEqual(doc["contract"], "app-storage/v1")
         self.assertEqual(doc["app"], "crm")
         self.assertEqual(doc["record_kind"], "customer")
-        self.assertEqual(doc["schema_version"], 10)
-        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual(doc["schema_version"], 11)
+        self.assertEqual(doc["compatible_schema_versions"], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         self.assertEqual(doc["default_table"], "customers")
-        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        self.assertEqual([m["version"] for m in doc["migrations"]], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
         fields_migration = "storage/005-customer-custom-fields.json"
         notes_migration = "storage/006-customer-notes.json"
         deals_migration = "storage/007-deals.json"
@@ -718,6 +719,8 @@ class StorageContractTests(unittest.TestCase):
         self.assertEqual(dict(contents)[tasks_migration], (REPO / "app" / tasks_migration).read_bytes())
         self.assertEqual(dict(contents)[touchpoints_migration], (REPO / "app" / touchpoints_migration).read_bytes())
         self.assertIn("storage/010-touchpoint-deal.json", dict(contents))
+        columns_migration = "storage/011-crm26-schema-columns.json"
+        self.assertEqual(dict(contents)[columns_migration], (REPO / "app" / columns_migration).read_bytes())
         self.assertIn("notes", doc["tables"])
         self.assertEqual(doc["tables"]["notes"]["search_columns"], ["body"])
         self.assertEqual(doc["tables"]["notes"]["immutable_columns"], ["customer_id"])
