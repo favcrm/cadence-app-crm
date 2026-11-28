@@ -38,7 +38,11 @@
                 "constructor", "prototype", "__proto__",
                 "action_token", "confirmation_token", "confirmation_nonce", "confirm_token",
                 "csv_confirm_token", "scope_proof", "password", "credentials", "credential",
-                "secret", "session_key", "host_command"
+                "secret", "session_key", "host_command",
+                "api_key", "apikey", "api_secret", "access_token", "auth_token",
+                "refresh_token", "session_token", "bearer_token", "id_token",
+                "client_secret", "private_key", "secret_key", "signing_key",
+                "encryption_key", "passphrase"
               ]}}
             ]
           },
