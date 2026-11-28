@@ -943,6 +943,7 @@ export const zhTW: Record<string, string> = {
   "Mark done": "標記為完成",
   "Touchpoints": "互動紀錄",
   "Touchpoint summary is required.": "請輸入互動摘要。",
+  "That deal is no longer available for this customer. Choose another deal or No deal.": "此客戶已無法使用該商機。請選擇其他商機，或選擇不關聯商機。",
   "Channel": "管道",
   "Direction": "方向",
   "Outbound": "外撥／寄出",

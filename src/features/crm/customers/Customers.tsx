@@ -1621,23 +1621,39 @@ function CustomerWorkspace({
           {canWrite && (
             <form
               className="grid gap-2 mb-3"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
+                if (tpPending) return;
                 const trimmed = tpSummary.trim();
                 if (!trimmed) { setTpFormError(t("Touchpoint summary is required.")); return; }
                 setTpPending(true);
                 setTpFormError(null);
-                void hostActions
-                  .createTouchpoint(scope, {
+                try {
+                  if (selectedDeal) {
+                    const deal = await hostActions.showDeal(scope, selectedDeal.id).catch((error: unknown) => {
+                      if (error instanceof ApiError && error.status === 404) return null;
+                      throw error;
+                    });
+                    if (deal?.customerId !== recordId) {
+                      setTpFormError(t("That deal is no longer available for this customer. Choose another deal or No deal."));
+                      return;
+                    }
+                  }
+                  await hostActions.createTouchpoint(scope, {
                     customerId: recordId,
                     dealId: selectedDeal?.id,
                     channel: tpChannel,
                     direction: tpDirection,
                     summary: trimmed,
-                  })
-                  .then(() => { setTpSummary(""); setTpDeal(null); refreshTouchpoints(); })
-                  .catch((err: unknown) => setTpFormError(friendlyError(err)))
-                  .finally(() => setTpPending(false));
+                  });
+                  setTpSummary("");
+                  setTpDeal(null);
+                  refreshTouchpoints();
+                } catch (err) {
+                  setTpFormError(friendlyError(err));
+                } finally {
+                  setTpPending(false);
+                }
               }}
             >
               <div className="crm-field-row flex gap-2">
@@ -1647,6 +1663,7 @@ function CustomerWorkspace({
                       {...c}
                       value={tpChannel}
                       onChange={(v) => setTpChannel(v as TouchpointChannel)}
+                      disabled={tpPending}
                       options={TOUCHPOINT_CHANNELS.map((ch) => ({ value: ch, label: t(ch) }))}
                     />
                   )}
@@ -1657,6 +1674,7 @@ function CustomerWorkspace({
                       {...c}
                       value={tpDirection}
                       onChange={(v) => setTpDirection(v as TouchpointDirection)}
+                      disabled={tpPending}
                       options={[
                         { value: "outbound", label: t("Outbound") },
                         { value: "inbound", label: t("Inbound") },
@@ -1673,7 +1691,10 @@ function CustomerWorkspace({
                       {...c}
                       full
                       value={selectedDeal?.id ?? ""}
-                      onChange={(id) => setTpDeal(id === selectedDeal?.id ? selectedDeal : deals.find((deal) => deal.id === id) ?? null)}
+                      onChange={(id) => {
+                        setTpDeal(id === selectedDeal?.id ? selectedDeal : deals.find((deal) => deal.id === id) ?? null);
+                        setTpFormError(null);
+                      }}
                       disabled={tpPending}
                       options={[
                         { value: "", label: t("No deal") },
@@ -1693,7 +1714,7 @@ function CustomerWorkspace({
                   </div>
                 )}
               <Field label={t("Interaction summary")} id="crm-tp-summary" className="crm-field">
-                {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
+                {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} disabled={tpPending} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
               </Field>
               {tpFormError && <ErrorNotice bare>{tpFormError}</ErrorNotice>}
               <div>
