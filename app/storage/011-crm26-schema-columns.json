@@ -43,7 +43,8 @@
                 "refresh_token", "session_token", "bearer_token", "id_token",
                 "client_secret", "private_key", "secret_key", "signing_key",
                 "encryption_key", "passphrase"
-              ]}}
+              ]}},
+              {"not": {"pattern": "(^|_)(password|passwd|passphrase|secret|token|credentials?|apikey|api_key|private|signing|encryption)(_|$)"}}
             ]
           },
           "additionalProperties": {
