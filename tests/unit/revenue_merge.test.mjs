@@ -89,15 +89,26 @@ describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
       sha256: `sha256:${sha256File(path.join("app", columnsMigration))}`,
     });
     const added = {};
+    const nullable = [];
     for (const op of readJson(path.join("app", columnsMigration)).operations) {
       assert.equal(op.op, "add_column");
       (added[op.table] ??= []).push(op.column.name);
+      if (op.column.nullable) nullable.push([op.table, op.column.name]);
     }
     assert.deepEqual(added, {
       deals: ["status", "loss_reason", "source", "next_step", "custom_fields"],
       tasks: ["priority", "origin", "source_ref"],
       touchpoints: ["external_ref", "provenance"],
     });
+    // A stored null is validated against the write schema, so every nullable column needs a null branch.
+    for (const [table, name] of nullable) {
+      const property = manifest.tables[table].write_schema.properties.after.properties[name];
+      assert.ok(property, `write schema missing ${table}.${name}`);
+      assert.ok(
+        (property.anyOf ?? []).some((branch) => branch.type === "null"),
+        `${table}.${name} write schema must accept the stored null`,
+      );
+    }
   });
 
   it("bridge services and CRM views expose records.merge and deals/tasks/customer routes", () => {

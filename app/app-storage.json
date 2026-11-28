@@ -119,10 +119,10 @@
               "customer_id": { "type": "string", "minLength": 1, "maxLength": 128 },
               "title": { "type": "string", "minLength": 1, "maxLength": 200 },
               "amount_cents": { "type": "integer", "minimum": 0 },
-              "status": { "type": "string", "maxLength": 32 },
-              "loss_reason": { "type": "string", "maxLength": 200 },
-              "source": { "type": "string", "maxLength": 120 },
-              "next_step": { "type": "string", "maxLength": 200 },
+              "status": { "anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }] },
+              "loss_reason": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
+              "source": { "anyOf": [{ "type": "string", "maxLength": 120 }, { "type": "null" }] },
+              "next_step": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
               "custom_fields": { "type": "object" }
             }
           },
@@ -148,9 +148,9 @@
             "required": ["title"],
             "properties": {
               "title": { "type": "string", "minLength": 1, "maxLength": 200 },
-              "priority": { "type": "string", "maxLength": 16 },
-              "origin": { "type": "string", "maxLength": 32 },
-              "source_ref": { "type": "string", "maxLength": 200 }
+              "priority": { "anyOf": [{ "type": "string", "maxLength": 16 }, { "type": "null" }] },
+              "origin": { "anyOf": [{ "type": "string", "maxLength": 32 }, { "type": "null" }] },
+              "source_ref": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] }
             }
           },
           "provenance": {
@@ -178,8 +178,8 @@
               "deal_id": {
                 "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 128 }, { "type": "null" }]
               },
-              "external_ref": { "type": "string", "maxLength": 200 },
-              "provenance": { "type": "string", "maxLength": 200 },
+              "external_ref": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
+              "provenance": { "anyOf": [{ "type": "string", "maxLength": 200 }, { "type": "null" }] },
               "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
               "occurred_at": { "type": "string", "minLength": 1, "maxLength": 64 }
             }
