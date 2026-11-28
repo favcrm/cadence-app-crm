@@ -223,7 +223,11 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
           }
         }
         const limit = typeof args.limit === "number" ? Math.max(1, Math.min(100, args.limit)) : 20;
-        return { records: rows.slice(0, limit), total: rows.length, truncated: rows.length > limit, next_cursor: rows.length > limit ? rows[limit - 1]!.id : null };
+        const start = args.cursor === undefined ? 0 : rows.findIndex(row => row.id === args.cursor) + 1;
+        if (args.cursor !== undefined && start === 0) missing();
+        const page = rows.slice(start, start + limit);
+        const truncated = start + page.length < rows.length;
+        return { records: page, total: rows.length, truncated, next_cursor: truncated ? page.at(-1)!.id : null };
       }
       const query = typeof args.query === "string" ? args.query.toLowerCase() : "";
       const rows = records.filter(r => `${r.profile.display_name} ${r.profile.email ?? ""} ${r.profile.tags.join(" ")}`.toLowerCase().includes(query));

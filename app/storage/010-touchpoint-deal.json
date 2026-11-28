@@ -1,0 +1,10 @@
+{
+  "version": 10,
+  "operations": [
+    {
+      "op": "add_column",
+      "table": "touchpoints",
+      "column": {"name": "deal_id", "type": "text", "nullable": true, "default": null, "max_length": 128}
+    }
+  ]
+}

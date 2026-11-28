@@ -19,10 +19,10 @@ function sha256File(relPath) {
 }
 
 describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
-  it("app-storage.json declares schema v9 with verified 007-009 migrations and tables", () => {
+  it("app-storage.json declares schema v10 with verified 007-010 migrations and tables", () => {
     const manifest = readJson("app/app-storage.json");
-    assert.equal(manifest.schema_version, 9);
-    assert.deepEqual(manifest.compatible_schema_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert.equal(manifest.schema_version, 10);
+    assert.deepEqual(manifest.compatible_schema_versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 
     const expectedMigrations = [
       {
@@ -76,6 +76,12 @@ describe("CRM 0.8.0 revenue, touchpoints, and merge contracts", () => {
       "note",
       "other",
     ]);
+    const linkMigration = "storage/010-touchpoint-deal.json";
+    assert.deepEqual(manifest.migrations.at(-1), {
+      version: 10,
+      path: linkMigration,
+      sha256: `sha256:${sha256File(path.join("app", linkMigration))}`,
+    });
   });
 
   it("bridge services and CRM views expose records.merge and deals/tasks/customer routes", () => {

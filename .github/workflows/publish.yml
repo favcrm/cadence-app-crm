@@ -34,15 +34,52 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      app_tree: ${{ steps.app-tree.outputs.tree }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.2"
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          run_install: false
+      - name: Install locked verification dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify the checked-in screen before inspecting or uploading it
+        run: |
+          set -euo pipefail
+          mkdir .cadence-ui/package
+          cp -R node_modules/@cadence/screen-ui/. .cadence-ui/package/
+          pnpm run verify
+          pnpm run build --check
+      - name: Record the qualified app tree
+        id: app-tree
+        run: |
+          set -euo pipefail
+          tree=$(bash .github/scripts/committed-app-tree.sh)
+          printf 'tree=%s\n' "$tree" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: qualify
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -52,6 +89,17 @@ jobs:
           run_install: false
       - name: Install locked publisher dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Require the independently qualified app tree
+        env:
+          QUALIFIED_TREE: ${{ needs.qualify.outputs.app_tree }}
+        run: |
+          set -euo pipefail
+          tree=$(bash .github/scripts/committed-app-tree.sh)
+          if [ "$tree" != "$QUALIFIED_TREE" ]; then
+            echo "The checked-out app does not match its qualification." >&2
+            exit 1
+          fi
 
       - name: Install the exact pinned Cadence CLI
         env:

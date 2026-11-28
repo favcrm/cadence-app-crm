@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,DataTable,Detail,EmptyState,ErrorNotice,Field,Loading,Notice,Resource,Select,useQuery } from "@cadence/screen-ui";
-import { useEffect,useRef,useState,type MouseEvent } from "react";
+import { useEffect,useMemo,useRef,useState,type MouseEvent } from "react";
 import FrameDrawer from "../FrameDrawer";
 import ImportCsvDrawer from "./ImportCsvDrawer";
 import MergeCustomerDrawer from "./MergeCustomerDrawer";
@@ -1149,6 +1149,10 @@ function CustomerWorkspace({
   const [confirmArchiveId, setArchiveConfirmId] = useState<string | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deals, setDeals] = useState<DealRecord[]>([]);
+  const dealTitles = useMemo(() => new Map(deals.map((deal) => [deal.id, deal.title])), [deals]);
+  const [nextDealCursor, setNextDealCursor] = useState<string | null>(null);
+  const [dealsLoading, setDealsLoading] = useState(false);
+  const [resolvedDealTitles, setResolvedDealTitles] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [dealTitleDraft, setDealTitleDraft] = useState("");
   const [dealAmountDraft, setDealAmountDraft] = useState("0");
@@ -1165,31 +1169,54 @@ function CustomerWorkspace({
   const [touchpointsError, setTouchpointsError] = useState<string | null>(null);
   const [tpChannel, setTpChannel] = useState<TouchpointChannel>("note");
   const [tpDirection, setTpDirection] = useState<TouchpointDirection>("outbound");
+  const [tpDeal, setTpDeal] = useState<DealRecord | null>(null);
+  const selectedDeal = tpDeal?.customerId === recordId ? tpDeal : null;
   const [tpSummary, setTpSummary] = useState("");
   const [tpPending, setTpPending] = useState(false);
   const [tpFormError, setTpFormError] = useState<string | null>(null);
   const notesRequest = useRef(0);
-  const refreshRelated = () => {
+  const dealsRequest = useRef(0);
+  const touchpointsRequest = useRef(0);
+  const loadDeals = (cursor?: string) => {
+    const req = ++dealsRequest.current;
+    setDealsLoading(true);
     setDealsError(null);
-    setTasksError(null);
-    setTouchpointsError(null);
-    void hostActions.listDeals(scope, { customerId: recordId, limit: 100 })
-      .then((res) => setDeals(res.deals))
+    if (!cursor) setNextDealCursor(null);
+    void hostActions.listDeals(scope, { customerId: recordId, limit: 100, cursor })
+      .then((page) => {
+        if (req !== dealsRequest.current) return;
+        setDeals((current) => cursor
+          ? [...new Map([...current, ...page.deals].map((deal) => [deal.id, deal])).values()]
+          : page.deals);
+        setNextDealCursor(page.nextCursor);
+      })
       .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setDeals([]);
+        if (req !== dealsRequest.current) return;
+        if (!cursor && err instanceof ApiError && (err.status === 400 || err.status === 404)) setDeals([]);
         else setDealsError(friendlyError(err));
+      })
+      .finally(() => { if (req === dealsRequest.current) setDealsLoading(false); });
+  };
+  const refreshTouchpoints = () => {
+    const req = ++touchpointsRequest.current;
+    setTouchpointsError(null);
+    void hostActions.listTouchpoints(scope, recordId)
+      .then((rows) => { if (req === touchpointsRequest.current) setTouchpoints(rows); })
+      .catch((err: unknown) => {
+        if (req !== touchpointsRequest.current) return;
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
+        else setTouchpointsError(friendlyError(err));
       });
+  };
+  const refreshRelated = () => {
+    loadDeals();
+    refreshTouchpoints();
+    setTasksError(null);
     void hostActions.listTasks(scope, { customerId: recordId, limit: 100 })
       .then((res) => setTasks(res.tasks))
       .catch((err: unknown) => {
         if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTasks([]);
         else setTasksError(friendlyError(err));
-      });
-    void hostActions.listTouchpoints(scope, recordId)
-      .then((rows) => setTouchpoints(rows))
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
-        else setTouchpointsError(friendlyError(err));
       });
   };
   const refreshNotes = () => {
@@ -1223,16 +1250,50 @@ function CustomerWorkspace({
     setNotesUnsupported(false);
     setNotesError(null);
     setDeals([]);
+    setResolvedDealTitles(new Map());
+    setNextDealCursor(null);
+    setDealsLoading(false);
     setTasks([]);
     setTouchpoints([]);
+    setTpDeal(null);
   }, [recordId, scope]);
   useEffect(() => {
     if (viewer.operator === true && data !== null) {
       refreshNotes();
       refreshRelated();
     }
-    return () => { notesRequest.current += 1; };
+    return () => {
+      notesRequest.current += 1;
+      dealsRequest.current += 1;
+      touchpointsRequest.current += 1;
+    };
   }, [recordId, scope, viewer.operator, data !== null]);
+  useEffect(() => {
+    if (activeTab !== "activity" || dealsLoading) return;
+    const missing = new Set<string>();
+    for (const row of touchpoints) {
+      if (row.dealId && !dealTitles.has(row.dealId)) missing.add(row.dealId);
+    }
+    if (missing.size === 0) return;
+    let current = true;
+    const resolveTitles = async () => {
+      const ids = [...missing];
+      const titles = new Map<string, string>();
+      // The record service cannot filter by its host-owned ID column. Resolve
+      // distinct off-page links directly, in small groups, only in Activity.
+      for (let index = 0; current && index < ids.length; index += 4) {
+        const results = await Promise.allSettled(ids.slice(index, index + 4).map((id) => hostActions.showDeal(scope, id)));
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value.customerId === recordId) {
+            titles.set(result.value.id, result.value.title);
+          }
+        }
+      }
+      if (current) setResolvedDealTitles(titles);
+    };
+    void resolveTitles();
+    return () => { current = false; };
+  }, [activeTab, dealTitles, dealsLoading, recordId, scope, touchpoints]);
   useEffect(() => {
     const wasEditing = previousMode.current !== "view";
     previousMode.current = mode;
@@ -1560,17 +1621,39 @@ function CustomerWorkspace({
           {canWrite && (
             <form
               className="grid gap-2 mb-3"
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
+                if (tpPending) return;
                 const trimmed = tpSummary.trim();
                 if (!trimmed) { setTpFormError(t("Touchpoint summary is required.")); return; }
                 setTpPending(true);
                 setTpFormError(null);
-                void hostActions
-                  .createTouchpoint(scope, { customerId: recordId, channel: tpChannel, direction: tpDirection, summary: trimmed })
-                  .then(() => { setTpSummary(""); refreshRelated(); })
-                  .catch((err: unknown) => setTpFormError(friendlyError(err)))
-                  .finally(() => setTpPending(false));
+                try {
+                  if (selectedDeal) {
+                    const deal = await hostActions.showDeal(scope, selectedDeal.id).catch((error: unknown) => {
+                      if (error instanceof ApiError && error.status === 404) return null;
+                      throw error;
+                    });
+                    if (deal?.customerId !== recordId) {
+                      setTpFormError(t("That deal is no longer available for this customer. Choose another deal or No deal."));
+                      return;
+                    }
+                  }
+                  await hostActions.createTouchpoint(scope, {
+                    customerId: recordId,
+                    dealId: selectedDeal?.id,
+                    channel: tpChannel,
+                    direction: tpDirection,
+                    summary: trimmed,
+                  });
+                  setTpSummary("");
+                  setTpDeal(null);
+                  refreshTouchpoints();
+                } catch (err) {
+                  setTpFormError(friendlyError(err));
+                } finally {
+                  setTpPending(false);
+                }
               }}
             >
               <div className="crm-field-row flex gap-2">
@@ -1580,6 +1663,7 @@ function CustomerWorkspace({
                       {...c}
                       value={tpChannel}
                       onChange={(v) => setTpChannel(v as TouchpointChannel)}
+                      disabled={tpPending}
                       options={TOUCHPOINT_CHANNELS.map((ch) => ({ value: ch, label: t(ch) }))}
                     />
                   )}
@@ -1590,6 +1674,7 @@ function CustomerWorkspace({
                       {...c}
                       value={tpDirection}
                       onChange={(v) => setTpDirection(v as TouchpointDirection)}
+                      disabled={tpPending}
                       options={[
                         { value: "outbound", label: t("Outbound") },
                         { value: "inbound", label: t("Inbound") },
@@ -1599,8 +1684,37 @@ function CustomerWorkspace({
                   )}
                 </Field>
               </div>
+              {(deals.length > 0 || selectedDeal !== null) && (
+                <Field label={t("Deal (optional)")} id="crm-tp-deal" className="crm-field">
+                  {(c) => (
+                    <Select
+                      {...c}
+                      full
+                      value={selectedDeal?.id ?? ""}
+                      onChange={(id) => {
+                        setTpDeal(id === selectedDeal?.id ? selectedDeal : deals.find((deal) => deal.id === id) ?? null);
+                        setTpFormError(null);
+                      }}
+                      disabled={tpPending}
+                      options={[
+                        { value: "", label: t("No deal") },
+                        ...(selectedDeal && !dealTitles.has(selectedDeal.id) ? [{ value: selectedDeal.id, label: selectedDeal.title }] : []),
+                        ...deals.map((deal) => ({ value: deal.id, label: deal.title })),
+                      ]}
+                    />
+                  )}
+                </Field>
+              )}
+              {dealsError ? <ErrorNotice onRetry={() => loadDeals(nextDealCursor ?? undefined)}>{dealsError}</ErrorNotice>
+                : nextDealCursor && (
+                  <div>
+                    <Button type="button" size="sm" loading={dealsLoading} disabled={dealsLoading || tpPending} onClick={() => loadDeals(nextDealCursor)}>
+                      {t("Load more deals")}
+                    </Button>
+                  </div>
+                )}
               <Field label={t("Interaction summary")} id="crm-tp-summary" className="crm-field">
-                {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
+                {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} disabled={tpPending} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
               </Field>
               {tpFormError && <ErrorNotice bare>{tpFormError}</ErrorNotice>}
               <div>
@@ -1610,19 +1724,27 @@ function CustomerWorkspace({
               </div>
             </form>
           )}
-          {touchpointsError ? <ErrorNotice onRetry={refreshRelated}>{touchpointsError}</ErrorNotice>
+          {touchpointsError ? <ErrorNotice onRetry={refreshTouchpoints}>{touchpointsError}</ErrorNotice>
             : touchpoints.length === 0 ? <p className="text-secondary text-ink-400">{t("No touchpoints recorded yet.")}</p>
             : (
               <ul className="customer-contacts" aria-label={t("Touchpoints")}>
-                {touchpoints.map((tp) => (
-                  <li key={tp.id}>
-                    <div>
-                      <strong>{tp.channel} ({tp.direction})</strong>
-                      <p>{tp.summary}</p>
-                      <p className="num text-micro text-ink-500">{tp.occurredAt.slice(0, 10)}</p>
-                    </div>
-                  </li>
-                ))}
+                {touchpoints.map((tp) => {
+                  const dealTitle = tp.dealId ? (dealTitles.get(tp.dealId) ?? resolvedDealTitles.get(tp.dealId)) : undefined;
+                  return (
+                    <li key={tp.id}>
+                      <div>
+                        <strong>{tp.channel} ({tp.direction})</strong>
+                        <p>{tp.summary}</p>
+                        {tp.dealId && (
+                          <p className="text-micro text-ink-500">
+                            {dealTitle ? `${t("Deal")}: ${dealTitle}` : t("Linked deal")}
+                          </p>
+                        )}
+                        <p className="num text-micro text-ink-500">{tp.occurredAt.slice(0, 10)}</p>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
         </div>

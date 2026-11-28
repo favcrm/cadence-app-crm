@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { views } from "./crm_views.mjs";
 import { root, hash, files, inputs, sourceDigest, operationInventory } from "./screen_inputs.mjs";
@@ -18,7 +19,11 @@ const {build}=await import(pathToFileURL(env.require.resolve('vite')));
 const {default:react}=await import(pathToFileURL(env.require.resolve('@vitejs/plugin-react')));
 // Derive the closed declaration from the same source table without runtime evaluation.
 const operations=operationInventory();
-const out=join(root,'app/screens/crm');mkdirSync(out,{recursive:true});
+const checkedIn = join(root,'app/screens/crm');
+const checking = process.argv.includes('--check');
+const out = checking ? mkdtempSync(join(tmpdir(),'crm-screen-')) : checkedIn;
+try {
+mkdirSync(out,{recursive:true});
 const globals = {'react':'CadenceCrmRuntime.React','react-dom':'CadenceCrmRuntime.ReactDOM','react-dom/client':'CadenceCrmRuntime.ReactDOMClient','react/jsx-runtime':'CadenceCrmRuntime.JSXRuntime'};
 for (const runtime of [true,false]) {
 await build({configFile:false,root,define:{'process.env.NODE_ENV':'"production"'},plugins:[react(),{
@@ -68,3 +73,15 @@ const declaration=JSON.stringify(decl,null,2)+'\n';
 if(Buffer.byteLength(declaration)>SCREEN_MANIFEST_CAP)throw new Error(`Screen declaration exceeds ${SCREEN_MANIFEST_CAP} bytes`);
 writeFileSync(join(out,'screens.json'),declaration);
 console.log(JSON.stringify({development:env.dev,sdk:env.pin.archive,assets,total:assets.reduce((n,a)=>n+a.size,0)},null,2));
+if (checking) {
+  const built = files(out).map(file => relative(out,file));
+  const committed = files(checkedIn).map(file => relative(checkedIn,file));
+  if (built.length !== committed.length || built.some((file,index) => file !== committed[index] ||
+    !readFileSync(join(out,file)).equals(readFileSync(join(checkedIn,file))))) {
+    throw new Error('CRM screen assets differ from the pinned build. Run pnpm build and commit app/screens/crm.');
+  }
+  console.log('Closed screen output matches the checked-in bytes.');
+}
+} finally {
+  if (checking) rmSync(out,{recursive:true,force:true});
+}

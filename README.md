@@ -20,6 +20,14 @@ zh-HK; text only), with no partial data and no further reads. Customers keep loa
 same mount; every other refusal is handled as before. The dev preview answers those reads
 this way with `?owner=required`.
 
+## Deal-linked touchpoints in 0.8.0
+
+In a customer profile's **Activity & Notes**, a touchpoint can optionally name
+one of that customer's deals. The activity list shows the saved association.
+Storage migration 010 adds nullable `touchpoints.deal_id`; customer-only
+touchpoints remain valid. Merging customers moves the deal and touchpoint to
+the target without changing their link.
+
 ## Chat canvas
 
 The bridge declares `screen-surfaces.v1` and `screen-canvas.v1` (app-kit 0.7.0). When the
@@ -143,6 +151,12 @@ are unchanged. Use [packaging.md](docs/packaging.md) for packaging and
 The manifest's plain `X.Y.Z` version and matching `vX.Y.Z` tag identify an
 immutable app release. Source, catalogue publication and live installation are
 different states; a merged commit is not evidence of a deployed app.
+
+Package CI and the read-only release qualification job verify the checked-in
+screen and compare it byte-for-byte against a pinned build in a temporary
+directory. The OIDC publisher requires the exact qualified, unchanged `app/`
+tree before inspection; it does not build or replace anything. After a screen
+source or toolchain change, run `pnpm build` and commit `app/screens/crm/`.
 
 The `publish` workflow requires an exact `CADENCE_TARGET_VERSION` repository
 variable (or `cadence_version` input on the release tag) and installs that
