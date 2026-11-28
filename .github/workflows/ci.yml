@@ -146,14 +146,7 @@ jobs:
         run: pnpm run verify
 
       - name: Rebuild the screen and require identical checked-in assets
-        run: |
-          set -euo pipefail
-          pnpm run build
-          changes=$(git status --porcelain --untracked-files=all -- app/screens/crm)
-          if [ -n "$changes" ]; then
-            echo "::error::CRM screen assets differ from the pinned build. Run pnpm build and commit app/screens/crm."
-            exit 1
-          fi
+        run: pnpm run build --check
 
       - name: Check bundle against the current host grammar
         run: |

@@ -602,6 +602,16 @@ export const hostActions = {
     };
   },
 
+  async showDeal(scope: HostScope, dealId: string): Promise<DealRecord> {
+    assertScope(scope);
+    assertRecordId(dealId);
+    const value = await serviceCall<{ record?: unknown }>(scope, "records.show", {
+      table: "deals",
+      record_id: dealId,
+    });
+    return parseDealRecord(value?.record);
+  },
+
   async aggregateDealsByStage(scope: HostScope, query?: string): Promise<DealStageAggregate[]> {
     assertScope(scope);
     const value = await serviceCall<{ groups?: unknown }>(scope, "records.aggregate", {

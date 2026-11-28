@@ -152,10 +152,10 @@ The manifest's plain `X.Y.Z` version and matching `vX.Y.Z` tag identify an
 immutable app release. Source, catalogue publication and live installation are
 different states; a merged commit is not evidence of a deployed app.
 
-Package CI verifies the checked-in screen and requires the pinned build to
-produce the same bytes. The publish workflow verifies those checked-in files
-again before inspecting or uploading `app/`; it never rebuilds them. After a
-screen source or toolchain change, run `pnpm build` and commit `app/screens/crm/`.
+Package CI and the publish workflow verify the checked-in screen and compare
+it byte-for-byte against a pinned build in a temporary directory. Publication
+does not replace anything in `app/`. After a screen source or toolchain change,
+run `pnpm build` and commit `app/screens/crm/`.
 
 The `publish` workflow requires an exact `CADENCE_TARGET_VERSION` repository
 variable (or `cadence_version` input on the release tag) and installs that

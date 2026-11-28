@@ -950,6 +950,7 @@ export const zhTW: Record<string, string> = {
   "Internal": "內部",
   "Deal (optional)": "商機（選填）",
   "No deal": "不關聯商機",
+  "Load more deals": "載入更多商機",
   "Linked deal": "已關聯商機",
   "Interaction summary": "互動摘要",
   "Log touchpoint": "記錄互動",

@@ -1150,6 +1150,9 @@ function CustomerWorkspace({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [deals, setDeals] = useState<DealRecord[]>([]);
   const dealTitles = useMemo(() => new Map(deals.map((deal) => [deal.id, deal.title])), [deals]);
+  const [nextDealCursor, setNextDealCursor] = useState<string | null>(null);
+  const [dealsLoading, setDealsLoading] = useState(false);
+  const [resolvedDealTitles, setResolvedDealTitles] = useState<ReadonlyMap<string, string>>(() => new Map());
   const [dealsError, setDealsError] = useState<string | null>(null);
   const [dealTitleDraft, setDealTitleDraft] = useState("");
   const [dealAmountDraft, setDealAmountDraft] = useState("0");
@@ -1172,27 +1175,48 @@ function CustomerWorkspace({
   const [tpPending, setTpPending] = useState(false);
   const [tpFormError, setTpFormError] = useState<string | null>(null);
   const notesRequest = useRef(0);
-  const refreshRelated = () => {
+  const dealsRequest = useRef(0);
+  const touchpointsRequest = useRef(0);
+  const loadDeals = (cursor?: string) => {
+    const req = ++dealsRequest.current;
+    setDealsLoading(true);
     setDealsError(null);
-    setTasksError(null);
-    setTouchpointsError(null);
-    void hostActions.listDeals(scope, { customerId: recordId, limit: 100 })
-      .then((res) => setDeals(res.deals))
+    if (!cursor) setNextDealCursor(null);
+    void hostActions.listDeals(scope, { customerId: recordId, limit: 100, cursor })
+      .then((page) => {
+        if (req !== dealsRequest.current) return;
+        setDeals((current) => cursor
+          ? [...new Map([...current, ...page.deals].map((deal) => [deal.id, deal])).values()]
+          : page.deals);
+        setNextDealCursor(page.nextCursor);
+      })
       .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setDeals([]);
+        if (req !== dealsRequest.current) return;
+        if (!cursor && err instanceof ApiError && (err.status === 400 || err.status === 404)) setDeals([]);
         else setDealsError(friendlyError(err));
+      })
+      .finally(() => { if (req === dealsRequest.current) setDealsLoading(false); });
+  };
+  const refreshTouchpoints = () => {
+    const req = ++touchpointsRequest.current;
+    setTouchpointsError(null);
+    void hostActions.listTouchpoints(scope, recordId)
+      .then((rows) => { if (req === touchpointsRequest.current) setTouchpoints(rows); })
+      .catch((err: unknown) => {
+        if (req !== touchpointsRequest.current) return;
+        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
+        else setTouchpointsError(friendlyError(err));
       });
+  };
+  const refreshRelated = () => {
+    loadDeals();
+    refreshTouchpoints();
+    setTasksError(null);
     void hostActions.listTasks(scope, { customerId: recordId, limit: 100 })
       .then((res) => setTasks(res.tasks))
       .catch((err: unknown) => {
         if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTasks([]);
         else setTasksError(friendlyError(err));
-      });
-    void hostActions.listTouchpoints(scope, recordId)
-      .then((rows) => setTouchpoints(rows))
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && (err.status === 400 || err.status === 404)) setTouchpoints([]);
-        else setTouchpointsError(friendlyError(err));
       });
   };
   const refreshNotes = () => {
@@ -1226,6 +1250,9 @@ function CustomerWorkspace({
     setNotesUnsupported(false);
     setNotesError(null);
     setDeals([]);
+    setResolvedDealTitles(new Map());
+    setNextDealCursor(null);
+    setDealsLoading(false);
     setTasks([]);
     setTouchpoints([]);
     setTpDealId("");
@@ -1235,8 +1262,38 @@ function CustomerWorkspace({
       refreshNotes();
       refreshRelated();
     }
-    return () => { notesRequest.current += 1; };
+    return () => {
+      notesRequest.current += 1;
+      dealsRequest.current += 1;
+      touchpointsRequest.current += 1;
+    };
   }, [recordId, scope, viewer.operator, data !== null]);
+  useEffect(() => {
+    if (activeTab !== "activity" || dealsLoading) return;
+    const missing = new Set<string>();
+    for (const row of touchpoints) {
+      if (row.dealId && !dealTitles.has(row.dealId)) missing.add(row.dealId);
+    }
+    if (missing.size === 0) return;
+    let current = true;
+    const resolveTitles = async () => {
+      const ids = [...missing];
+      const titles = new Map<string, string>();
+      // The record service cannot filter by its host-owned ID column. Resolve
+      // distinct off-page links directly, in small groups, only in Activity.
+      for (let index = 0; current && index < ids.length; index += 4) {
+        const results = await Promise.allSettled(ids.slice(index, index + 4).map((id) => hostActions.showDeal(scope, id)));
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value.customerId === recordId) {
+            titles.set(result.value.id, result.value.title);
+          }
+        }
+      }
+      if (current) setResolvedDealTitles(titles);
+    };
+    void resolveTitles();
+    return () => { current = false; };
+  }, [activeTab, dealTitles, dealsLoading, recordId, scope, touchpoints]);
   useEffect(() => {
     const wasEditing = previousMode.current !== "view";
     previousMode.current = mode;
@@ -1578,7 +1635,7 @@ function CustomerWorkspace({
                     direction: tpDirection,
                     summary: trimmed,
                   })
-                  .then(() => { setTpSummary(""); setTpDealId(""); refreshRelated(); })
+                  .then(() => { setTpSummary(""); setTpDealId(""); refreshTouchpoints(); })
                   .catch((err: unknown) => setTpFormError(friendlyError(err)))
                   .finally(() => setTpPending(false));
               }}
@@ -1623,6 +1680,14 @@ function CustomerWorkspace({
                   )}
                 </Field>
               )}
+              {dealsError ? <ErrorNotice onRetry={() => loadDeals(nextDealCursor ?? undefined)}>{dealsError}</ErrorNotice>
+                : nextDealCursor && (
+                  <div>
+                    <Button type="button" size="sm" loading={dealsLoading} disabled={dealsLoading || tpPending} onClick={() => loadDeals(nextDealCursor)}>
+                      {t("Load more deals")}
+                    </Button>
+                  </div>
+                )}
               <Field label={t("Interaction summary")} id="crm-tp-summary" className="crm-field">
                 {(c) => <input {...c} className="field" maxLength={2000} value={tpSummary} onChange={(e) => { setTpSummary(e.target.value); setTpFormError(null); }} />}
               </Field>
@@ -1634,12 +1699,12 @@ function CustomerWorkspace({
               </div>
             </form>
           )}
-          {touchpointsError ? <ErrorNotice onRetry={refreshRelated}>{touchpointsError}</ErrorNotice>
+          {touchpointsError ? <ErrorNotice onRetry={refreshTouchpoints}>{touchpointsError}</ErrorNotice>
             : touchpoints.length === 0 ? <p className="text-secondary text-ink-400">{t("No touchpoints recorded yet.")}</p>
             : (
               <ul className="customer-contacts" aria-label={t("Touchpoints")}>
                 {touchpoints.map((tp) => {
-                  const dealTitle = tp.dealId ? dealTitles.get(tp.dealId) : undefined;
+                  const dealTitle = tp.dealId ? (dealTitles.get(tp.dealId) ?? resolvedDealTitles.get(tp.dealId)) : undefined;
                   return (
                     <li key={tp.id}>
                       <div>
