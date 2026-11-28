@@ -9,9 +9,10 @@
   with its archive checksum pinned in CI. This is not storage qualification.
 - `publish.yml` (AOS-376 / AOS-390 / AOS-384 / AOS-431) — tag-driven,
   OIDC-only publication of one verified release, listed as `published`
-  immediately. Screen provenance, integrity and equality with an isolated
-  pinned rebuild are required before bundle inspection; publication does not
-  modify `app/`. The exact pinned native checker supplies only the canonical
+  immediately. A read-only job checks screen provenance, integrity and
+  equality with an isolated pinned rebuild. The OIDC job verifies the exact
+  qualified `app/` tree before inspection; it neither builds nor modifies the
+  bundle. The exact pinned native checker supplies only the canonical
   digest/inventory; a hosted-only package (e.g. CRM's `app-storage: [1]`) may be
   refused with exit 3. That stage code can also wrap a secret rejection, so it
   never grants safety or compatibility. Identity, title, summary and listing are

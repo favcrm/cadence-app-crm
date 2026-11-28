@@ -1169,8 +1169,8 @@ function CustomerWorkspace({
   const [touchpointsError, setTouchpointsError] = useState<string | null>(null);
   const [tpChannel, setTpChannel] = useState<TouchpointChannel>("note");
   const [tpDirection, setTpDirection] = useState<TouchpointDirection>("outbound");
-  const [tpDealId, setTpDealId] = useState("");
-  const selectedDealId = dealTitles.has(tpDealId) ? tpDealId : "";
+  const [tpDeal, setTpDeal] = useState<DealRecord | null>(null);
+  const selectedDeal = tpDeal?.customerId === recordId ? tpDeal : null;
   const [tpSummary, setTpSummary] = useState("");
   const [tpPending, setTpPending] = useState(false);
   const [tpFormError, setTpFormError] = useState<string | null>(null);
@@ -1255,7 +1255,7 @@ function CustomerWorkspace({
     setDealsLoading(false);
     setTasks([]);
     setTouchpoints([]);
-    setTpDealId("");
+    setTpDeal(null);
   }, [recordId, scope]);
   useEffect(() => {
     if (viewer.operator === true && data !== null) {
@@ -1630,12 +1630,12 @@ function CustomerWorkspace({
                 void hostActions
                   .createTouchpoint(scope, {
                     customerId: recordId,
-                    dealId: selectedDealId || undefined,
+                    dealId: selectedDeal?.id,
                     channel: tpChannel,
                     direction: tpDirection,
                     summary: trimmed,
                   })
-                  .then(() => { setTpSummary(""); setTpDealId(""); refreshTouchpoints(); })
+                  .then(() => { setTpSummary(""); setTpDeal(null); refreshTouchpoints(); })
                   .catch((err: unknown) => setTpFormError(friendlyError(err)))
                   .finally(() => setTpPending(false));
               }}
@@ -1666,16 +1666,20 @@ function CustomerWorkspace({
                   )}
                 </Field>
               </div>
-              {deals.length > 0 && (
+              {(deals.length > 0 || selectedDeal !== null) && (
                 <Field label={t("Deal (optional)")} id="crm-tp-deal" className="crm-field">
                   {(c) => (
                     <Select
                       {...c}
                       full
-                      value={selectedDealId}
-                      onChange={setTpDealId}
+                      value={selectedDeal?.id ?? ""}
+                      onChange={(id) => setTpDeal(id === selectedDeal?.id ? selectedDeal : deals.find((deal) => deal.id === id) ?? null)}
                       disabled={tpPending}
-                      options={[{ value: "", label: t("No deal") }, ...deals.map((deal) => ({ value: deal.id, label: deal.title }))]}
+                      options={[
+                        { value: "", label: t("No deal") },
+                        ...(selectedDeal && !dealTitles.has(selectedDeal.id) ? [{ value: selectedDeal.id, label: selectedDeal.title }] : []),
+                        ...deals.map((deal) => ({ value: deal.id, label: deal.title })),
+                      ]}
                     />
                   )}
                 </Field>
