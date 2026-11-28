@@ -587,6 +587,23 @@
 
 /* CAD-1058 New campaign dialog: a short modal on the shared confirm
    scrim. Board tokens only; no motion. */
+.crm-confirm-wrap[data-new-campaign] {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  overflow: hidden;
+}
+.crm-confirm-wrap[data-new-campaign]:not([open]) {
+  display: none;
+}
+.crm-confirm-wrap[data-new-campaign]::backdrop {
+  background: transparent;
+}
 .crm-newc {
   position: relative;
   width: min(37.5rem, 100%);

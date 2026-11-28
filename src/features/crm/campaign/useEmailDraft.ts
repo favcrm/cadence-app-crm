@@ -321,7 +321,7 @@ export function useEmailDraft(
       })
       .catch((err: unknown) => {
         if (!isConflict(err)) {
-          setError(friendlyCampaignError(err));
+          setError(friendlyCampaignError(err, draft.html !== null));
           return;
         }
         // A CAS refusal is evidence the cached doc is stale. Fetch it for

@@ -1,6 +1,6 @@
 import { useLocale } from "../locale";
 import { ApiError,Button,Field,Select } from "@cadence/screen-ui";
-import { useEffect,useRef,useState } from "react";
+import { useLayoutEffect,useRef,useState } from "react";
 import { campaignChat } from "../../../bridge/chat";
 import type { AudienceScope } from "../audienceClient";
 import { useCrmQuery } from "../resources";
@@ -67,11 +67,22 @@ export default function NewCampaignDialog({
   // and never saves the campaign twice.
   const [campaignId] = useState(() => newAudienceId("cmp"));
   const [saved, setSaved] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const htmlRef = useRef<HTMLTextAreaElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current!;
+    dialog.showModal();
     nameRef.current?.focus();
+    return () => dialog.close();
   }, []);
+
+  useLayoutEffect(() => {
+    if (pending) formRef.current?.focus({ preventScroll: true });
+    else if (error !== null && start === "html") htmlRef.current?.focus({ preventScroll: true });
+  }, [pending, error, start]);
 
   const land = () => {
     setLanding({ campaignId, tab: "email", segmentId: segmentId === "" ? null : segmentId });
@@ -131,7 +142,7 @@ export default function NewCampaignDialog({
       }
       land();
     } catch (e) {
-      setError(friendlyCampaignError(e));
+      setError(friendlyCampaignError(e, start === "html"));
     } finally {
       setPending(false);
     }
@@ -139,23 +150,38 @@ export default function NewCampaignDialog({
 
   const action = t(saved && start === "ai" ? "Send brief again" : startAction(start));
   return (
-    <div className="crm-confirm-wrap" role="presentation" data-new-campaign>
+    <dialog
+      ref={dialogRef}
+      className="crm-confirm-wrap"
+      aria-labelledby="crm-newc-title"
+      data-new-campaign
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!pending) onCancel();
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        // A native modal makes this document inert outside the dialog, but
+        // the hosted shell is the parent document of this iframe.
+        const stops = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex='0']",
+        )).filter((node) => node.tabIndex >= 0 && node.getClientRects().length > 0);
+        const active = document.activeElement;
+        if (active === (e.shiftKey ? stops[0] : stops.at(-1)) || !stops.some((node) => node === active)) {
+          e.preventDefault();
+          (e.shiftKey ? stops.at(-1) : stops[0])?.focus();
+        }
+      }}
+    >
       <div className="crm-confirm-scrim" onClick={pending ? undefined : onCancel} />
       <form
+        ref={formRef}
+        tabIndex={-1}
         className="card crm-newc grid gap-3"
         noValidate
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="crm-newc-title"
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !pending) {
-            e.stopPropagation();
-            onCancel();
-          }
         }}
       >
         <div className="crm-newc-head">
@@ -224,12 +250,13 @@ export default function NewCampaignDialog({
         {start === "html" && (
           <Field
             label={t("HTML")}
-            hint={t("Scripts, forms and tracking pixels are removed; the unsubscribe footer is added for you")}
+            hint={t("On hosted boards, pasted images are replaced with their alt text.")}
             className="crm-field"
           >
             {(c) => (
               <textarea
                 {...c}
+                ref={htmlRef}
                 className="field num"
                 rows={6}
                 value={html}
@@ -283,6 +310,6 @@ export default function NewCampaignDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </dialog>
   );
 }

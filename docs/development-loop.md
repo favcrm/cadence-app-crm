@@ -40,13 +40,12 @@ The real app action buttons operate on browser-memory fixtures:
   snapshot action anywhere in the campaign UI.
   Subject/preheader validation is shared with the real editor in both modes,
   including direct local saves; it is not host authorization.
-  Two URL switches change what the fixture shows, and neither simulates a
-  send, test or approval (those slots stay refused): `?board=audience` makes the
-  fixture keep a chosen audience like a board that reports
-  `draft_audience_full` (without it the fixture is an older board and the
-  Audience tab says the choice stays on screen), and
-  `?sends=sending|sent|partial|uncertain` seeds one read-only send row so the
-  status chip and result view can be reviewed.
+  URL switches change what the fixture shows; none simulates a send, test or
+  approval (those slots stay refused). `?board=audience` preserves a chosen
+  audience like a board that reports `draft_audience_full`. `?board=blocks`
+  returns the generic HTML save refusal an older hosted board projects while
+  still allowing block drafts. `?sends=sending|sent|partial|uncertain` seeds one
+  read-only send row so the status chip and result view can be reviewed.
 - **Reset local data** asks before discarding all local changes and the chat draft.
   Reload also resets the data; nothing is stored in localStorage or on a server.
 
@@ -139,12 +138,18 @@ trigger's 2rem height, 12px label scale and 0.75rem inline inset; list
 toolbars keep their 1.75rem controls and textareas keep their multi-line
 height.
 
-The Email tab keeps one editing surface: the visual canvas. The saved host
-render is no longer shown in the tab — the test send remains the real check.
-The canvas hint was removed, leaving only the host-footer line, and the toolbar
-keeps modes and block inserts on the left with Desktop/Mobile on the right. HTML mode is just the source field plus the existing plain-text
-disclosure: the sanitization alert and the live HTML preview are gone, while
-the host still strips unsupported markup at save. The
+The Email tab keeps the direct visual canvas for block drafts. HTML mode shows
+the editable source and the plain-text disclosure, not a live render of pasted
+input. Switch to Visual after saving to see the sanitized, matching host
+revision; unsaved HTML never reaches the preview. Hosted paste replaces images
+with their alt text before preview or delivery, as the local fixture does.
+The hosted preview takes a saved campaign revision rather than a document
+from the screen and runs only for the owner's live mount. The native
+inert-document command is unchanged. Without both preview operations in the
+mount grant, Visual points to the HTML tab without requesting a host preview.
+The creation modal keeps keyboard focus inside the form after an HTML save
+is refused. The toolbar keeps modes and block inserts on the left with
+Desktop/Mobile on the right. The
 canvas and the `Email settings` rail sit side by side on wide screens (a
 20rem rail), with subject, preheader, sender preview and sample first name in
 the rail — the inbox/canvas shows only the From/To line and the body blocks.

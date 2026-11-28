@@ -2,6 +2,7 @@ import { useLocale } from "../locale";
 import { Button,ConfirmDialog } from "@cadence/screen-ui";
 import { useEffect,useState } from "react";
 import HostPreview from "../../../bridge/HostPreview";
+import { useScope } from "../../../bridge/scope";
 import type { AudienceScope } from "../audienceClient";
 import {
 friendlyCampaignError,
@@ -85,6 +86,8 @@ export default function EmailPane({
   edit: EmailDraftApi | null;
 }) {
   const { t, formatNumber } = useLocale();
+  const actions = useScope()?.actions;
+  const canPreview = actions?.includes("screen.preview.show") && actions.includes("screen.preview.clear");
   const [mode, setMode] = useState<Mode>("visual");
   const [device, setDevice] = useState<Device>("desktop");
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -131,8 +134,13 @@ export default function EmailPane({
   // A host-attributed suggestion is read-only until Use in editor. The
   // local editor is available at revision 0 as well as on saved revisions.
   const editing = canWrite && edit !== null && draft === null;
-  const editingBlocks =
-    editing && edit !== null && mode === "visual" && edit.draft.html === null;
+  const editingHtml = editing && edit.draft.html !== null;
+  const htmlNeedsSave = editingHtml && edit.dirty;
+  const editingBlocks = editing && mode === "visual" && !editingHtml;
+  const visual = !editing || (editingHtml && !htmlNeedsSave &&
+    render?.revision === expectedRevision && render.contentDigest === doc?.contentDigest)
+    ? shown
+    : null;
   const blockSource = edit === null
     ? ""
     : blocksToGrammar(edit.draft.blocks)
@@ -151,12 +159,6 @@ export default function EmailPane({
         })
         .join("\n");
   const htmlSource = edit?.draft.html ?? blockSource;
-  const draftHtmlPreview = (html: string) => {
-    const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src 'none'; form-action 'none'; base-uri 'none'">`;
-    return /<head(?:\s[^>]*)?>/i.test(html)
-      ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${policy}`)
-      : `<!doctype html><html><head>${policy}</head><body>${html}</body></html>`;
-  };
 
   const useProposalInEditor = (row: ProposalDoc, confirmed = false) => {
     if (
@@ -249,6 +251,7 @@ export default function EmailPane({
               </label>
               <textarea
                 id="cmp-html-source"
+                aria-describedby="cmp-html-images"
                 className="field srcedit"
                 rows={12}
                 spellCheck={false}
@@ -257,27 +260,34 @@ export default function EmailPane({
                 disabled={edit.saving || edit.reloading}
                 onChange={(e) => edit.patch({ html: e.target.value })}
               />
+              <p id="cmp-html-images" className="text-micro text-ink-500">
+                {t("On hosted boards, pasted images are replaced with their alt text.")}
+              </p>
             </div>
           )}
-          {shown === null && (draft !== null ? draftPending : renderPending) && (
+          {!htmlNeedsSave && (mode === "visual" ? visual : shown) === null && (draft !== null ? draftPending : renderPending) && (
             <p className="text-label text-ink-500 mt-2" role="status" data-preview="loading">
               {t(draft !== null ? "Rendering the draft preview…" : "Rendering the saved email…")}
             </p>
           )}
-          {editing && mode === "visual" && edit !== null && edit.draft.html !== null && (
-            <>
-              <p className="text-micro text-ink-500 mt-2">{t("Visual preview of HTML draft")}</p>
-              <HostPreview title={t("Visual preview of HTML draft")} document={draftHtmlPreview(edit.draft.html)} mode="draft" device={device} />
-            </>
+          {mode === "visual" && htmlNeedsSave && (
+            <p className="text-label text-ink-300 mt-2" role="status">
+              {t("Save the draft to preview your HTML.")}
+            </p>
           )}
-          {shown !== null && mode === "visual" && !editing && (
+          {visual !== null && mode === "visual" && (canPreview ? (
             <HostPreview
               title={draft !== null ? t("Draft email preview") : `${t("Visual email preview, saved revision")} ${render?.revision == null ? "" : formatNumber(render.revision)}`}
-              document={shown.html}
+              document={visual.html}
+              source={draft === null ? render?.previewSource ?? null : null}
               mode={draft !== null ? "draft" : "saved"}
               device={device}
             />
-          )}
+          ) : (
+            <p className="text-label text-ink-500 mt-2" data-preview="unavailable">
+              {t("Visual preview is unavailable here. Switch to HTML to view the email.")}
+            </p>
+          ))}
           {shown !== null && mode === "html" && !editing && (
             <pre className="crm-preview" data-preview="html">
               {shown.html}

@@ -1,4 +1,5 @@
 import { ApiError } from "@cadence/screen-ui";
+import type { SavedPreviewSource } from "../../bridge/services";
 import type { AudienceBaseInput } from "./audienceClient";
 import { hostErrorText } from "./hostErrors";
 
@@ -339,6 +340,7 @@ export function parseContentList(value: unknown): ContentDoc[] {
 export interface ContentRender {
   revision: number;
   contentDigest: string;
+  previewSource: SavedPreviewSource | null;
   html: string;
   text: string;
   previewOnly: boolean;
@@ -366,9 +368,27 @@ export function parseRender(value: unknown): ContentRender {
     throw new ApiError("The server returned an invalid render receipt", 502);
   }
   const binding = (row.binding as Record<string, unknown> | null) ?? {};
+  let previewSource: SavedPreviewSource | null = null;
+  if (row.preview_source !== undefined) {
+    const source = row.preview_source;
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      throw new ApiError("The server returned an invalid preview source", 502);
+    }
+    const { campaign_id, revision, sample_first_name } = source as Record<string, unknown>;
+    if (
+      typeof campaign_id !== "string" ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(campaign_id) ||
+      revision !== row.revision || !Number.isSafeInteger(row.revision) || row.revision < 1 ||
+      (sample_first_name !== undefined && (typeof sample_first_name !== "string" || sample_first_name.length > 80))
+    ) {
+      throw new ApiError("The server returned an invalid preview source", 502);
+    }
+    previewSource = { campaign_id, revision: row.revision, sample_first_name };
+  }
   return {
     revision: row.revision,
     contentDigest: row.content_digest,
+    previewSource,
     html: row.html,
     text: row.text,
     previewOnly: row.preview_only === true,
@@ -570,7 +590,12 @@ export function parseProposalList(value: unknown): ProposalDoc[] {
   return rows.map((row) => parseProposal({ proposal: row }));
 }
 
-/** Server refusals stay generic; transport failures name the retry. */
-export function friendlyCampaignError(error: unknown): string {
+/** Legacy boards project an unsupported HTML save to a generic refusal. */
+export function friendlyCampaignError(error: unknown, savingHtml = false): string {
+  if (savingHtml && error instanceof ApiError) {
+    if (error.code === "html_unsupported") return "This board does not support pasted HTML. Use the block editor instead.";
+    if (error.status === 413) return "This HTML is too large for the board. Shorten it or use the block editor.";
+    if (error.code === "failed") return "Could not confirm the HTML save. Check the HTML or try a shorter version. If this board does not support pasted HTML, use the block editor.";
+  }
   return hostErrorText(error, "The campaign request was refused — retry.");
 }

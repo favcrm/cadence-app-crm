@@ -165,6 +165,14 @@ export function inertHtml(raw: string) {
   template.innerHTML = raw;
   const allowed: Record<string, true> = { H1: true, H2: true, H3: true, H4: true, P: true, BR: true, STRONG: true, EM: true, B: true, I: true, U: true, S: true, A: true, DIV: true, SPAN: true, TABLE: true, TBODY: true, THEAD: true, TFOOT: true, TR: true, TD: true, TH: true, UL: true, OL: true, LI: true, BLOCKQUOTE: true, HR: true };
   for (const element of template.content.querySelectorAll("*")) {
+    if (element.tagName === "PICTURE") {
+      element.replaceWith(...element.childNodes);
+      continue;
+    }
+    if (element.tagName === "IMG") {
+      element.replaceWith(element.getAttribute("alt") ?? "");
+      continue;
+    }
     if (!allowed[element.tagName]) { element.remove(); continue; }
     for (const attribute of [...element.attributes]) if (!["style", "title", "colspan", "rowspan"].includes(attribute.name)) element.removeAttribute(attribute.name);
   }
@@ -387,11 +395,14 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
       else {
         checkContentFields(args.subject, preheader);
         if (typeof args.html !== "string" || !args.html.trim()) throw new ApiError("Valid email HTML is required.", 400);
+        if (params.get("board") === "blocks") throw new ApiError("Cadence refused this request. Inspect fresh status before retrying an effect.", 400, { code: "failed" });
       }
       if ("draft_audience" in args && !keepsAudience) throw new ApiError("Unknown field draft_audience.", 400, { code: "validation_failed" });
       const content: Content = { draft_audience_full: "draft_audience" in args ? args.draft_audience : existing?.draft_audience_full ?? null, campaign_id: args.campaign_id, name, revision: (existing?.revision ?? 0) + 1, subject: args.subject, preheader, blocks: blocks ?? [], mode: blocks ? "blocks" : "html", html: typeof args.html === "string" ? inertHtml(args.html) : null, text_override: typeof args.text === "string" ? args.text : null, content_digest: fixtureDigest, approval: { revision: null, digest: null, valid: false, scope: "content-only" } };
       // An audience-only save (same content) keeps the revision, as AOS-521 does.
-      const unchanged = existing && existing.subject === content.subject && existing.preheader === content.preheader && JSON.stringify(existing.blocks) === JSON.stringify(content.blocks);
+      const unchanged = existing && existing.subject === content.subject && existing.preheader === content.preheader &&
+        existing.mode === content.mode && existing.html === content.html && existing.text_override === content.text_override &&
+        JSON.stringify(existing.blocks) === JSON.stringify(content.blocks);
       if (unchanged) content.revision = existing.revision;
       if (existing) contents.splice(contents.indexOf(existing), 1, content); else contents.push(content);
       changed(existing ? "Campaign draft updated locally." : "Campaign draft created locally.");
@@ -410,11 +421,12 @@ export function fixtureCall(verb: string, args: Record<string, unknown>): unknow
     }
     case "content.render": {
       const content = contents.find(c => c.campaign_id === args.campaign_id) ?? missing();
+      if (args.revision !== undefined && args.revision !== content.revision) throw new ApiError("The saved campaign moved; reload it to preview.", 409, { code: "revision_conflict" });
       if (args.binding_id !== undefined && !fixtureSenderBindings.some(binding => binding.binding_id === args.binding_id)) throw new ApiError("No matching local sender preview exists.", 404, { code: "not_found" });
       const html = content.mode === "html" ? content.html! : content.blocks.map(block => block.type === "button" ? `<p><strong>${escapeHtml(block.label)}</strong></p>` : `<${block.type === "heading" ? "h1" : "p"}>${escapeHtml(block.text)}</${block.type === "heading" ? "h1" : "p"}>`).join("");
       const rendered = html.replace(/\{\{first_name\|([^}]+)\}\}/g, (_match, fallback: string) => escapeHtml(typeof args.sample_first_name === "string" && args.sample_first_name ? args.sample_first_name : fallback));
       const template = document.createElement("template"); template.innerHTML = rendered;
-      return { render: { revision: content.revision, content_digest: content.content_digest, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
+      return { render: { revision: content.revision, content_digest: content.content_digest, preview_source: { campaign_id: content.campaign_id, revision: content.revision, sample_first_name: args.sample_first_name }, html: rendered, text: content.text_override ?? template.content.textContent ?? "", preview_only: true, sender: fixtureSender, unsubscribe_url: "https://example.invalid/unsubscribe", binding: typeof args.binding_id === "string" ? { binding_id: args.binding_id } : undefined } };
     }
     case "proposals.list": return { proposals: [] };
     case "sends.list": { const row = seededSendRow(); return { sends: row ? [row] : [] }; }
